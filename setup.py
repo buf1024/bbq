@@ -24,6 +24,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
+            'quotation=barbar.cmd.quotation:main',
             'syncstock=barbar.data.stock_sync:main',
             'syncfund=barbar.data.fund_sync:main'
         ]
