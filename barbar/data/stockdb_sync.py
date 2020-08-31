@@ -1,10 +1,8 @@
 from barbar.data.mongodb_sync import MongoDBSync
 from typing import List, Optional
 import pandas as pd
-from barbar.common import singleton
 
 
-@singleton
 class StockDB(MongoDBSync):
     _comm_db = 'comm_db'  # 通用数据库
     _code_info = 'code_info'  # 股票信息

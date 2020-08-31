@@ -80,16 +80,16 @@ async def run(loop):
 
     print("Connected to NATS at {}...".format(nc.connected_url.netloc))
 
-    def signal_handler():
-        if nc.is_closed:
-            return
-        print("Disconnecting...")
-        loop.create_task(nc.close())
+    # def signal_handler():
+    #     if nc.is_closed:
+    #         return
+    #     print("Disconnecting...")
+    #     loop.create_task(nc.close())
+    #
+    # for sig in ('SIGINT', 'SIGTERM'):
+    #     loop.add_signal_handler(getattr(signal, sig), signal_handler)
 
-    for sig in ('SIGINT', 'SIGTERM'):
-        loop.add_signal_handler(getattr(signal, sig), signal_handler)
-
-    # await nc.subscribe('hello', cb=subscribe_handler)
+    await nc.subscribe('hello', cb=subscribe_handler)
     await test(loop, nc, subscribe_handler)
 
 

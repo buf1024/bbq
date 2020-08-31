@@ -1,10 +1,7 @@
 from barbar.data.mongodb import MongoDB
 from typing import List, Optional
 import pandas as pd
-from barbar.common import singleton
 
-
-@singleton
 class StockDB(MongoDB):
     _comm_db = 'comm_db'  # 通用数据库
     _code_info = 'code_info'  # 股票信息
