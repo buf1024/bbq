@@ -313,7 +313,7 @@ class Tdx(threading.Thread):
         if frequency in ['1Y', 'Y', 'YEAR']:
             typ = 11
 
-        if frequency in ['M', '1M', 'MIN', 'MINUTE']:
+        if frequency in ['M', '1M', '1MIN', 'MINUTE']:
             typ = 8
         if frequency in ['5M', '5MIN', '5MINUTE']:
             typ = 0
@@ -441,7 +441,8 @@ class Tdx(threading.Thread):
                 df = df[df['datetime'] <= end_date]
 
             if df is not None and not df.empty:
-                df.drop(['datetime'], axis=1, inplace=True)
+                if typ not in [0, 1, 2, 3, 8]:
+                    df.drop(['datetime'], axis=1, inplace=True)
                 df.reset_index(drop=True, inplace=True)
 
         return df
@@ -513,7 +514,7 @@ class Tdx(threading.Thread):
                      (int(q['ask3']), float(q['ask_vol3'])), (int(q['ask4']), float(q['ask_vol4'])),
                      (int(q['ask5']), float(q['ask_vol5']))],
                 date=datetime.now(),
-                time=datetime.strptime(
+                datetime=datetime.strptime(
                     datetime.now().strftime('%Y-%m-%d') + ' ' + q['servertime'].split('.')[0], '%Y-%m-%d %H:%M:%S'), )
 
         self.log.debug('get_rt_quot 实时行情应答, size={}'.format(len(quote) if quote is not None else 0))
@@ -585,8 +586,8 @@ if __name__ == '__main__':
     # df = tdx.get_code_list()
     # print(df)
 
-    df = tdx.get_bar(code='000008.SH', start=None, end='20200829')
-    print(df)
+    # df = tdx.get_bar(code='000008.SH', start=None, end='20200829', frequency='5min')
+    # print(df)
 
     # df = tdx.get_index_bar(code='399001.sz', frequency='60m')
     # print(df)
@@ -597,5 +598,5 @@ if __name__ == '__main__':
     # df = tdx.get_xdxr_list('000002.Sz')
     # print(df)
 
-    # df = tdx.get_rt_quot(['000002.Sz', '000001.sz'])
-    # print(df)
+    df = tdx.get_rt_quot(['000002.Sz', '000001.sz'])
+    print(df)

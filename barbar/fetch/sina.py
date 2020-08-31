@@ -69,12 +69,22 @@ class Sina:
                      (int(quots[25]), float(quots[26])), (int(quots[27]), float(quots[28])),
                      (int(quots[29]), float(quots[30]))],
                 date=datetime.datetime.strptime(quots[31], '%Y-%m-%d'),
-                time=datetime.datetime.strptime(quots[31] + ' ' + quots[32], '%Y-%m-%d %H:%M:%S'),
+                datetime=datetime.datetime.strptime(quots[31] + ' ' + quots[32], '%Y-%m-%d %H:%M:%S'),
             )
         return quot_dict
 
+    async def get_rt_quot(self, codes):
+        if codes is None:
+            return None
+        params = []
+        for code in codes:
+            p = code.lower().split('.')
+            params.append(p[1] + p[0])
+        code_list = ','.join(params)
 
-    def get_rt_quot(self, codes):
+        return await self._get_quot(code_list)
+
+    def get_rt_quot_sync(self, codes):
         if codes is None:
             return None
         params = []
@@ -98,5 +108,5 @@ class Sina:
 
 if __name__ == '__main__':
     q = Sina()
-    quot = q.get_rt_quot(codes=['000001.SZ', '601099.SH'])
+    quot = q.get_rt_quot_sync(codes=['000001.SZ', '601099.SH'])
     print(quot)

@@ -2,31 +2,22 @@ import asyncio
 import traceback
 import barbar.log as log
 from threading import Thread
-from queue import Queue, Empty
 from nats.aio.client import Client as NATS
-from typing import Dict, List
+from typing import Dict
 import json
 
 
 class AsyncNats(Thread):
-    def __init__(self, options: Dict = None):
+    def __init__(self, loop, options: Dict = None):
         super().__init__(daemon=True)
         self.log = log.get_logger(self.__class__.__name__)
 
-        self.queue_in = None
-        self.queue_out = None
         self.options = options
         self.nc = NATS()
 
         self.subjects = {}
-        self.loop = None
 
-        self.running = False
-        self.queue_handlers = {
-            'subscribe': self._subscribe,
-            'unsubscribe': self._unsubscribe,
-            'publish': self._publish
-        }
+        self.loop = loop
 
     async def on_nats_error(self, e):
         self.log.error('Nat error: '.format(e))
@@ -34,8 +25,6 @@ class AsyncNats(Thread):
     async def on_nats_closed(self):
         self.log.info("Connection to NATS is closed.")
         await asyncio.sleep(0.1, loop=self.loop)
-        self.running = False
-        self.loop.stop()
 
     async def on_nats_connected(self):
         self.log.info("Connected to NATS at {} success.".format(self.nc.connected_url.netloc))
@@ -51,27 +40,16 @@ class AsyncNats(Thread):
             subject=subject, reply=reply, data=data))
         data = json.loads(data)
 
-        await self.queue_out.put(dict(subject=subject, reply=reply, data=data))
+        await self.on_message(subject=subject, reply=reply, data=data)
+
+    async def on_message(self, subject, reply, data):
+        pass
 
     def stop(self):
         if self.nc.is_closed:
             return
         self.log.info("Disconnecting...")
         self.loop.create_task(self.nc.close())
-
-    async def queue_task(self):
-        while self.running:
-            try:
-                data = await self.queue_in.get()
-                self.log.debug('NATS queue recv: {}'.format(data))
-                cmd, data = data['cmd'], data['data']
-
-                if cmd in self.queue_handlers.keys():
-                    await self.queue_handlers[cmd](data)
-                else:
-                    self.log.warning('unknown queue data: {}'.format(data))
-            except Empty:
-                pass
 
     async def nats_task(self):
         options = {
@@ -98,39 +76,20 @@ class AsyncNats(Thread):
 
         return True
 
-    def run(self) -> None:
-        try:
-
-            self.loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self.loop)
-
-            self.queue_in = asyncio.Queue(loop=self.loop)
-            self.queue_out = asyncio.Queue(loop=self.loop)
-
-            if self.loop.run_until_complete(self.nats_task()):
-                self.running = True
-                self.loop.create_task(self.queue_task())
-                self.loop.run_forever()
-        finally:
-            self.log.info('nats loop done')
-
-    async def _subscribe(self, data):
+    async def subscribe(self, subject: str):
         if not self.nc.is_closed:
-            subject = data['subject']
             if subject not in self.subjects:
                 ssid = await self.nc.subscribe(subject=subject, cb=self.on_nats_message)
                 self.subjects[subject] = ssid
 
-    async def _unsubscribe(self, data):
+    async def unsubscribe(self, subject: str):
         if not self.nc.is_closed:
-            subject = data['subject']
             if subject in self.subjects:
                 await self.nc.unsubscribe(ssid=self.subjects[subject])
                 del self.subjects[subject]
 
-    async def _publish(self, data):
+    async def publish(self, subject: str, data: object):
         if not self.nc.is_closed:
-            subject, data = data['subject'], data['data']
             payload = ''
             if isinstance(data, dict):
                 payload = json.dumps(data).encode()
@@ -138,13 +97,3 @@ class AsyncNats(Thread):
                 payload = str(data).encode()
             await self.nc.publish(subject=subject, payload=payload)
             await self.nc.flush()
-
-    def subscribe(self, subject):
-        self.queue_in.put_nowait(dict(cmd='subscribe', data=dict(subject=subject)))
-
-    def unsubscribe(self, subject):
-        self.queue_in.put_nowait(dict(cmd='unsubscribe', data=dict(subject=subject)))
-
-    def publish(self, subject, data):
-        self.log.info('push')
-        self.queue_in.put_nowait(dict(cmd='publish', data=dict(subject=subject, data=data)))

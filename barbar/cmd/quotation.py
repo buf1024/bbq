@@ -7,8 +7,7 @@ import traceback
 from barbar.config import conf_dict
 import click
 from barbar.data.stockdb import StockDB
-from threading import Thread
-import time
+from collections import OrderedDict
 import uuid
 from typing import Dict
 import barbar.fetch as fetch
@@ -23,6 +22,8 @@ req:
   "data": {
     "type": "realtime" | "backtest",
     "frequency": "1min", "5min", '15min', '30min', '60min',
+    "start": yyyy-mm-dd hh:mm:ss, backtest
+    "end": yyyy-mm-dd hh:mm:ss, backtest
     "index_list": ["000001.SH"],
     "stock_list": ["000001.SZ"]
   }
@@ -32,7 +33,7 @@ resp:
     "status": "OK",
     "msg": "SUCCESS",
     "data": {
-        "queue": "topic:barbar.quotation.xxxxxxxx"
+        "subject": "topic:barbar.quotation.xxxxxxxx"
     }
 }
 
@@ -41,7 +42,7 @@ req:
 {
   "cmd": "unsubscribe",
   "data": {
-    "queue": "topic:barbar.quotation.xxxxxxxx"
+    "subject": "topic:barbar.quotation.xxxxxxxx"
   }
 }
 
@@ -61,9 +62,8 @@ req:
 """
 
 
-class RealtimeQuotation(Thread):
-    def __init__(self, subject: str, nats: AsyncNats, db_uri: str, db_pool: int, data: Dict):
-        super().__init__(daemon=True)
+class BacktestQuotation:
+    def __init__(self, loop, subject: str, nats: AsyncNats, db: StockDB, data: Dict):
         self.log = log.get_logger(self.__class__.__name__)
 
         self.subject = subject
@@ -71,26 +71,183 @@ class RealtimeQuotation(Thread):
         self.data = data
 
         self.running = False
-        self.loop = None
+
+        self.db = db
+        self.loop = loop
+
+        self.bar = OrderedDict()
+
+        self.quot_date = {}
+
+    def add_bar(self, bars):
+        if len(bars) > 0:
+            for code, bar_df in bars.items():
+                for item in bar_df.to_dict('records'):
+                    dt = item['datetime']
+                    item['datetime'] = item['datetime'].strftime('%Y-%m-%d %H:%M:%S')
+                    item['trade_date'] = item['trade_date'].strftime('%Y-%m-%d')
+                    if dt not in self.bar:
+                        self.bar[dt] = OrderedDict()
+                    self.bar[dt][item['code']] = item
+
+    async def init(self):
+        try:
+            start, end, frequency = self.data['start'], self.data['end'], self.data['frequency'].lower()
+            index_list, stock_list = self.data['index_list'], self.data['stock_list']
+            if 'min' not in frequency:
+                self.log.error('frequency 格式不正确')
+                return False
+
+            if frequency not in ['1min', '5min', '15min', '30min', '60min']:
+                self.log.error('frequency 格式不正确')
+                return False
+
+            start = datetime.strptime(start, '%Y-%m-%d %H:%M:%S').strftime('%Y%m%d %H:%M:%S')
+            end = datetime.strptime(end, '%Y-%m-%d %H:%M:%S').strftime('%Y%m%d %H:%M:%S')
+
+            bar_index = OrderedDict()
+            if index_list is not None:
+                for index in index_list:
+                    df = fetch.get_index_bar(code=index, frequency=frequency,
+                                             start=start, end=end)
+                    if df is None:
+                        self.log.error('指数{}, {} k线无数据'.format(index, frequency))
+                        return False
+                    bar_index[index] = df
+
+            bar_stock = OrderedDict()
+            if stock_list is not None:
+                for code in stock_list:
+                    df = fetch.get_bar(code=code, frequency=frequency,
+                                       start=start, end=end)
+                    if df is None:
+                        self.log.error('股票{}, {} k线无数据'.format(code, frequency))
+                        return False
+                    bar_stock[code] = df
+
+            self.add_bar(bars=bar_stock)
+            self.add_bar(bars=bar_index)
+
+            return True
+
+        except Exception as e:
+            self.log.error('backtest quot 初始化失败, ex={}, callstack={}'.format(e, traceback.format_exc()))
+            return False
+
+    async def quot_task(self):
+        now = datetime.now()
+        await self.nats.publish(self.subject, dict(cmd='quotation',
+                                                   data=dict(type='start',
+                                                             frequency=self.data['frequency'],
+                                                             start=now.strftime('%Y-%m-%d %H:%M:%S'),
+                                                             end=now.strftime('%Y-%m-%d %H:%M:%S'))))
+        for now, bars in self.bar.items():
+            date_now = datetime(year=now.year, month=now.month, day=now.day)
+            if date_now not in self.quot_date:
+                self.quot_date.clear()
+                self.quot_date[date_now] = dict(is_open=True,
+                                                is_morning_start=False,
+                                                is_morning_end=False,
+                                                is_noon_start=False,
+                                                is_noon_end=False)
+            status_dict = self.quot_date[date_now]
+
+            morning_start_date = datetime(year=now.year, month=now.month, day=now.day, hour=9, minute=30, second=0)
+            morning_end_date = datetime(year=now.year, month=now.month, day=now.day, hour=11, minute=30, second=0)
+
+            noon_start_date = datetime(year=now.year, month=now.month, day=now.day, hour=13, minute=0, second=0)
+            noon_end_date = datetime(year=now.year, month=now.month, day=now.day, hour=15, minute=0, second=0)
+
+            if morning_start_date <= now < morning_end_date:
+                if not status_dict['is_morning_start']:
+                    await self.nats.publish(self.subject, dict(cmd='quotation',
+                                                               data=dict(type='trade_morning_start',
+                                                                         frequency=self.data['frequency'],
+                                                                         start=now.strftime(
+                                                                             '%Y-%m-%d %H:%M:%S'),
+                                                                         end=now.strftime(
+                                                                             '%Y-%m-%d %H:%M:%S'))))
+                    status_dict['is_noon_start'] = True
+            elif morning_end_date <= now < noon_start_date:
+                if not status_dict['is_morning_end']:
+                    await self.nats.publish(self.subject, dict(cmd='quotation',
+                                                               data=dict(type='trade_morning_end',
+                                                                         frequency=self.data['frequency'],
+                                                                         start=now.strftime(
+                                                                             '%Y-%m-%d %H:%M:%S'),
+                                                                         end=now.strftime(
+                                                                             '%Y-%m-%d %H:%M:%S'))))
+                    status_dict['is_morning_end'] = True
+            elif noon_start_date <= now < noon_end_date:
+                if not status_dict['is_noon_start']:
+                    await self.nats.publish(self.subject, dict(cmd='quotation',
+                                                               data=dict(type='trade_noon_start',
+                                                                         frequency=self.data['frequency'],
+                                                                         start=now.strftime(
+                                                                             '%Y-%m-%d %H:%M:%S'),
+                                                                         end=now.strftime(
+                                                                             '%Y-%m-%d %H:%M:%S'))))
+                    status_dict['is_noon_start'] = True
+            elif now >= noon_end_date:
+                if not status_dict['is_noon_end']:
+                    await self.nats.publish(self.subject, dict(cmd='quotation',
+                                                               data=dict(type='trade_noon_end',
+                                                                         frequency=self.data['frequency'],
+                                                                         start=now.strftime('%Y-%m-%d %H:%M:%S'),
+                                                                         end=now.strftime('%Y-%m-%d %H:%M:%S'))))
+                    status_dict['is_noon_end'] = True
+
+            await self.nats.publish(self.subject,
+                                    dict(cmd='quotation',
+                                         data=dict(type='quot',
+                                                   frequency=self.data['frequency'],
+                                                   start=now.strftime('%Y-%m-%d %H:%M:%S'),
+                                                   end=now.strftime('%Y-%m-%d %H:%M:%S'),
+                                                   list=bars)))
+
+        now = datetime.now()
+        await self.nats.publish(self.subject, dict(cmd='quotation',
+                                                   data=dict(type='end',
+                                                             frequency=self.data['frequency'],
+                                                             start=now.strftime('%Y-%m-%d %H:%M:%S'),
+                                                             end=now.strftime('%Y-%m-%d %H:%M:%S'))))
+
+    async def start(self):
+        if not await self.init():
+            return
+
+        self.running = True
+        self.loop.create_task(self.quot_task())
+
+
+class RealtimeQuotation:
+    def __init__(self, loop, subject: str, nats: AsyncNats, db: StockDB, data: Dict):
+        self.log = log.get_logger(self.__class__.__name__)
+
+        self.subject = subject
+        self.nats = nats
+        self.data = data
+
+        self.running = False
 
         self.frequency = 0
         self.codes = None
 
         self.quot_date = {}
 
-        self.last_pub = None
+        self.db = db
+        self.loop = loop
 
-        self.db = StockDB(uri=db_uri, pool=db_pool)
+        self.bar = None
+        self.bar_time = None
+
+        self.last_pub = None
 
     def stop(self) -> None:
         self.running = False
 
     async def init(self):
         try:
-            if not self.db.init():
-                self.log.error('连接数据库错误')
-                return False
-
             frequency, index_list, stock_list = self.data['frequency'].lower(), self.data['index_list'], self.data[
                 'stock_list']
             if 'min' not in frequency:
@@ -102,7 +259,8 @@ class RealtimeQuotation(Thread):
                 self.log.error('frequency 格式不正确')
                 return False
 
-            self.frequency = frequency * 60
+            # self.frequency = frequency * 60
+            self.frequency = 5
             self.codes = index_list + stock_list
 
             return True
@@ -110,6 +268,36 @@ class RealtimeQuotation(Thread):
         except Exception as e:
             self.log.error('realtime quot 初始化失败, ex={}, callstack={}'.format(e, traceback.format_exc()))
             return False
+
+    def pub_bar(self, now, quots):
+        self.update_bar(now, quots)
+
+        self.log.debug('current bar: {}'.format(self.bar))
+        delta = now - self.bar_time['start']
+        if delta.seconds > self.frequency or self.last_pub is None:
+            self.bar_time['end'] = now
+            return self.bar
+        return None
+
+    def update_bar(self, now, quots):
+        if self.bar is None:
+            self.bar = {}
+            for code, quot in quots.items():
+                self.bar[code] = dict(code=quot['code'], name=quot['name'],
+                                      trade_date=quot['date'].strftime('%Y-%m-%d'),
+                                      open=quot['now'], high=quot['high'], low=quot['low'], close=quot['now'],
+                                      vol=quot['vol'], amount=quot['amount'])
+            self.bar_time = dict(start=now)
+            return
+        else:
+            for code, quot in quots.items():
+                bar = self.bar[code]
+                bar['close'] = quot['now']
+                if quot['high'] > bar['high']:
+                    bar['high'] = quot['high']
+                if quot['low'] < bar['low']:
+                    bar['low'] = quot['low']
+                bar['datetime'] = quot['datetime'].strftime('%Y-%m-%d %H:%M:%S'),
 
     async def get_quot(self):
         try:
@@ -126,12 +314,14 @@ class RealtimeQuotation(Thread):
                                                 is_morning_start=False,
                                                 is_morning_end=False,
                                                 is_noon_start=False,
-                                                is_nood_end=False)
+                                                is_noon_end=False)
 
             status_dict = self.quot_date[date_now]
 
             if not status_dict['is_open']:
                 return
+
+            quot = None
 
             morning_start_date = datetime(year=now.year, month=now.month, day=now.day, hour=9, minute=30, second=0)
             morning_end_date = datetime(year=now.year, month=now.month, day=now.day, hour=11, minute=30, second=0)
@@ -139,105 +329,96 @@ class RealtimeQuotation(Thread):
             noon_start_date = datetime(year=now.year, month=now.month, day=now.day, hour=13, minute=0, second=0)
             noon_end_date = datetime(year=now.year, month=now.month, day=now.day, hour=18, minute=0, second=0)
 
-            quot = None
             if morning_start_date <= now < morning_end_date:
                 if not status_dict['is_morning_start']:
-                    self.nats.publish(self.subject, dict(cmd='quotation',
-                                                         data=dict(type='trade_morning_start',
-                                                                   frequency=self.data['frequency'],
-                                                                   start=now.strftime(
-                                                                       '%Y%m%d %H:%M:%S'),
-                                                                   end=now.strftime(
-                                                                       '%Y%m%d %H:%M:%S'))))
+                    await self.nats.publish(self.subject, dict(cmd='quotation',
+                                                               data=dict(type='trade_morning_start',
+                                                                         frequency=self.data['frequency'],
+                                                                         start=now.strftime(
+                                                                             '%Y-%m-%d %H:%M:%S'),
+                                                                         end=now.strftime(
+                                                                             '%Y-%m-%d %H:%M:%S'))))
                     status_dict['is_noon_start'] = True
-                qf = fetch.get_rt_quot(codes=self.codes)
+                quots = await fetch.get_rt_quot(codes=self.codes)
+                quot = self.pub_bar(now, quots)
             elif morning_end_date <= now < noon_start_date:
                 if not status_dict['is_morning_end']:
-                    self.nats.publish(self.subject, dict(cmd='quotation',
-                                                         data=dict(type='trade_morning_end',
-                                                                   frequency=self.data['frequency'],
-                                                                   start=now.strftime(
-                                                                       '%Y%m%d %H:%M:%S'),
-                                                                   end=now.strftime(
-                                                                       '%Y%m%d %H:%M:%S'))))
+                    await self.nats.publish(self.subject, dict(cmd='quotation',
+                                                               data=dict(type='trade_morning_end',
+                                                                         frequency=self.data['frequency'],
+                                                                         start=now.strftime(
+                                                                             '%Y-%m-%d %H:%M:%S'),
+                                                                         end=now.strftime(
+                                                                             '%Y-%m-%d %H:%M:%S'))))
                     status_dict['is_morning_end'] = True
             elif noon_start_date <= now < noon_end_date:
                 if not status_dict['is_noon_start']:
-                    self.nats.publish(self.subject, dict(cmd='quotation',
-                                                         data=dict(type='trade_noon_start',
-                                                                   frequency=self.data['frequency'],
-                                                                   start=now.strftime(
-                                                                       '%Y%m%d %H:%M:%S'),
-                                                                   end=now.strftime(
-                                                                       '%Y%m%d %H:%M:%S'))))
+                    await self.nats.publish(self.subject, dict(cmd='quotation',
+                                                               data=dict(type='trade_noon_start',
+                                                                         frequency=self.data['frequency'],
+                                                                         start=now.strftime(
+                                                                             '%Y-%m-%d %H:%M:%S'),
+                                                                         end=now.strftime(
+                                                                             '%Y-%m-%d %H:%M:%S'))))
                     status_dict['is_noon_start'] = True
-                qf = fetch.get_rt_quot(codes=self.codes)
+                quots = await fetch.get_rt_quot(codes=self.codes)
+                quot = self.pub_bar(now, quots)
             elif now >= noon_end_date:
                 if not status_dict['is_noon_end']:
-                    self.nats.publish(self.subject, dict(cmd='quotation',
-                                                         data=dict(type='trade_noon_end',
-                                                                   frequency=self.data['frequency'],
-                                                                   start=now.strftime('%Y%m%d %H:%M:%S'),
-                                                                   end=now.strftime('%Y%m%d %H:%M:%S'))))
+                    await self.nats.publish(self.subject, dict(cmd='quotation',
+                                                               data=dict(type='trade_noon_end',
+                                                                         frequency=self.data['frequency'],
+                                                                         start=now.strftime('%Y-%m-%d %H:%M:%S'),
+                                                                         end=now.strftime('%Y-%m-%d %H:%M:%S'))))
                     status_dict['is_noon_end'] = True
 
             if quot is not None:
-                if self.last_pub is None:
-                    self.nats.publish(self.subject, dict(cmd='quotation',
-                                                         data=dict(type='trade_noon_end',
-                                                                   frequency=self.data['frequency'],
-                                                                   start=now.strftime('%Y%m%d %H:%M:%S'),
-                                                                   end=now.strftime('%Y%m%d %H:%M:%S'),
-                                                                   list=quot)))
-
-
+                await self.nats.publish(self.subject,
+                                        dict(cmd='quotation',
+                                             data=dict(type='quot',
+                                                       frequency=self.data['frequency'],
+                                                       start=self.bar_time['start'].strftime('%Y-%m-%d %H:%M:%S'),
+                                                       end=self.bar_time['end'].strftime('%Y-%m-%d %H:%M:%S'),
+                                                       list=quot)))
+                self.bar = None
+                self.bar_time = None
+                self.last_pub = now
         except Exception as e:
             self.log.error('get_quot 异常, ex={}, callstack={}'.format(e, traceback.format_exc()))
 
     async def quot_task(self):
-        queue = asyncio.Queue()
         now = datetime.now()
-        self.nats.publish(self.subject, dict(cmd='quotation',
-                                             data=dict(type='start',
-                                                       frequency=self.data['frequency'],
-                                                       start=now.strftime('%Y%m%d %H:%M:%S'),
-                                                       end=now.strftime('%Y%m%d %H:%M:%S'))))
+        await self.nats.publish(self.subject, dict(cmd='quotation',
+                                                   data=dict(type='start',
+                                                             frequency=self.data['frequency'],
+                                                             start=now.strftime('%Y-%m-%d %H:%M:%S'),
+                                                             end=now.strftime('%Y-%m-%d %H:%M:%S'))))
         while self.running:
-            try:
-                queue.get_nowait()
-            except asyncio.QueueEmpty:
-                await self.get_quot()
-                await asyncio.sleep(delay=1, loop=self.loop)
+            await self.get_quot()
+            await asyncio.sleep(delay=1, loop=self.loop)
 
         now = datetime.now()
-        self.nats.publish(self.subject, dict(cmd='quotation',
-                                             data=dict(type='end',
-                                                       frequency=self.data['frequency'],
-                                                       start=now.strftime('%Y%m%d %H:%M:%S'),
-                                                       end=now.strftime('%Y%m%d %H:%M:%S'))))
-        self.loop.stop()
+        await self.nats.publish(self.subject, dict(cmd='quotation',
+                                                   data=dict(type='end',
+                                                             frequency=self.data['frequency'],
+                                                             start=now.strftime('%Y-%m-%d %H:%M:%S'),
+                                                             end=now.strftime('%Y-%m-%d %H:%M:%S'))))
 
-    def run(self) -> None:
-        try:
+    async def start(self):
+        if not await self.init():
+            return
 
-            self.loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(self.loop)
-
-            if self.loop.run_until_complete(self.init()):
-                self.running = True
-                self.loop.create_task(self.quot_task())
-                self.loop.run_forever()
-        finally:
-            self.log.info('RealtimeQuotation loop done')
+        self.running = True
+        self.loop.create_task(self.quot_task())
 
 
-class Quotation:
+class Quotation(AsyncNats):
 
-    def __init__(self, db: StockDB, nats: AsyncNats):
-        self.log = log.get_logger(self.__class__.__name__)
+    def __init__(self, options: Dict, db: StockDB):
+        self.loop = asyncio.get_event_loop()
+        super().__init__(loop=self.loop, options=options)
 
         self.db = db
-        self.nats = nats
 
         self.topic_cmd = 'topic:barbar.quotation.command'
 
@@ -248,60 +429,64 @@ class Quotation:
         self.subject = {}
 
     def start(self):
-        self.nats.start()
-        time.sleep(1)
+        try:
+            if self.loop.run_until_complete(self.nats_task()):
+                self.loop.create_task(self.subscribe(self.topic_cmd))
+                self.loop.run_forever()
+        except Exception as e:
+            self.log.error('quotation start 异常, ex={}, callstack={}'.format(e, traceback.format_exc()))
+        finally:
+            self.loop.close()
 
-        self.nats.subscribe(self.topic_cmd)
-        while True:
-            try:
-                data = self.nats.queue_out.get_nowait()
-                subject, reply, data = data['subject'], data['reply'], data['data']
-                handlers = None
-                if subject == self.topic_cmd:
-                    handlers = self.cmd_handlers
+    async def on_unsubscribe(self, data):
+        self.log.info('on_unsubscribe: {}'.format(data))
+        subject = data['subject']
+        if subject in self.subject:
+            quot = self.subject[subject]
+            if quot is not None:
+                quot.stop()
+            del self.subject[subject]
 
-                if handlers is not None:
-                    self.on_command(handlers=handlers, subject=subject, reply=reply, data=data)
-            except asyncio.QueueEmpty:
-                time.sleep(1)
-            except Exception as e:
-                self.log.error(
-                    'wait queue exception={} call_stack={}'.format(e, traceback.format_exc()))
+        return 'OK', 'SUCCESS', ''
 
-    def on_unsubscribe(self, data):
-        self.log('on_unsubscribe: {}'.format(data))
-
-    # def my_task(self, nc):
-    #     js = json.dumps(dict(cmd="unsubscribe", data="data"))
-    #     self.log.info("publish: {}".format(js))
-    #     a = await nc.publish(subject="hello:world", payload=js.encode())
-    #     print(a)
-
-    def my_th(self):
-        self.log.info('nc thread')
-        self.nats.publish(subject="hello:world", data='nice work')
-
-    def on_subscribe(self, data):
+    async def on_subscribe(self, data):
         self.log.info('on_subscribe: {}'.format(data))
-        typ = data['type']
+        typ = data['type'].lower()
 
-        if typ == 'realtime':
+        if typ == 'realtime' or typ == 'simulate':
             # subject = 'topic:barbar.realtime.' + str(uuid.uuid4())
             subject = 'topic:barbar.realtime.abc'
-            subject_thread = RealtimeQuotation(subject=subject, db_uri=self.db.uri, db_pool=self.db.pool,
-                                               nats=self.nats, data=data).start()
-            self.subject[subject] = subject_thread
+            rt = RealtimeQuotation(loop=self.loop, subject=subject, db=self.db, nats=self, data=data)
+            self.loop.create_task(rt.start())
+            self.subject[subject] = rt
+
+            return "OK", 'SUCCESS', dict(subject=subject)
+
+        if typ == 'backtest':
+            # subject = 'topic:barbar.backtest.' + str(uuid.uuid4())
+            subject = 'topic:barbar.backtest.abc'
+            bt = BacktestQuotation(loop=self.loop, subject=subject, db=self.db, nats=self, data=data)
+            self.loop.create_task(bt.start())
+            self.subject[subject] = bt
 
             return "OK", 'SUCCESS', dict(subject=subject)
 
         return "FAIL", "未知类型", None
 
-    def on_command(self, handlers, subject, reply, data):
+    async def on_message(self, subject, reply, data):
+        handlers = None
+        if subject == self.topic_cmd:
+            handlers = self.cmd_handlers
+
+        if handlers is not None:
+            await self.on_command(handlers=handlers, subject=subject, reply=reply, data=data)
+
+    async def on_command(self, handlers, subject, reply, data):
         resp = None
         try:
             cmd, data = data['cmd'], data['data'] if 'data' in data else None
             if cmd in handlers.keys():
-                status, msg, data = handlers[cmd](data)
+                status, msg, data = await handlers[cmd](data)
                 resp = dict(status=status, msg=msg, data=data)
             else:
                 self.log.error('handler not found, data={}'.format(data))
@@ -314,7 +499,7 @@ class Quotation:
             if reply != '' and resp is not None:
                 js_resp = json.dumps(resp)
                 self.log.info("Response a message: '{data}'".format(data=js_resp))
-                self.nats.publish(subject=reply, data=js_resp.encode())
+                await self.publish(subject=reply, data=js_resp.encode())
 
 
 @click.command()
@@ -342,8 +527,9 @@ def main(uri: str, pool: int, nats: str, debug: bool):
         logger.error('初始化数据库失败')
         return
 
-    nats = AsyncNats(options={'servers': [nats]})
-    quot = Quotation(nats=nats, db=db)
+    fetch.init()
+
+    quot = Quotation(options={'servers': [nats]}, db=db)
     quot.start()
 
 
