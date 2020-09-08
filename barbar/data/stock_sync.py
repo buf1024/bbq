@@ -23,7 +23,7 @@ class StockSync:
             now = datetime.now()
             now = datetime(year=now.year, month=now.month, day=now.day)
             now_tag = datetime(year=now.year, month=now.month, day=now.day, hour=15, minute=30)
-            codes, indexes = await self._sync_basic_data()
+            codes, indexes = await self._sync_basic()
             if codes is None or indexes is None:
                 self.log.error('保存/加载基础数据失败')
                 return
@@ -49,12 +49,24 @@ class StockSync:
 
             await queue.join()
 
-            await self.db.build_index()
+            # await self.db.build_index()
             self.log.debug('股票信息同步完成')
         except Exception as e:
             self.log.error('同步股票失败: ex={}, stack={}'.format(e, traceback.format_exc()))
 
-    async def _sync_basic_data(self):
+    def _incr_data(self, key, data_db, data):
+        data_new = data
+        if data_db is not None:
+            diff_set = set(data[key].values).difference(set(data_db['code'].values))
+            if len(diff_set) > 0:
+                diff_values = '["{}"]'.format('","'.join(diff_set))
+                data_new = data.query('{} in {}'.format(key, diff_values))
+                self.log.debug('增量数据新增个数: {}'.format(data_new.shape[0]))
+            else:
+                data_new = None
+        return data_new
+
+    async def _sync_basic(self):
         self.log.debug('开始同步基础数据...')
 
         self.log.debug('获取股票列表...')
@@ -64,8 +76,10 @@ class StockSync:
             return None, None
         codes_db = await self.db.load_code_list(projection=['code'])
         if codes_db is None or codes_db.shape[0] != codes.shape[0]:
-            self.log.debug('保存股票列表, count = {} ...'.format(codes.shape[0]))
-            await self.db.save_code_list(codes)
+            codes_new = self._incr_data('code', codes_db, codes)
+            if codes_new is not None:
+                self.log.debug('保存股票列表, count = {} ...'.format(codes_new.shape[0]))
+                await self.db.save_code_list(codes_new)
 
         self.log.debug('获取股票指数列表...')
         indexes = fetch.get_index_list()
@@ -74,8 +88,10 @@ class StockSync:
             return None, None
         indexes_db = await self.db.load_index_list(projection=['code'])
         if indexes_db is None or indexes_db.shape[0] != indexes.shape[0]:
-            self.log.debug('保存股票指数列表, count = {} ...'.format(indexes.shape[0]))
-            await self.db.save_code_list(indexes)
+            indexes_new = self._incr_data('code', indexes_db, indexes)
+            if indexes_new is not None:
+                self.log.debug('保存股票列表, count = {} ...'.format(indexes_new.shape[0]))
+                await self.db.save_index_list(indexes_new)
 
         self.log.debug('获取股票交易日历...')
         trad_cals = fetch.get_trade_cal()
@@ -84,8 +100,10 @@ class StockSync:
             return None, None
         trad_cals_db = await self.db.load_trade_cal(projection=['cal_date'])
         if trad_cals_db is None or trad_cals_db.shape[0] != trad_cals.shape[0]:
-            self.log.debug('保存股票交易日历...')
-            await self.db.save_trade_cal(trad_cals)
+            trad_cals_new = self._incr_data('cal_date', trad_cals_db, trad_cals)
+            if trad_cals_new is not None:
+                self.log.debug('保存股票交易日历...')
+                await self.db.save_trade_cal(trad_cals_new)
 
         return codes, indexes
 
@@ -97,7 +115,8 @@ class StockSync:
         if is_sync:
             ft = None
             if start is not None and end is not None:
-                ft = {'is_open': 1, 'trade_date': {'$gte': start, '$lte': end}}
+                ft = {'is_open': 1, 'cal_date': {'$gte': datetime.strptime(start, '%Y%m%d'),
+                                                 '$lte': datetime.strptime(end, '%Y%m%d')}}
 
             if ft is not None:
                 trade_cals = await self.db.load_trade_cal(filter=ft)
@@ -142,11 +161,15 @@ class StockSync:
                     await self.db.save_adj_factor(code=code, data=adj_factor)
 
             self.log.debug('开始同步除权除息数据, code={}'.format(code))
-            xdxr_fet = fetch.get_xdxr_list(code=code)
-            if xdxr_fet is not None:
-                xdxr = await self.db.load_xdxr_list(filter={'code': code})
-                if xdxr is None or xdxr.shape[0] != xdxr_fet.shape[0]:
-                    await self.db.save_xdxr_list(xdxr_fet)
+
+            xdxr = fetch.get_xdxr_list(code=code)
+            if xdxr is not None:
+                xdxr_db = await self.db.load_xdxr_list(filter={'code': code})
+                if xdxr_db is None or xdxr.shape[0] != xdxr_db.shape[0]:
+                    xdxr = self._incr_data('code', xdxr_db, xdxr)
+                    if xdxr is not None:
+                        self.log.debug('保存股票除权除息信息...')
+                        await self.db.save_xdxr_list(xdxr)
         except Exception as e:
             self.log.error('同步股票失败: code={} ex={} stack={}'.format(code, e, traceback.format_exc()))
         finally:
@@ -156,7 +179,7 @@ class StockSync:
     async def sync_index(self, now: datetime, now_tag: datetime, code: str, queue: asyncio.Queue):
         try:
             self.log.debug('开始同步指数日线数据, code={}'.format(code))
-            trade_dates = await self.db.load_index_bar(filter={'code': code},
+            trade_dates = await self.db.load_index_bar(code=code,
                                                        projection=['trade_date'],
                                                        sort=[('trade_date', -1)], limit=1)
             start = None
@@ -172,7 +195,7 @@ class StockSync:
             if is_sync:
                 day_bar = fetch.get_index_bar(code=code, start=start, end=end)
                 if day_bar is not None and not day_bar.empty:
-                    await self.db.save_index_bar(data=day_bar)
+                    await self.db.save_index_bar(code=code, data=day_bar)
 
         except Exception as e:
             self.log.error('同步指数失败: code={} ex={} stack={}'.format(code, e, traceback.format_exc()))
@@ -187,6 +210,7 @@ class StockSync:
             block = fetch.get_block_list()
 
             if block is not None and not block.empty:
+                await self.db.do_delete(self.db.block_info, just_one=False)
                 await self.db.save_block_list(data=block)
 
         except Exception as e:

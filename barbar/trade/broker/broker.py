@@ -1,6 +1,5 @@
-import log
-from trader.account import Account
-
+import barbar.log as log
+from barbar.data.stockdb import StockDB
 
 class Broker:
     """
@@ -17,14 +16,15 @@ class Broker:
     4. 持仓同步事件
     """
 
-    name = None
-    desc = None
-
-    def __init__(self, repo):
+    def __init__(self, db: StockDB, **options):
         self.log = log.get_logger(self.__class__.__name__)
-        self.repo = repo
-        self.account = Account(repo)
-        self.strategy = None
+        self.db = db
+        # self.account = Account(repo)
+        # self.strategy = None
+
+    @property
+    def name(self):
+        return 'aa'
 
     def init(self, **kwargs):
         pass
@@ -36,5 +36,6 @@ class Broker:
         raise Exception('{} on_strategy payload={}, not implement'.format(self.__class__.__name__, payload))
 
     def on_quot(self, payload):
-        if self.account is not None:
-            self.account.on_quot(payload=payload)
+        # if self.account is not None:
+        #     self.account.on_quot(payload=payload)
+        pass

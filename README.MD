@@ -41,20 +41,4 @@ select模块
 以上独立docker部署。
           
 
-内部队列,协议格式:
-请求:
-{
-  "cmd": "xCmd",
-  "data": {
-    ""...
-  }
-}
-应答:
-{
-  "status": "OK",
-  "msg": "SUCCESS",
-  "data": {
-    ...
-  }
-}
 

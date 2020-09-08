@@ -1,4 +1,4 @@
-import log
+import barbar.log as log
 
 
 class Risk:

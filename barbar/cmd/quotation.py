@@ -1,4 +1,4 @@
-from barbar.async_nats import AsyncNats
+from barbar.stock_nats import StockNats
 import asyncio
 import json
 import os
@@ -63,7 +63,7 @@ req:
 
 
 class BacktestQuotation:
-    def __init__(self, loop, subject: str, nats: AsyncNats, db: StockDB, data: Dict):
+    def __init__(self, loop, subject: str, nats: StockNats, db: StockDB, data: Dict):
         self.log = log.get_logger(self.__class__.__name__)
 
         self.subject = subject
@@ -221,7 +221,7 @@ class BacktestQuotation:
 
 
 class RealtimeQuotation:
-    def __init__(self, loop, subject: str, nats: AsyncNats, db: StockDB, data: Dict):
+    def __init__(self, loop, subject: str, nats: StockNats, db: StockDB, data: Dict):
         self.log = log.get_logger(self.__class__.__name__)
 
         self.subject = subject
@@ -272,7 +272,6 @@ class RealtimeQuotation:
     def pub_bar(self, now, quots):
         self.update_bar(now, quots)
 
-        self.log.debug('current bar: {}'.format(self.bar))
         delta = now - self.bar_time['start']
         if delta.seconds > self.frequency or self.last_pub is None:
             self.bar_time['end'] = now
@@ -297,7 +296,7 @@ class RealtimeQuotation:
                     bar['high'] = quot['high']
                 if quot['low'] < bar['low']:
                     bar['low'] = quot['low']
-                bar['datetime'] = quot['datetime'].strftime('%Y-%m-%d %H:%M:%S'),
+                bar['datetime'] = quot['datetime'].strftime('%Y-%m-%d %H:%M:%S')
 
     async def get_quot(self):
         try:
@@ -334,11 +333,9 @@ class RealtimeQuotation:
                     await self.nats.publish(self.subject, dict(cmd='quotation',
                                                                data=dict(type='trade_morning_start',
                                                                          frequency=self.data['frequency'],
-                                                                         start=now.strftime(
-                                                                             '%Y-%m-%d %H:%M:%S'),
-                                                                         end=now.strftime(
-                                                                             '%Y-%m-%d %H:%M:%S'))))
-                    status_dict['is_noon_start'] = True
+                                                                         start=now.strftime('%Y-%m-%d %H:%M:%S'),
+                                                                         end=now.strftime('%Y-%m-%d %H:%M:%S'))))
+                    status_dict['is_morning_start'] = True
                 quots = await fetch.get_rt_quot(codes=self.codes)
                 quot = self.pub_bar(now, quots)
             elif morning_end_date <= now < noon_start_date:
@@ -412,7 +409,7 @@ class RealtimeQuotation:
         self.loop.create_task(self.quot_task())
 
 
-class Quotation(AsyncNats):
+class Quotation(StockNats):
 
     def __init__(self, options: Dict, db: StockDB):
         self.loop = asyncio.get_event_loop()
@@ -426,6 +423,8 @@ class Quotation(AsyncNats):
             'subscribe': self.on_subscribe,
             'unsubscribe': self.on_unsubscribe
         }
+        self.add_handler(self.topic_cmd, self.cmd_handlers)
+
         self.subject = {}
 
     def start(self):
@@ -473,39 +472,39 @@ class Quotation(AsyncNats):
 
         return "FAIL", "未知类型", None
 
-    async def on_message(self, subject, reply, data):
-        handlers = None
-        if subject == self.topic_cmd:
-            handlers = self.cmd_handlers
-
-        if handlers is not None:
-            await self.on_command(handlers=handlers, subject=subject, reply=reply, data=data)
-
-    async def on_command(self, handlers, subject, reply, data):
-        resp = None
-        try:
-            cmd, data = data['cmd'], data['data'] if 'data' in data else None
-            if cmd in handlers.keys():
-                status, msg, data = await handlers[cmd](data)
-                resp = dict(status=status, msg=msg, data=data)
-            else:
-                self.log.error('handler not found, data={}'.format(data))
-        except Exception as e:
-            self.log.error(
-                'execute command failed: exception={} subject={}, data={} call_stack={}'.format(e, subject, data,
-                                                                                                traceback.format_exc()))
-            resp = dict(status='FAIL', msg='调用异常', data=None)
-        finally:
-            if reply != '' and resp is not None:
-                js_resp = json.dumps(resp)
-                self.log.info("Response a message: '{data}'".format(data=js_resp))
-                await self.publish(subject=reply, data=js_resp.encode())
+    # async def on_message(self, subject, reply, data):
+    #     handlers = None
+    #     if subject == self.topic_cmd:
+    #         handlers = self.cmd_handlers
+    #
+    #     if handlers is not None:
+    #         await self.on_command(handlers=handlers, subject=subject, reply=reply, data=data)
+    #
+    # async def on_command(self, handlers, subject, reply, data):
+    #     resp = None
+    #     try:
+    #         cmd, data = data['cmd'], data['data'] if 'data' in data else None
+    #         if cmd in handlers.keys():
+    #             status, msg, data = await handlers[cmd](data)
+    #             resp = dict(status=status, msg=msg, data=data)
+    #         else:
+    #             self.log.error('handler not found, data={}'.format(data))
+    #     except Exception as e:
+    #         self.log.error(
+    #             'execute command failed: exception={} subject={}, data={} call_stack={}'.format(e, subject, data,
+    #                                                                                             traceback.format_exc()))
+    #         resp = dict(status='FAIL', msg='调用异常', data=None)
+    #     finally:
+    #         if reply != '' and resp is not None:
+    #             js_resp = json.dumps(resp)
+    #             self.log.info("Response a message: '{data}'".format(data=js_resp))
+    #             await self.publish(subject=reply, data=js_resp.encode())
 
 
 @click.command()
 @click.option('--uri', type=str, help='mongodb connection uri')
 @click.option('--pool', default=0, type=int, help='mongodb connection pool size')
-@click.option('--nats', type=str, help='mongodb connection pool size')
+@click.option('--nats', type=str, help='mongodb uri')
 @click.option('--debug/--no-debug', default=True, help='show debug log')
 def main(uri: str, pool: int, nats: str, debug: bool):
     uri = conf_dict['mongo']['uri'] if uri is None else uri

@@ -1,8 +1,7 @@
-import log
+import barbar.log as log
 import json
 from datetime import datetime
-from trader.risk import strategy as risk_strategies
-from selector.strategy import strategy as select_strategies
+from barbar.trade.account import Account
 
 '''
 {
@@ -30,35 +29,18 @@ from selector.strategy import strategy as select_strategies
 
 '''
 
+
 class Strategy:
-    name = None
-    desc = None
-
-    def __init__(self, repo, broker=None, **kwargs):
+    def __init__(self, account: Account):
         self.log = log.get_logger(self.__class__.__name__)
-        self.repo = repo
-        self.db = repo.db
-        self.broker = broker
 
-        self.account = None if broker is None else broker.account
-        self.db = repo.db
+        self.account = account
+        self.db = self.account.db
 
-        self.risk = None
-        self.select = None
-        self.codes = []
-
-        self._create_time = datetime.now()
-
-    def init(self, **kwargs):
-        if self.name is not None and \
-                self.broker is not None and \
-                self.broker.name is not None:
-            if not self._load_strategy():
-                return False
-
+    async def init(self, **kwargs):
         return True
 
-    def start(self):
+    async def run(self):
         return True
 
     def stop(self):

@@ -7,9 +7,8 @@ from typing import Dict
 import json
 
 
-class AsyncNats(Thread):
+class AsyncNats:
     def __init__(self, loop, options: Dict = None):
-        super().__init__(daemon=True)
         self.log = log.get_logger(self.__class__.__name__)
 
         self.options = options

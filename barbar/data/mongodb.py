@@ -1,11 +1,13 @@
 from functools import wraps
 from collections import namedtuple
 import motor.motor_asyncio
+from pymongo.errors import ServerSelectionTimeoutError, AutoReconnect
 import time
 import traceback
 import pandas as pd
 from barbar import log
 from abc import ABC
+import asyncio
 
 
 class MongoDB(ABC):
@@ -46,32 +48,45 @@ class MongoDB(ABC):
         return kwargs['__client'] if '__client' in kwargs else None
 
     async def do_load(self, coll, filter=None, projection=None, skip=0, limit=0, sort=None, to_frame=True):
-        try:
-            cursor = coll.find(filter=filter, projection=projection, skip=skip, limit=limit, sort=sort)
-            if cursor is not None:
-                # data = [await item async for item in cursor]
-                data = await cursor.to_list(None)
-                cursor.close()
-                if to_frame:
-                    df = pd.DataFrame(data=data, columns=projection)
-                    if not df.empty:
-                        if '_id' in df.columns:
-                            df.drop(columns=['_id'], inplace=True)
-                        return df
-                else:
-                    return data
-            return None
-        except:
-            self.log.error('mongodb 调用 %s 异常:\n%s\n', self.do_load.__name__, traceback.format_exc())
+        for i in range(5):
+            try:
+                cursor = coll.find(filter=filter, projection=projection, skip=skip, limit=limit, sort=sort)
+                if cursor is not None:
+                    # data = [await item async for item in cursor]
+                    data = await cursor.to_list(None)
+                    cursor.close()
+                    if to_frame:
+                        df = pd.DataFrame(data=data, columns=projection)
+                        if not df.empty:
+                            if '_id' in df.columns:
+                                df.drop(columns=['_id'], inplace=True)
+                            return df
+                    else:
+                        if data is not None:
+                            del data['_id']
+                        return data
+            except (ServerSelectionTimeoutError, AutoReconnect) as e:
+                self.log.error('mongodb 调用 {}, 连接异常: ex={}, call {}, {}s后重试'.format(self.do_load.__name__,
+                                                                                    e, traceback.format_exc(),
+                                                                                    (i + 1) * 5))
+                await asyncio.sleep((i + 1) * 5)
+                self.init()
+        return None
 
-    async def do_update(self, coll, filter=None, update=None):
-        try:
-            if update is None:
-                return None
-            res = await coll.update_one(filter, {'$set': update}, upsert=True)
-            return res.upserted_id
-        except:
-            self.log.error('mongodb 调用 %s 异常:\n%s\n', self.do_update.__name__, traceback.format_exc())
+    async def do_update(self, coll, filter=None, update=None, upsert=True):
+        for i in range(5):
+            try:
+                if update is None:
+                    return None
+                res = await coll.update_one(filter, {'$set': update}, upsert=upsert)
+                return res.upserted_id
+            except (ServerSelectionTimeoutError, AutoReconnect) as e:
+                self.log.error('mongodb 调用 {}, 连接异常: ex={}, call {}, {}s后重试'.format(self.do_update.__name__,
+                                                                                    e, traceback.format_exc(),
+                                                                                    (i + 1) * 5))
+                await asyncio.sleep((i + 1) * 5)
+                self.init()
+        return 0
 
     async def do_batch_update(self, data, func):
         upsert_list = []
@@ -87,8 +102,38 @@ class MongoDB(ABC):
         return upsert_list if len(upsert_list) > 0 else None
 
     async def do_delete(self, coll, filter=None, just_one=True):
-        try:
-            res = await coll.remove(filter, {'justOne': just_one})
-            return res.upserted_id
-        except:
-            self.log.error('mongodb 调用 %s 异常:\n%s\n', self.do_delete.__name__, traceback.format_exc())
+        for i in range(5):
+            try:
+                res = None
+                if just_one:
+                    res = await coll.delete_one(filter)
+                else:
+                    if filter is not None:
+                        res = await coll.delete_many(filter)
+                    else:
+                        res = await coll.drop()
+                return 0 if res is None else res.deleted_count
+            except (ServerSelectionTimeoutError, AutoReconnect) as e:
+                self.log.error('mongodb 调用 {}, 连接异常: ex={}, call {}, {}s后重试').format(self.do_delete.__name__,
+                                                                                     e, traceback.format_exc(),
+                                                                                     (i + 1) * 5)
+                await asyncio.sleep((i + 1) * 5)
+                self.init()
+        return 0
+
+    async def do_insert(self, coll, data):
+        for i in range(5):
+            try:
+                inserted_ids = []
+                if data is not None and not data.empty:
+                    docs = data.to_dict('records')
+                    result = await coll.insert_many(docs)
+                    inserted_ids = result.inserted_ids
+                return inserted_ids
+            except (ServerSelectionTimeoutError, AutoReconnect) as e:
+                self.log.error('mongodb 调用 {}, 连接异常: ex={}, call {}, {}s后重试').format(self.do_insert.__name__,
+                                                                                     e, traceback.format_exc(),
+                                                                                     (i + 1) * 5)
+                await asyncio.sleep((i + 1) * 5)
+                self.init()
+        return 0

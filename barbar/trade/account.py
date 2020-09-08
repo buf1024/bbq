@@ -1,11 +1,16 @@
-import log
+import barbar.log as log
 import uuid
+from barbar.data.stockdb import StockDB
+from barbar.trade.broker.broker import Broker
 
 
 class Account:
-    def __init__(self, repo):
+    def __init__(self, account_id: str, db: StockDB):
         self.log = log.get_logger(self.__class__.__name__)
-        self.repo = repo
+
+        self.account_id = account_id
+        self.db = db
+
         self.cash_init = 0
         self.cash_available = 0
 
@@ -21,12 +26,18 @@ class Account:
         self.profit += self.position[code].profit
         self.cost += (self.position[code].cost * self.position[code].volume)
 
-    def on_quot(self, payload):
+    async def on_quot(self, payload):
         for code in self.position.keys():
             if code in payload:
                 self._update_position_quot(code, payload[code])
         if self.cost > 0:
             self.profit_rate = self.profit / self.cost
 
+    async def on_broker(self, broker, payload):
+        pass
 
+    async def on_risk(self, risk, payload):
+        pass
 
+    async def on_strategy(self, strategy, payload):
+        pass

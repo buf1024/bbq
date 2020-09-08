@@ -39,7 +39,7 @@ class Sina:
                          (int(quots[25]), float(quots[26])), (int(quots[27]), float(quots[28])),
                          (int(quots[29]), float(quots[30]))],
                     date=datetime.datetime.strptime(quots[31], '%Y-%m-%d'),
-                    time=datetime.datetime.strptime(quots[31] + ' ' + quots[32], '%Y-%m-%d %H:%M:%S'),
+                    datetime=datetime.datetime.strptime(quots[31] + ' ' + quots[32], '%Y-%m-%d %H:%M:%S'),
                 )
             return quot_dict
 

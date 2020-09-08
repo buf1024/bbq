@@ -2,6 +2,7 @@ from barbar.data.mongodb import MongoDB
 from typing import List, Optional
 import pandas as pd
 
+
 class StockDB(MongoDB):
     _comm_db = 'comm_db'  # 通用数据库
     _code_info = 'code_info'  # 股票信息
@@ -93,7 +94,7 @@ class StockDB(MongoDB):
         :return: list[_id]
         """
         self.log.debug('保存股票列表, count = {} ...'.format(data.shape[0] if data is not None else 0))
-        inserted_ids = await self.do_batch_update(data, lambda x: (self.code_info, {'code': x['code']}, x))
+        inserted_ids = await self.do_insert(coll=self.code_info, data=data)
         self.log.debug('保存股票列表成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
@@ -113,7 +114,7 @@ class StockDB(MongoDB):
         :return: list[_id]
         """
         self.log.debug('保存交易日历, count = {} ...'.format(data.shape[0] if data is not None else 0))
-        inserted_ids = await self.do_batch_update(data, lambda x: (self.trade_cal, {'cal_date': x['cal_date']}, x))
+        inserted_ids = await self.do_insert(coll=self.trade_cal, data=data)
         self.log.debug('保存交易日历成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
@@ -189,11 +190,7 @@ class StockDB(MongoDB):
         :return: None/list[_id]
         """
         self.log.debug('保存日K数据, code={}, count = {} ...'.format(code, data.shape[0] if data is not None else 0))
-        inserted_ids = []
-        if data is not None:
-            docs = data.to_dict('records')
-            result = await self.stock_bar(code=code).insert_many(docs)
-            inserted_ids = result.inserted_ids
+        inserted_ids = await self.do_insert(coll=self.stock_bar(code=code), data=data)
         self.log.debug('保存日K数据成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
@@ -217,11 +214,7 @@ class StockDB(MongoDB):
         :return: None/list[_id]
         """
         self.log.debug('保存复权因子数据, code={}, count = {} ...'.format(code, data.shape[0] if data is not None else 0))
-        inserted_ids = []
-        if data is not None:
-            docs = data.to_dict('records')
-            result = await self.adj_factor(code=code).insert_many(docs)
-            inserted_ids = result.inserted_ids
+        inserted_ids = await self.do_insert(coll=self.adj_factor(code=code), data=data)
         self.log.debug('保存复权因子数据成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
@@ -241,7 +234,7 @@ class StockDB(MongoDB):
         :return: None/list[_id]
         """
         self.log.debug('保存大盘指数列表, count = {} ...'.format(data.shape[0]))
-        inserted_ids = await self.do_batch_update(data, lambda x: (self.index_info, {'code': x['code']}, x))
+        inserted_ids = await self.do_insert(coll=self.index_info, data=data)
         self.log.debug('保存大盘指数列表成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
@@ -259,15 +252,12 @@ class StockDB(MongoDB):
 
     async def save_index_bar(self, code: str, data: pd.DataFrame) -> List[str]:
         """
+        :param code:
         :param data:  DataFrame([code,trade_date,open,high,low,close,vol,amt])
         :return: None/list[_id]
         """
         self.log.debug('保存大盘日K数据, code={} count = {} ...'.format(code, data.shape[0]))
-        inserted_ids = []
-        if data is not None:
-            docs = data.to_dict('records')
-            result = await self.index_bar(code=code).insert_many(docs)
-            inserted_ids = result.inserted_ids
+        inserted_ids = await self.do_insert(coll=self.index_bar(code=code), data=data)
         self.log.debug('保存大盘日K数据成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
@@ -288,7 +278,7 @@ class StockDB(MongoDB):
         :return: list[_id]
         """
         self.log.debug('保存板块列表, count = {} ...'.format(data.shape[0] if data is not None else 0))
-        inserted_ids = await self.do_batch_update(data, lambda x: (self.block_info, {'code': x['code']}, x))
+        inserted_ids = await self.do_insert(coll=self.block_info, data=data)
         self.log.debug('保存板块列表成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
@@ -305,14 +295,11 @@ class StockDB(MongoDB):
 
     async def save_xdxr_list(self, data: pd.DataFrame) -> List[str]:
         """
-
         :param data: DataFrame([blockname, code])
         :return: None/list[_id]
         """
         self.log.debug('保存除权除息数据, count = {} ...'.format(data.shape[0] if data is not None else 0))
-        inserted_ids = await self.do_batch_update(data,
-                                                  lambda x: (self.xdxr_info, {'code': x['code'], 'date': x['date'],
-                                                                              'category': x['category']}, x))
+        inserted_ids = await self.do_insert(coll=self.xdxr_info, data=data)
         self.log.debug('保存除权除息数据成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
@@ -417,6 +404,8 @@ if __name__ == '__main__':
 
 
     async def test_xdxr_list(db):
+        ret = await db.do_delete(db.block_info, just_one=False)
+        print('ret drop: {}'.format(ret))
         xdxr = fetch.get_xdxr_list(code='000001.sz')
         print('fetch xdxr:\n')
         print(xdxr.head())
@@ -445,6 +434,6 @@ if __name__ == '__main__':
         # test_adj_stock_bar(mongo)
         # test_index_bar(mongo)
         # test_block_list(mongo)
-        # test_xdxr_list(mongo)
-        test_build_index(mongo)
+        test_xdxr_list(mongo)
+        # test_build_index(mongo)
     )

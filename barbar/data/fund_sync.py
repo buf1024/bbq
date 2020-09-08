@@ -91,7 +91,7 @@ class FundSync:
             funds = await self.fund.get_block_list(sync_fund=True)
             await self.db.save_block_list(funds)
 
-            await self.db.build_index()
+            # await self.db.build_index()
             self.log.info('基金信息同步完成')
         except Exception as e:
             self.log.error('同步基金失败: ex={}, stack={}'.format(e, traceback.format_exc()))

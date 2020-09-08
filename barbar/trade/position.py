@@ -1,57 +1,62 @@
 from datetime import datetime, timedelta
+from barbar.data.stockdb import StockDB
+import uuid
 
 
 class Position:
-    def __init__(self, repo):
-        self.repo = repo
+    def __init__(self, db: StockDB):
+        self.db = db
+        self.position_id = str(uuid.uuid4())
 
-        self.name = ''
-        self.code = ''
+        self.name = ''  # 股票名称
+        self.code = ''  # 股票代码
+        self.time = datetime.now()  # 首次建仓时间
 
-        self.time = None
-        self.last_time = None
+        self.volume = 0   # 持仓量
+        self.volume_available = 0   # 可用持仓量
 
-        self.volume = 0
-        self.volume_available = 0
+        self.cost = 0.0  # 平均持仓成本
+        self.price = 0.0  # 平均持仓价
 
-        self.cost = 0.0
+        self.now_price = 0.0  # 最新价
+        self.max_price = 0.0  # 最高价
+        self.min_price = 0.0  # 最低价
 
-        self.price = 0.0
-        self.max_price = 0.0
-        self.min_price = 0.0
+        self.profit_rate = 0.0  # 盈利比例
+        self.max_profit_rate = 0.0  # 最大盈利比例
+        self.min_profit_rate = 0.0  # 最小盈利比例
 
-        self.profit_rate = 0.0
-        self.max_profit_rate = 0.0
-
-        self.profit = 0.0
-        self.max_profit = 0.0
+        self.profit = 0.0  # 盈利
+        self.max_profit = 0.0  # 最大盈利
+        self.min_profit = 0.0  # 最小盈利
 
         self.adj_factor = 1.0
 
-        self._adj_check_date = []
+        # self._adj_check_date = []
 
-    def _get_adj_factor(self, codes, trade_date, pre_close):
-        if trade_date in self._adj_check_date:
-            return self.adj_factor
-
-        price = self.repo.db.load_code_kdata(codes=codes,
-                                             filter={'trade_date': {'$lt': trade_date}},
-                                             projection=['close'],
-                                             limit=1)
-        if price is None or price.empty:
-            return self.adj_factor
-
-        db_pre_close = price['close'].tolist()[0]
-        if db_pre_close == pre_close:
-            return self.adj_factor
-
-        self.adj_factor = self.adj_factor * (pre_close / db_pre_close)
-
-        return self.adj_factor
+    # def _get_adj_factor(self, codes, trade_date, pre_close):
+    #     if trade_date in self._adj_check_date:
+    #         return self.adj_factor
+    #
+    #     price = self.repo.db.load_code_kdata(codes=codes,
+    #                                          filter={'trade_date': {'$lt': trade_date}},
+    #                                          projection=['close'],
+    #                                          limit=1)
+    #     if price is None or price.empty:
+    #         return self.adj_factor
+    #
+    #     db_pre_close = price['close'].tolist()[0]
+    #     if db_pre_close == pre_close:
+    #         return self.adj_factor
+    #
+    #     self.adj_factor = self.adj_factor * (pre_close / db_pre_close)
+    #
+    #     return self.adj_factor
 
     def on_quot(self, quot):
-        adj_factor = self._get_adj_factor(codes=[self.code], trade_date=quot['trade_date'], pre_close=quot['pre_close'])
+        # adj_factor = self._get_adj_factor(codes=[self.code], trade_date=quot['trade_date'], pre_close=quot['pre_close'])
 
+        adj_factor = 1.0
         self.volume = self.volume * adj_factor
         self.price = quot.now * adj_factor
 
