@@ -4,7 +4,7 @@ from datetime import datetime
 
 class Signal:
     def __init__(self):
-        self.signal_id = str(uuid.uuid4())
+        self.signal_id = str(uuid.uuid4()).replace('-', '')
 
         self.source = ''  # 信号源, risk, strategy, broker, handy
         self.action = ''  # sell, buy, cancel

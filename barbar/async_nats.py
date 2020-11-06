@@ -1,7 +1,6 @@
 import asyncio
 import traceback
 import barbar.log as log
-from threading import Thread
 from nats.aio.client import Client as NATS
 from typing import Dict
 import json
@@ -35,8 +34,8 @@ class AsyncNats:
         subject = msg.subject
         reply = msg.reply
         data = msg.data.decode()
-        self.log.info("Received a message on '{subject} {reply}': {data}".format(
-            subject=subject, reply=reply, data=data))
+        # self.log.info("Received a message on '{subject} {reply}': {data}".format(
+        #     subject=subject, reply=reply, data=data))
         data = json.loads(data)
 
         await self.on_message(subject=subject, reply=reply, data=data)
@@ -44,11 +43,11 @@ class AsyncNats:
     async def on_message(self, subject, reply, data):
         pass
 
-    def stop(self):
+    async def stop(self):
         if self.nc.is_closed:
             return
         self.log.info("Disconnecting...")
-        self.loop.create_task(self.nc.close())
+        await self.nc.close()
 
     async def nats_task(self):
         options = {
@@ -76,23 +75,31 @@ class AsyncNats:
         return True
 
     async def subscribe(self, subject: str):
-        if not self.nc.is_closed:
-            if subject not in self.subjects:
-                ssid = await self.nc.subscribe(subject=subject, cb=self.on_nats_message)
-                self.subjects[subject] = ssid
+        if subject not in self.subjects:
+            ssid = await self.nc.subscribe(subject=subject, cb=self.on_nats_message)
+            self.subjects[subject] = ssid
 
     async def unsubscribe(self, subject: str):
-        if not self.nc.is_closed:
-            if subject in self.subjects:
-                await self.nc.unsubscribe(ssid=self.subjects[subject])
-                del self.subjects[subject]
+        if subject in self.subjects:
+            await self.nc.unsubscribe(ssid=self.subjects[subject])
+            del self.subjects[subject]
 
     async def publish(self, subject: str, data: object):
-        if not self.nc.is_closed:
-            payload = ''
-            if isinstance(data, dict):
-                payload = json.dumps(data).encode()
-            else:
-                payload = str(data).encode()
-            await self.nc.publish(subject=subject, payload=payload)
-            await self.nc.flush()
+        payload = ''
+        if isinstance(data, dict):
+            payload = json.dumps(data).encode()
+        else:
+            payload = str(data).encode()
+        await self.nc.publish(subject=subject, payload=payload)
+        await self.nc.flush()
+
+    async def request(self, subject: str, data: object, timeout: int = 15):
+        payload = ''
+        if isinstance(data, dict):
+            payload = json.dumps(data).encode()
+        else:
+            payload = str(data).encode()
+        msg = await self.nc.request(subject=subject,
+                                    payload=payload,
+                                    timeout=timeout)
+        return json.loads(msg.data)

@@ -4,7 +4,7 @@ from datetime import datetime
 
 class Entrust:
     def __init__(self):
-        self.entrust_id = str(uuid.uuid4())
+        self.entrust_id = str(uuid.uuid4()).replace('-', '')
 
         self.name = ''  # 股票名称
         self.code = ''  # 股票代码

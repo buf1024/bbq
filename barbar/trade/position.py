@@ -6,7 +6,7 @@ import uuid
 class Position:
     def __init__(self, db: StockDB):
         self.db = db
-        self.position_id = str(uuid.uuid4())
+        self.position_id = str(uuid.uuid4()).replace('-', '')
 
         self.name = ''  # 股票名称
         self.code = ''  # 股票代码

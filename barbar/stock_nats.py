@@ -1,6 +1,7 @@
 from barbar.async_nats import AsyncNats
 from typing import Dict
 import json
+import traceback
 
 
 class StockNats(AsyncNats):
@@ -30,18 +31,28 @@ class StockNats(AsyncNats):
         try:
             cmd, data = data['cmd'], data['data'] if 'data' in data else None
             if cmd in handlers.keys():
-                status, msg, data = await handlers[cmd](data)
-                resp = dict(status=status, msg=msg, data=data)
+                rst = await handlers[cmd](data)
+                resp = None
+                if isinstance(rst, tuple) and (len(rst) == 2 or len(rst) == 3):
+                    if len(rst) == 3:
+                        status, msg, data = rst
+                        resp = dict(status=status, msg=msg, data=data)
+                    else:
+                        status, msg = rst
+                        resp = dict(status=status, msg=msg)
             else:
-                self.log.error('handler not found, data={}'.format(data))
+                if 'heartbeat' == cmd:
+                    resp = dict(status='OK', msg='SUCCESS')
+                else:
+                    self.log.error('handler not found, data={}'.format(data))
         except Exception as e:
             self.log.error(
                 'execute command failed: exception={} subject={}, data={} call_stack={}'.format(e, subject, data,
                                                                                                 traceback.format_exc()))
-            resp = dict(status='FAIL', msg='调用异常', data=None)
+            resp = dict(status='FAIL', msg='调用异常')
         finally:
             if reply != '' and resp is not None:
                 js_resp = json.dumps(resp)
-                self.log.info("Response a message: '{data}'".format(data=js_resp))
-                await self.publish(subject=reply, data=js_resp.encode())
+                # self.log.info("Response a message: '{data}'".format(data=js_resp))
+                await self.publish(subject=reply, data=js_resp)
 

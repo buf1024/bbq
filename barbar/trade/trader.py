@@ -2,32 +2,54 @@ import barbar.log as log
 import click
 from barbar.config import conf_dict
 import os
-from barbar.common import run_until_complete
+import uuid
 import barbar.fetch as fetch
 from barbar.data.stockdb import StockDB
 from barbar.stock_nats import StockNats
 import asyncio
-
+from multiprocessing import Process
+import multiprocessing as mp
 from typing import Dict, ClassVar
+import traceback
+import json
 
-from barbar.trade.account import Account
-from barbar.trade.strategy import strategies
+# from barbar.trade.account import Account
+
+"""
+监听topic: topic:barbar.trader.command
+提供功能: 1. 实盘或模拟盘交易 2.交易回测 3. 停止
+
+采用多进程交易或回测:
+Trader
+trade/backtest -> TradeReal/TradeBacktest(topic:barbar.trader.trade.command.{}.format(uuid.uuid4()))启动进程
+
+TradeReal/TradeBacktest
+订阅行情 -> 监听行情推送 -> 处理行情
+订阅其他命令
+
+1. 
+{
+
+"""
 
 
-# from selector.strategy import strategies as select_strategies
-# from trader.broker import brokers
-# from trader.strategy import strategies as trade_strategies
-# from trader.robot import robots
+def run(cls: ClassVar, **kwargs):
+    """
 
-def run(uri: str, pool: int, nats: str, debug: bool, cls: ClassVar):
-    uri = conf_dict['mongo']['uri'] if uri is None else uri
-    pool = conf_dict['mongo']['pool'] if pool <= 0 else pool
-    nats = conf_dict['nats']['uri'] if nats is None else nats
+    :param cls:
+    :param kwargs:
+    :return:
+    """
+
+    uri = conf_dict['mongo']['uri'] if 'uri' not in kwargs or kwargs['uri'] is None else kwargs['uri']
+    pool = conf_dict['mongo']['pool'] if 'pool' not in kwargs or kwargs['pool'] <= 0 else kwargs['pool']
+    nats = conf_dict['nats']['uri'] if 'nats' not in kwargs or kwargs['uri'] is None else kwargs['nats']
+    debug = kwargs['debug']
 
     file = None
     level = "critical"
     if debug:
-        file = conf_dict['log']['path'] + os.sep + 'stock_trade.log'
+        file = conf_dict['log']['path'] + os.sep + cls.__name__.lower() + '.log'
         level = conf_dict['log']['level']
 
     log.setup_logger(file=file, level=level)
@@ -38,34 +60,154 @@ def run(uri: str, pool: int, nats: str, debug: bool, cls: ClassVar):
         print('初始化数据库失败')
         return
 
-    fetch.init()
+    if 'quot' in kwargs:
+        fetch.init()
 
-    trader = cls(options={'servers': [nats]}, db=db)
+    kwargs['options'] = {'servers': [nats]}
+    kwargs['db'] = db
+
+    trader = cls(**kwargs)
     trader.start()
 
 
 class TradeReal(StockNats):
-    def __init__(self, options: Dict, db: StockDB):
+    """
+    account: {id, options}
+    """
+
+    def __init__(self, **kwargs):
+        """
+
+        :param kwargs:
+            options, db, topic, parent_topic, data
+        """
         self.loop = asyncio.get_event_loop()
-        super().__init__(loop=self.loop, options=options)
+        super().__init__(loop=self.loop, options=kwargs['options'])
 
-        self.db = db
+        self.db = kwargs['db']
 
-        self.topic_cmd = 'topic:barbar.tradeaccount.command'
+        self.topic_cmd = kwargs['topic']
+        self.parent_topic = kwargs['parent_topic']
+        self.data = kwargs['data']
+
+        self.quot_topic_cmd = 'topic:barbar.quotation.command'
+
+        self.quot_topic = None
+
+        self.cmd_handlers = {
+            'cancel': self.on_cancel
+        }
+        self.add_handler(self.topic_cmd, self.cmd_handlers)
+
+    async def init(self):
+        await self.nats_task()
+        payload = dict(cmd='subscribe', data=dict(
+            type='realtime',
+            frequency='1min',
+            start='2020-08-01 09:00:00',
+            end='2020-08-01 15:00:00',
+            index_list=['000001.SH', '399006.SZ'],
+            stock_list=['000001.SZ']
+        ))
+        suc = await self.sub_quot(payload=payload)
+        if not suc:
+            await self.stop()
+        return suc
+
+    async def loop_stop(self):
+        await asyncio.sleep(0.1, self.loop)
+        self.loop.stop()
+
+    async def on_cancel(self, data):
+        await self.unsub_quot(payload=dict(cmd='unsubscribe', data=dict(subject=self.quot_topic)))
+        self.loop.create_task(self.stop())
+        self.loop.create_task(self.loop_stop())
+        return 'OK'
+
+    async def on_quot(self, data):
+        self.log.info('on_quot: {}'.format(data))
+
+    async def unsub_quot(self, payload: Dict):
+        try:
+            data = await self.request(subject=self.quot_topic_cmd, data=payload, timeout=15)
+
+            if data['status'] != 'OK':
+                self.log.error('取消订阅行情异常, 失败={}'.format(data['msg']))
+                return False
+
+            await self.unsubscribe(subject=self.quot_topic)
+        except Exception as e:
+            self.log.error('取消订阅行情异常, ex={}, callstack={}'.format(e, traceback.format_exc()))
+            return False
+        return True
+
+    async def sub_quot(self, payload: Dict):
+        try:
+            data = await self.request(subject=self.quot_topic_cmd, data=payload, timeout=15)
+
+            if data['status'] != 'OK':
+                self.log.error('订阅行情异常, 失败={}'.format(data['msg']))
+                return False
+
+            subject = data['data']['subject']
+            self.quot_topic = subject
+            self.log.info('监听行情topic: {}'.format(subject))
+            self.add_handler(subject, dict(quotation=self.on_quot))
+            await self.subscribe(subject=subject)
+        except Exception as e:
+            self.log.error('订阅行情异常, ex={}, callstack={}'.format(e, traceback.format_exc()))
+            return False
+        return True
+
+    def start(self):
+        try:
+            if self.loop.run_until_complete(self.init()):
+                self.loop.create_task(self.subscribe(self.topic_cmd))
+                self.loop.run_forever()
+        except Exception as e:
+            self.log.error(
+                '{} start 异常, ex={}, callstack={}'.format(self.__class__.__name__, e, traceback.format_exc()))
+        finally:
+            self.loop.close()
 
 
 class TradeBacktest(TradeReal):
-    def __init__(self, options: Dict, db: StockDB):
-        super().__init__(options=options, db=db)
+    """
+    strategy: {id, options},
+    account: {id, options}
+    risk: {id, options}
+    code: {index, stock}
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    async def init(self):
+        await self.nats_task()
+        self.log.info('TradeBacktest init data={}'.format(self.data))
+        payload = dict(cmd='subscribe', data=dict(
+            type='backtest',
+            frequency='5min',
+            start='2020-08-01 09:00:00',
+            end='2020-08-01 15:00:00',
+            index_list=['000001.SH', '399006.SZ'],
+            stock_list=['000001.SZ']
+        ))
+        return await self.sub_quot(payload=payload)
 
 
 class Trader(StockNats):
+    def __init__(self, **kwargs):
+        """
 
-    def __init__(self, options: Dict, db: StockDB):
+        :param kwargs:
+            debug, options, db
+        """
         self.loop = asyncio.get_event_loop()
-        super().__init__(loop=self.loop, options=options)
+        super().__init__(loop=self.loop, options=kwargs['options'])
 
-        self.db = db
+        self.debug = kwargs['debug']
+        self.db = kwargs['db']
 
         self.topic_cmd = 'topic:barbar.trader.command'
 
@@ -78,7 +220,7 @@ class Trader(StockNats):
 
         self.running = False
 
-        self.strategies = []
+        self.topics = {}
 
         # account = Account(db=self.db)
         #
@@ -104,21 +246,67 @@ class Trader(StockNats):
         # account->on_quot
 
     async def on_backtest(self, data):
-        pass
+        self.log.info('backtest请求: {}'.format(data))
+        topic = 'topic:barbar.trader.backtest.command.{}'.format(str(uuid.uuid4()).replace('-', ''))
+        p = Process(target=run, kwargs=dict(cls=TradeBacktest,
+                                            topic=topic,
+                                            parent_topic=self.topic_cmd,
+                                            uri=self.db.uri,
+                                            pool=self.db.pool,
+                                            debug=self.debug,
+                                            nats=self.options['servers'][0],
+                                            quot=True,
+                                            data=data))
+        p.start()
+        self.topics[topic] = p
+        self.log.info('backtest 进程启动, pid={}, topic={}'.format(p.pid, topic))
+        return "OK", "SUCCESS", topic
 
     async def on_trade(self, data):
-        pass
+        self.log.info('trade请求: {}'.format(data))
+        topic = 'topic:barbar.trader.trade.command.{}'.format(str(uuid.uuid4()).replace('-', ''))
+        p = Process(target=run, kwargs=dict(cls=TradeReal,
+                                            topic=topic,
+                                            parent_topic=self.topic_cmd,
+                                            uri=self.db.uri,
+                                            pool=self.db.pool,
+                                            debug=self.debug,
+                                            nats=self.options['servers'][0],
+                                            quot=False,
+                                            data=data))
+        p.start()
+        self.topics[topic] = p
+        self.log.info('trade 进程启动, pid={}, topic={}'.format(p.pid, topic))
+        return "OK", "SUCCESS", topic
 
     async def on_cancel(self, data):
         pass
 
+    async def proc_check_task(self):
+        while self.running:
+            await asyncio.sleep(5)
+            if len(self.topics) <= 0:
+                continue
+
+            quit_proc = []
+            for topic, proc in self.topics.items():
+                if not proc.is_alive():
+                    self.log.info('进程退出, 获取退出码...')
+                    proc.join()
+                    self.log.info('进程退出, topic: {}, pid: {}, exitcode: {}'.format(topic, proc.pid, proc.exitcode))
+                    quit_proc.append(topic)
+            for topic in quit_proc:
+                del self.topics[topic]
+
     def start(self):
         try:
             if self.loop.run_until_complete(self.nats_task()):
+                self.running = True
                 self.loop.create_task(self.subscribe(self.topic_cmd))
+                self.loop.create_task(self.proc_check_task())
                 self.loop.run_forever()
         except Exception as e:
-            self.log.error('quotation start 异常, ex={}, callstack={}'.format(e, traceback.format_exc()))
+            self.log.error('{} start 异常, ex={}, callstack={}'.format(self.__name__, e, traceback.format_exc()))
         finally:
             self.loop.close()
 
@@ -129,100 +317,9 @@ class Trader(StockNats):
 @click.option('--nats', type=str, help='mongodb uri')
 @click.option('--debug/--no-debug', default=True, help='show debug log')
 def main(uri: str, pool: int, nats: str, debug: bool):
+    mp.set_start_method('spawn')
     run(uri=uri, pool=pool, nats=nats, debug=debug, cls=Trader)
 
 
 if __name__ == '__main__':
     main()
-
-# @singleton
-# class TraderRepository(BaseRepository):
-#     def __init__(self, config_path):
-#         super().__init__(config_path)
-#
-#
-# if __name__ == '__main__':
-#     def help(broker=None, strategy=None, robot=None):
-#         if broker is not None:
-#             print('broker:')
-#             print('name: {}\ndesc: {}\n'.format(broker.name, broker.desc))
-#         if strategy is not None:
-#             print('strategy:')
-#             print('name: {}\ndesc: {}\n'.format(strategy.name, strategy.desc))
-#         if robot is not None:
-#             print('robot:')
-#             print('name: {}\ndesc: {}\n'.format(robot.name, robot.desc))
-#
-#         if broker is None and strategy is None and robot is None:
-#             print('brokers:')
-#             for cls in brokers.values():
-#                 print('name: {}\ndesc: {}\n'.format(cls.name, cls.desc))
-#             print('strategies:')
-#             for cls in trade_strategies.values():
-#                 print('name: {}\ndesc: {}\n'.format(cls.name, cls.desc))
-#             print('robots:')
-#             for cls in robots.values():
-#                 print('name: {}\ndesc: {}\n'.format(cls.name, cls.desc))
-#
-#
-#     config_path, opts = parse_arguments(opt_desc='?=broker|strategy|robot=name '
-#                                                  'strategy=name;arg1=v1;arg2=v2 '
-#                                                  'broker=name;arg1=v1;arg2=v2 '
-#                                                  'robot=name;arg1=v1;arg2=v2 ')
-#     if config_path is None or opts is None:
-#         print('parse_arguments failed')
-#         os._exit(-1)
-#
-#     if '?' in opts:
-#         topic = opts['?']
-#         if not isinstance(topic, dict):
-#             help()
-#             os._exit(-1)
-#
-#         for k, v in topic.items():
-#             if k == 'broker':
-#                 names = brokers.keys()
-#                 if v not in names:
-#                     print('invalid broker name: {}, available names: {}'.format(v, names))
-#                 else:
-#                     help(broker=brokers[v])
-#
-#             if k == 'strategy':
-#                 names = trade_strategies.keys()
-#                 if v not in names:
-#                     print('invalid strategy name: {}, available names: {}'.format(v, names))
-#                 else:
-#                     help(strategy=trade_strategies[v])
-#
-#             if k == 'robot':
-#                 names = robots.keys()
-#                 if v not in names:
-#                     print('invalid robot name: {}, available names: {}'.format(v, names))
-#                 else:
-#                     help(robot=robots[v])
-#
-#         os._exit(0)
-#
-#     strategy_name = opts['strategy']['strategy']
-#     broker_name = opts['broker']['broker']
-#     robot_name = opts['robot']['robot']
-#
-#     strategy_cls = trade_strategies[strategy_name]
-#     broker_cls = brokers[broker_name]
-#     robot_cls = robots[robot_name]
-#
-#     repo = TraderRepository(config_path)
-#     if not repo.init('trade'):
-#         print('req init failed')
-#         os._exit(-1)
-#
-#     broker = broker_cls(repo, **opts['broker'])
-#     strategy = strategy_cls(repo, broker, **opts['strategy'])
-#
-#     trader = Trader(repo, 'trade')
-#     trader.set_robot(robot_cls(repo, **opts['robot']))
-#     trader.add_strategy(strategy)
-#
-#     trader.start()
-#     trader.join()
-#     bus_stop()
