@@ -4,72 +4,75 @@ import pandas as pd
 
 
 class StockDB(MongoDB):
-    _bbq_db = 'bbq'  # 通用数据库
-    _code_info = 'code_info'  # 股票信息
-    _index_info = 'index_info'  # 指数信息
-    _trade_cal = 'trade_cal'  # 交日日历
+    _meta = {
+        # 股票信息
+        'stock_info': {'code': '代码', 'name': '名称', 'block': '板块'},
+        # 日线数据, 如: stock_daily_sz000001
+        'stock_daily': {'code': '代码', 'trade_date': '交易日', 'close': '收盘价', 'open': '开盘价', 'high': '最高价', 'low': '最低价',
+                        'volume': '成交量(股)', 'turn_over': '换手率', 'hfq_factor': '后复权因子',
+                        'qfq_factor': '前复权因子'},
+        # 个股指标, 如: stock_index_sz000001
+        'stock_index': {'code': '代码', 'trade_date': '交易日', 'pe': '市盈率', 'pe_ttm': '市盈率TTM',
+                        'pb': '市净率', 'ps': '市销率', 'ps_ttm': '市销率TTM', 'dv_ratio': '股息率', 'dv_ttm': '股息率TTM',
+                        'total_mv': '总市值'},
 
-    _bar_db = 'bar_db'  # K线数据库
-    _stock_bar = 'stock_bar'  # 股票日k
-    _index_bar = 'index_bar'  # 大盘日k
-    _adj_factor = 'adj_factor'  # 复权因子
+        # 日线信息
+        'index_info': {'code': '代码', 'name': '名称'},
+        # 指数日线数据, 如: index_daily_sz000001
+        'index_daily': {'code': '代码', 'trade_date': '交易日', 'close': '收盘价', 'open': '开盘价', 'high': '最高价', 'low': '最低价',
+                        'volume': '成交量(股)'},
 
-    _misc_db = 'misc_db'  # 其他杂项数据库
-    _block_info = 'block_info'  # 板块信息
-    _xdxr_info = 'xdxr_info'  # 除权除息
+        # 股票北向资金
+        'stock_ns_flow': {'trade_date': '交易日',
+                          'sz_north_value': '深股通北上', 'sh_north_value': '沪股通北上', 'north_value': '北上资金',
+                          'sz_south_value': '深股通南下', 'sh_south_value': '沪股通南下', 'south_value': '南下资金'},
+
+        # 历史分红数据
+        'stock_his_divend': {'code': '代码', 'name': '名称', 'listing_date': '上市日期', 'divend_acc': '累计股息',
+                             'divend_avg': '年均股息', 'divend_count': '分红次数', 'financed_total': '融资总额',
+                             'financed_count': '融资次数'},
+
+        # 申万行业数据
+        'sw_index_info': {'index_code': '行业代码', 'index_name': '行业名称', 'stock_code': '股票代码', 'stock_name': '股票名称',
+                          'start_date': '开始日期', 'weight': '权重'}
+    }
+
+    _db = 'akshare_db'  # 通用数据库
 
     def __init__(self, uri='mongodb://localhost:27017/', pool=5):
         super().__init__(uri, pool)
 
     @property
-    def code_info(self):
-        return self.get_coll(self._comm_db, self._code_info)
+    def stock_info(self):
+        return self.get_coll(self._db, 'stock_info')
 
     @property
     def index_info(self):
-        return self.get_coll(self._comm_db, self._index_info)
+        return self.get_coll(self._db, 'index_info')
 
     @property
-    def trade_cal(self):
-        return self.get_coll(self._comm_db, self._trade_cal)
-
-    def stock_bar(self, code: str):
-        return self.get_coll(self._bar_db, self._stock_bar + '_' + code)
-
-    def index_bar(self, code: str):
-        return self.get_coll(self._bar_db, self._index_bar + '_' + code)
-
-    def adj_factor(self, code: str):
-        return self.get_coll(self._bar_db, self._adj_factor + '_' + code)
+    def stock_daily(self):
+        return self.get_coll(self._db, 'stock_daily')
 
     @property
-    def xdxr_info(self):
-        return self.get_coll(self._misc_db, self._xdxr_info)
+    def stock_index(self):
+        return self.get_coll(self._db, 'stock_index')
 
     @property
-    def block_info(self):
-        return self.get_coll(self._misc_db, self._block_info)
+    def index_daily(self):
+        return self.get_coll(self._db, 'index_daily')
 
-    async def build_index(self):
-        self.log.debug('创建索引...')
-        await self.code_info.create_index([('code', 1)], unique=True)
-        await self.index_info.create_index([('code', 1)], unique=True)
-        await self.trade_cal.create_index([('cal_date', -1)], unique=True)
+    @property
+    def stock_ns_flow(self):
+        return self.get_coll(self._db, 'stock_ns_flow')
 
-        datas = await self.load_code_list(projection=['code'])
-        if datas is not None:
-            for data in datas.to_dict('records'):
-                await self.stock_bar(data['code']).create_index([('code', 1), ('trade_date', -1)], unique=True)
-                await self.adj_factor(data['code']).create_index([('code', 1), ('trade_date', -1)], unique=True)
+    @property
+    def stock_his_divend(self):
+        return self.get_coll(self._db, 'stock_his_divend')
 
-        datas = await self.load_code_list(projection=['code'])
-        if datas is not None:
-            for data in datas.to_dict('records'):
-                await self.index_bar(data['code']).create_index([('code', 1), ('trade_date', -1)], unique=True)
-
-        await self.block_info.create_index([('blockname', 1)], unique=False)
-        await self.xdxr_info.create_index([('code', 1)], unique=False)
-        self.log.debug('创建索引完成')
+    @property
+    def sw_index_info(self):
+        return self.get_coll(self._db, 'sw_index_info')
 
     def get_coll(self, db: str, col: str):
         client = self.get_client()
@@ -77,148 +80,107 @@ class StockDB(MongoDB):
             return None
         return client[db][col]
 
-    async def load_code_list(self, **kwargs) -> Optional[pd.DataFrame]:
+    async def load_stock_info(self, **kwargs) -> Optional[pd.DataFrame]:
         """
         kwargs参数同pymongo参数, 另外增加to_frame
         :param kwargs:  filter=None, projection=None, skip=0, limit=0, sort=None, to_frame=True
-        :return: DataFrame[_id, code name]
+        :return: DataFrame
         """
-        self.log.debug('加载股票列表, kwargs={} ...'.format(kwargs))
-        df = await self.do_load(self.code_info, **kwargs)
-        self.log.debug('加载股票列表成功 size={}'.format(df.shape[0] if df is not None else 0))
+        self.log.debug('加载股票信息, kwargs={} ...'.format(kwargs))
+        df = await self.do_load(self.stock_info, **kwargs)
+        self.log.debug('加载股票信息成功 size={}'.format(df.shape[0] if df is not None else 0))
         return df
 
-    async def save_code_list(self, data: pd.DataFrame) -> List[str]:
+    async def save_stock_info(self, data: pd.DataFrame) -> List[str]:
         """
         :param data: DataFrame[code name]
         :return: list[_id]
         """
-        self.log.debug('保存股票列表, count = {} ...'.format(data.shape[0] if data is not None else 0))
-        inserted_ids = await self.do_insert(coll=self.code_info, data=data)
-        self.log.debug('保存股票列表成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
+        count = data.shape[0] if data is not None else 0
+        inserted_ids = []
+        self.log.debug('保存股票信息, count = {} ...'.format(count))
+        if count > 0:
+            inserted_ids = await self.do_insert(coll=self.stock_info, data=data)
+        self.log.debug('保存股票信息成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
-    async def load_trade_cal(self, **kwargs) -> Optional[pd.DataFrame]:
+    async def load_stock_daily(self, fq: str = None, **kwargs) -> Optional[pd.DataFrame]:
         """
-        :param kwargs:  filter=None, projection=None, skip=0, limit=0, sort=None, to_frame=True
-        :return: DataFrame[_id, cal_date,is_open]
-        """
-        self.log.debug('加载交易日历, kwargs={} ...'.format(kwargs))
-        df = await self.do_load(self.trade_cal, **kwargs)
-        self.log.debug('加载交易日历成功 size={}'.format(df.shape[0] if df is not None else 0))
-        return df
-
-    async def save_trade_cal(self, data: pd.DataFrame) -> List[str]:
-        """
-        :param data: DataFrame[cal_date,is_open]
-        :return: list[_id]
-        """
-        self.log.debug('保存交易日历, count = {} ...'.format(data.shape[0] if data is not None else 0))
-        inserted_ids = await self.do_insert(coll=self.trade_cal, data=data)
-        self.log.debug('保存交易日历成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
-        return inserted_ids
-
-    async def load_adj_stock_bar(self, code: str = None, fq: str = None, **kwargs) -> Optional[pd.DataFrame]:
-        """
-
-        :param code:
         :param fq: qfq 前复权 hfq 后复权 None不复权
         :param kwargs:  filter=None, projection=None, skip=0, limit=0, sort=None, to_frame=True
         :return: DataFrame([code,trade_date,open,high,low,close,vol,amount])
         """
-        self.log.debug('加载复权因子日线, code={}, kwargs={}'.format(code, kwargs))
+        self.log.debug('加载股票日线, kwargs={}'.format(kwargs))
 
-        srt = None if 'sort' not in kwargs else kwargs['sort']
-        if srt is None:
-            srt = [('trade_date', -1)]
-            kwargs['sort'] = srt
-        else:
-            srt = [s for s in srt if srt != ('trade_date', -1)]
-            srt.append(('trade_date', -1))
+        proj_tmp = kwargs['projection'] if 'projection' in kwargs else None
+        proj = self._meta['stock_daily'].keys()
+        kwargs['projection'] = proj
 
-        data = await self.load_stock_bar(code=code, **kwargs)
-        if data is None or data.empty:
-            self.log.error('加载复权日线失败, 无日线数据')
+        df = await self.do_load(self.stock_daily, **kwargs)
+        if df is None or df.shape[0] == 0:
+            self.log.debug('加载日线数据成功 size=0')
             return None
+
         if fq == 'qfq' or fq == 'hfq':
-            factors = await self.load_adj_factor(code=code, sort=[('trade_date', -1)])
-            if factors is None or factors.empty:
-                self.log.error('加载复权因子日线失败, 无复权数据')
-                return None
-
-            data = data.merge(factors, how='left', left_on=['code', 'trade_date'], right_on=['code', 'trade_date'])
-
-            factor = 1.0
             if fq == 'qfq':
-                # 前复权以现价为标准
-                factor = factors['adj_factor'].iloc[0]
-                data.fillna(method='ffill', inplace=True)
+                df['open'] = df['open'] * df['qfq_factor']
+                df['high'] = df['high'] * df['qfq_factor']
+                df['low'] = df['low'] * df['qfq_factor']
+                df['close'] = df['close'] * df['qfq_factor']
+                df['volume'] = df['volume'] * df['qfq_factor']
+
             if fq == 'hfq':
-                # 前复权以第一天上市价为标准
-                factor = factors['adj_factor'].iloc[-1]
-                data.fillna(method='bfill', inplace=True)
+                df['open'] = df['open'] * df['hfq_factor']
+                df['high'] = df['high'] * df['hfq_factor']
+                df['low'] = df['low'] * df['hfq_factor']
+                df['close'] = df['close'] * df['hfq_factor']
+                df['volume'] = df['volume'] * df['hfq_factor']
 
-            data['open'] = data['open'] * data['adj_factor'] / factor
-            data['high'] = data['high'] * data['adj_factor'] / factor
-            data['low'] = data['low'] * data['adj_factor'] / factor
-            data['close'] = data['close'] * data['adj_factor'] / factor
-            data['vol'] = data['vol'] * data['adj_factor'] / factor
-
-            data.drop(columns=['adj_factor'], inplace=True)
-
-        self.log.debug('加载日线数据成功 size={}'.format(data.shape[0] if data is not None else 0))
-
-        return data
-
-    async def load_stock_bar(self, code: str, **kwargs) -> Optional[pd.DataFrame]:
-        """
-
-        :param code:
-        :param kwargs:  filter=None, projection=None, skip=0, limit=0, sort=None, to_frame=True
-        :return: DataFrame([code,trade_date,open,high,low,close,vol,amount])
-        """
-        self.log.debug('加载日K数据, code={}, kwargs={} ...'.format(code, kwargs))
-        df = await self.do_load(self.stock_bar(code=code), **kwargs)
-        self.log.debug('加载日K数据成功 size={}'.format(df.shape[0] if df is not None else 0))
+        if proj_tmp is not None:
+            df = df[proj_tmp]
+        self.log.debug('加载日线数据成功 size={}'.format(df.shape[0]))
         return df
 
-    async def save_stock_bar(self, code: str, data: pd.DataFrame) -> List[str]:
+    async def save_stock_daily(self, data: pd.DataFrame) -> List[str]:
         """
-
         :param code:
         :param data: DataFrame([code,trade_date,open,high,low,close,vol,amt,adj_factor])
         :return: None/list[_id]
         """
-        self.log.debug('保存日K数据, code={}, count = {} ...'.format(code, data.shape[0] if data is not None else 0))
-        inserted_ids = await self.do_insert(coll=self.stock_bar(code=code), data=data)
-        self.log.debug('保存日K数据成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
+        count = data.shape[0] if data is not None else 0
+        inserted_ids = []
+        self.log.debug('保存日线数据, count = {} ...'.format(count))
+        if count > 0:
+            inserted_ids = await self.do_insert(coll=self.stock_daily, data=data)
+        self.log.debug('保存日线数据成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
-    async def load_adj_factor(self, code: str, **kwargs) -> Optional[pd.DataFrame]:
+    async def load_stock_index(self, **kwargs) -> Optional[pd.DataFrame]:
         """
-
         :param code:
         :param kwargs:  filter=None, projection=None, skip=0, limit=0, sort=None, to_frame=True
-        :return: DataFrame([code,trade_date,adj_factor])
+        :return: DataFrame([code,trade_date,open,high,low,close,vol,amount])
         """
-        self.log.debug('加载复权因子数据, code={}, kwargs={} ...'.format(code, kwargs))
-        df = await self.do_load(self.adj_factor(code=code), **kwargs)
-        self.log.debug('加载复权因子数据成功 size={}'.format(df.shape[0] if df is not None else 0))
+        self.log.debug('加载股票指标, kwargs={}'.format(kwargs))
+        df = await self.do_load(self.stock_index, **kwargs)
+        self.log.debug('加载日线数据成功 size={}'.format(df.shape[0] if df is not None else 0))
         return df
 
-    async def save_adj_factor(self, code: str, data: pd.DataFrame) -> List[str]:
+    async def save_stock_index(self, data: pd.DataFrame) -> List[str]:
         """
-
         :param code:
-        :param data: DataFrame([code,trade_date,adj_factor])
+        :param data: DataFrame([code,trade_date,open,high,low,close,vol,amt,adj_factor])
         :return: None/list[_id]
         """
-        self.log.debug('保存复权因子数据, code={}, count = {} ...'.format(code, data.shape[0] if data is not None else 0))
-        inserted_ids = await self.do_insert(coll=self.adj_factor(code=code), data=data)
-        self.log.debug('保存复权因子数据成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
+        count = data.shape[0] if data is not None else 0
+        inserted_ids = []
+        self.log.debug('保存股票指标数据, count = {} ...'.format(count))
+        if count > 0:
+            inserted_ids = await self.do_insert(coll=self.stock_index, data=data)
+        self.log.debug('保存股票指标数据成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
-    async def load_index_list(self, **kwargs) -> Optional[pd.DataFrame]:
+    async def load_index_info(self, **kwargs) -> Optional[pd.DataFrame]:
         """
         指数基本信息
         :return: None/DataFrame([code,name,market,category,index_type,exp_date])
@@ -228,212 +190,113 @@ class StockDB(MongoDB):
         self.log.debug('加载大盘指数列表成功 size={}'.format(df.shape[0] if df is not None else 0))
         return df
 
-    async def save_index_list(self, data: pd.DataFrame) -> List[str]:
+    async def save_index_info(self, data: pd.DataFrame) -> List[str]:
         """
         :param data: DataFrame([code,name,market,category,index_type,exp_date])
         :return: None/list[_id]
         """
-        self.log.debug('保存大盘指数列表, count = {} ...'.format(data.shape[0]))
-        inserted_ids = await self.do_insert(coll=self.index_info, data=data)
+        count = data.shape[0] if data is not None else 0
+        inserted_ids = []
+        self.log.debug('保存大盘指数列表, count = {} ...'.format(count))
+        if count > 0:
+            inserted_ids = await self.do_insert(coll=self.index_info, data=data)
         self.log.debug('保存大盘指数列表成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
-    async def load_index_bar(self, code: str, **kwargs) -> Optional[pd.DataFrame]:
+    async def load_index_daily(self, **kwargs) -> Optional[pd.DataFrame]:
         """
 
         :param code:
         :param kwargs:
-        :return: None/DataFrame([code,trade_date,open,high,low,close,vol,amount])
+        :return: None/DataFrame([code,trade_date,open,high,low,close,volume,amount])
         """
-        self.log.debug('加载大盘日k数据, code{}, kwargs={} ...'.format(code, kwargs))
-        df = await self.do_load(self.index_bar(code=code), **kwargs)
-        self.log.debug('加载大盘日k数据成功 size={}'.format(df.shape[0] if df is not None else 0))
+        self.log.debug('加载大盘日线数据, kwargs={} ...'.format(kwargs))
+        df = await self.do_load(self.index_daily, **kwargs)
+        self.log.debug('加载大盘日线数据成功 size={}'.format(df.shape[0] if df is not None else 0))
         return df
 
-    async def save_index_bar(self, code: str, data: pd.DataFrame) -> List[str]:
+    async def save_index_daily(self, data: pd.DataFrame) -> List[str]:
         """
         :param code:
         :param data:  DataFrame([code,trade_date,open,high,low,close,vol,amt])
         :return: None/list[_id]
         """
-        self.log.debug('保存大盘日K数据, code={} count = {} ...'.format(code, data.shape[0]))
-        inserted_ids = await self.do_insert(coll=self.index_bar(code=code), data=data)
+        count = data.shape[0] if data is not None else 0
+        inserted_ids = []
+        self.log.debug('保存大盘日K数据, count = {} ...'.format(count))
+        if count > 0:
+            inserted_ids = await self.do_insert(coll=self.index_daily, data=data)
         self.log.debug('保存大盘日K数据成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
-    async def load_block_list(self, **kwargs) -> Optional[pd.DataFrame]:
+    async def load_stock_north_south_flow(self, **kwargs) -> Optional[pd.DataFrame]:
         """
         kwargs参数同pymongo参数, 另外增加to_frame
         :param kwargs:  filter=None, projection=None, skip=0, limit=0, sort=None, to_frame=True
-        :return: DataFrame[_id, code name]
+        :return: DataFrame
         """
-        self.log.debug('加载板块列表, kwargs={} ...'.format(kwargs))
-        df = await self.do_load(self.block_info, **kwargs)
-        self.log.debug('加载板块列表成功 size={}'.format(df.shape[0] if df is not None else 0))
+        self.log.debug('加载北向资金信息, kwargs={} ...'.format(kwargs))
+        df = await self.do_load(self.stock_ns_flow, **kwargs)
+        self.log.debug('加载北向资金信息成功 size={}'.format(df.shape[0] if df is not None else 0))
         return df
 
-    async def save_block_list(self, data: pd.DataFrame) -> List[str]:
+    async def save_stock_north_south_flow(self, data: pd.DataFrame) -> List[str]:
         """
         :param data: DataFrame[code name]
         :return: list[_id]
         """
-        self.log.debug('保存板块列表, count = {} ...'.format(data.shape[0] if data is not None else 0))
-        inserted_ids = await self.do_insert(coll=self.block_info, data=data)
-        self.log.debug('保存板块列表成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
+        count = data.shape[0] if data is not None else 0
+        inserted_ids = []
+        self.log.debug('保存北向资金信息, count = {} ...'.format(count))
+        if count > 0:
+            inserted_ids = await self.do_insert(coll=self.stock_ns_flow, data=data)
+        self.log.debug('保存北向资金信息成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
-    async def load_xdxr_list(self, **kwargs) -> Optional[pd.DataFrame]:
+    async def load_stock_his_divend(self, **kwargs) -> Optional[pd.DataFrame]:
         """
-
+        kwargs参数同pymongo参数, 另外增加to_frame
         :param kwargs:  filter=None, projection=None, skip=0, limit=0, sort=None, to_frame=True
-        :return: DataFrame([blockname, code])
+        :return: DataFrame
         """
-        self.log.debug('加载除权除息数据, kwargs={} ...'.format(kwargs))
-        df = await self.do_load(self.xdxr_info, **kwargs)
-        self.log.debug('加载除权除息数据成功 size={}'.format(df.shape[0] if df is not None else 0))
+        self.log.debug('加载历史分红信息, kwargs={} ...'.format(kwargs))
+        df = await self.do_load(self.stock_his_divend, **kwargs)
+        self.log.debug('加载历史分红信息成功 size={}'.format(df.shape[0] if df is not None else 0))
         return df
 
-    async def save_xdxr_list(self, data: pd.DataFrame) -> List[str]:
+    async def save_stock_his_divend(self, data: pd.DataFrame) -> List[str]:
         """
-        :param data: DataFrame([blockname, code])
-        :return: None/list[_id]
+        :param data: DataFrame[code name]
+        :return: list[_id]
         """
-        self.log.debug('保存除权除息数据, count = {} ...'.format(data.shape[0] if data is not None else 0))
-        inserted_ids = await self.do_insert(coll=self.xdxr_info, data=data)
-        self.log.debug('保存除权除息数据成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
+        count = data.shape[0] if data is not None else 0
+        inserted_ids = []
+        self.log.debug('保存历史分红信息, count = {} ...'.format(count))
+        if count > 0:
+            inserted_ids = await self.do_insert(coll=self.stock_his_divend, data=data)
+        self.log.debug('保存历史分红信息成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
+    async def load_sw_index_info(self, **kwargs) -> Optional[pd.DataFrame]:
+        """
+        kwargs参数同pymongo参数, 另外增加to_frame
+        :param kwargs:  filter=None, projection=None, skip=0, limit=0, sort=None, to_frame=True
+        :return: DataFrame
+        """
+        self.log.debug('加载申万一级行业信息, kwargs={} ...'.format(kwargs))
+        df = await self.do_load(self.sw_index_info, **kwargs)
+        self.log.debug('加载申万一级行业信息成功 size={}'.format(df.shape[0] if df is not None else 0))
+        return df
 
-if __name__ == '__main__':
-    import bbq.fetch as fetch
-    from datetime import datetime
-    from bbq.config import conf_dict
-    import sys
-    from bbq.common import run_until_complete
-
-    fetch.init()
-
-
-    async def test_trade_cal(db):
-        cals = fetch.get_trade_cal()
-        print('fetch cal:\n')
-        print(cals.head())
-        await db.save_trade_cal(cals)
-        end_date = datetime(year=2020, month=8, day=5)
-        start_date = datetime(year=2010, month=8, day=4)
-        cals = await db.load_trade_cal(filter={'cal_date': {'$lte': end_date, '$gte': start_date}, 'is_open': 1},
-                                       sort=[('cal_date', -1)])
-        print('cals:\n')
-        print(cals.head())
-
-
-    async def test_code_list(db):
-        codes = fetch.get_code_list()
-        print('fetch codes:\n')
-        print(codes.head())
-        await db.save_code_list(codes)
-        codes = db.load_code_list()
-        print('codes:\n')
-        print(codes.head())
-
-
-    async def test_index_list(db):
-        indexes = fetch.get_index_list()
-        print('fetch index:\n')
-        print(indexes.head())
-        await db.save_index_list(indexes)
-        indexes = await db.load_index_list()
-        print('indexes:\n')
-        print(indexes.head())
-
-
-    async def test_stock_bar(db):
-        kdata = fetch.get_bar(code='000001.sz')
-        print('fetch kdata:\n')
-        print(kdata.head())
-        await db.save_stock_bar(kdata)
-        kdata = await db.load_stock_bar(filter={'code': '000001.SZ'})
-        print('mongo kdata:\n')
-        print(kdata.head())
-
-
-    async def test_adj_factor(db):
-        factor = fetch.get_adj_factor(code='000001.sz')
-        print('fetch kdata:\n')
-        print(factor.head())
-        await db.save_adj_factor(factor)
-        factor = await db.load_adj_factor(filter={'code': '000001.SZ'})
-        print('mongo kdata:\n')
-        print(factor.head())
-
-
-    async def test_adj_stock_bar(db):
-        kdata = db.load_adj_stock_bar(code='000001.sz')
-        print('mongo kdata fq=None:\n')
-        print(kdata.head())
-        kdata = await db.load_adj_stock_bar(code='000001.sz', fq='qfq',
-                                            filter={'trade_date': {'$gte': datetime(year=2020, month=8, day=17),
-                                                                   '$lte': datetime(year=2020, month=8, day=25)}})
-        print('mongo kdata fq=qfq:\n')
-        print(kdata.head())
-        kdata = await db.load_adj_stock_bar(code='000001.sz', fq='hfq',
-                                            filter={'trade_date': {'$gte': datetime(year=2020, month=8, day=17),
-                                                                   '$lte': datetime(year=2020, month=8, day=25)}})
-        print('mongo kdata fq=hfq:\n')
-        print(kdata.head())
-
-
-    async def test_index_bar(db):
-        kdata = fetch.get_index_bar(code='000001.SH')
-        print('fetch index kdata:\n')
-        print(kdata.head())
-        await db.save_index_bar(kdata)
-        kdata = await db.load_index_bar(filter={'code': '000001.SH'})
-        print('mongo index kdata:\n')
-        print(kdata.head())
-
-
-    async def test_block_list(db):
-        block = fetch.get_block_list()
-        print('fetch block:\n')
-        print(block.head())
-        await db.save_block_list(block)
-        block = await db.load_block_list()
-        print('block:\n')
-        print(block.head())
-
-
-    async def test_xdxr_list(db):
-        ret = await db.do_delete(db.block_info, just_one=False)
-        print('ret drop: {}'.format(ret))
-        xdxr = fetch.get_xdxr_list(code='000001.sz')
-        print('fetch xdxr:\n')
-        print(xdxr.head())
-        await db.save_xdxr_list(xdxr)
-        xdxr = await db.load_xdxr_list()
-        print('xdxr:\n')
-        print(xdxr.head())
-
-
-    async def test_build_index(db):
-        await db.build_index()
-
-
-    mongo = StockDB(uri=conf_dict['mongo']['uri'], pool=conf_dict['mongo']['pool'])
-    if not mongo.init():
-        print('init stockdb failed.')
-        sys.exit(-1)
-
-    run_until_complete(
-        #
-        # test_trade_cal(mongo)
-        # test_code_list(mongo)
-        # test_index_list(mongo)
-        # test_stock_bar(mongo)
-        # test_adj_factor(mongo)
-        # test_adj_stock_bar(mongo)
-        # test_index_bar(mongo)
-        # test_block_list(mongo)
-        test_xdxr_list(mongo)
-        # test_build_index(mongo)
-    )
+    async def save_sw_index_info(self, data: pd.DataFrame) -> List[str]:
+        """
+        :param data: DataFrame[code name]
+        :return: list[_id]
+        """
+        count = data.shape[0] if data is not None else 0
+        inserted_ids = []
+        self.log.debug('保存申万一级行业信息, count = {} ...'.format(count))
+        if count > 0:
+            inserted_ids = await self.do_insert(coll=self.sw_index_info, data=data)
+        self.log.debug('保存申万一级行业信息成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
+        return inserted_ids

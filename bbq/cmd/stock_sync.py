@@ -7,7 +7,7 @@ from bbq.common import run_until_complete
 import bbq.fetch as fetch
 from bbq.data.data_sync import DataSync
 from bbq.data.data_sync import Task
-from bbq.data.akshare_db import AKShareDB
+from bbq.data.stockdb import StockDB
 from functools import partial
 from typing import Dict
 from datetime import datetime, timedelta
@@ -26,7 +26,7 @@ class StockDailyTask(Task):
         save_func = self.db.save_stock_daily
         await self.incr_sync_on_trade_date(query_func=query_func, fetch_func=fetch_func, save_func=save_func,
                                            sync_start_time_func=lambda now: datetime(year=now.year, month=now.month,
-                                                                                     day=now.day, hour=23, minute=30))
+                                                                                     day=now.day, hour=15, minute=30))
         self.log.info('股票日线数据task完成, code={}'.format(self.code))
 
 
@@ -51,13 +51,13 @@ class IndexDailyTask(Task):
         self.code = code
 
     async def task(self):
-        self.log.info('开始同步股票日线数据, code={}'.format(self.code))
+        self.log.info('开始同步指数日线数据, code={}'.format(self.code))
         query_func = partial(self.ctx.db.load_index_daily, filter={'code': self.code}, projection=['trade_date'],
                              sort=[('trade_date', -1)], limit=1)
         fetch_func = partial(fetch.fetch_index_daily, code=self.code)
-        save_func = self.db.save_index_daily, code = self.code
+        save_func = self.db.save_index_daily
         await self.incr_sync_on_trade_date(query_func=query_func, fetch_func=fetch_func, save_func=save_func)
-        self.log.info('股票日线数据task完成, code={}'.format(self.code))
+        self.log.info('指数日线数据task完成, code={}'.format(self.code))
 
 
 class StockNorthFlowTask(Task):
@@ -107,7 +107,7 @@ class SWIndexInfoTask(Task):
 
 
 class AKShareSync(DataSync):
-    def __init__(self, db: AKShareDB, config: Dict):
+    def __init__(self, db: StockDB, config: Dict):
         super().__init__(db=db,
                          concurrent_fetch_count=config['con_fetch_num'],
                          concurrent_save_count=config['con_save_num'])
@@ -136,12 +136,9 @@ class AKShareSync(DataSync):
         for _, item in codes.iterrows():
             self.add_task(StockDailyTask(self, name='stack_daily_{}'.format(item['code']), code=item['code']))
             self.add_task(StockIndexTask(self, name='stack_index_{}'.format(item['code']), code=item['code']))
-            # break
-        self.add_task(StockDailyTask(self, name='stack_daily_{}'.format('sh688008'), code='sh688008'))
 
         for _, item in indexes.iterrows():
             self.add_task(IndexDailyTask(self, name='index_daily_{}'.format(item['code']), code=item['code']))
-            # break
 
         self.add_task(StockNorthFlowTask(self))
         self.add_task(StockHisDivEndTask(self))
@@ -176,7 +173,7 @@ def main(uri: str, pool: int, skip_basic: bool, con_fetch_num: int, con_save_num
     log.setup_logger(file=file, level=level)
     logger = log.get_logger()
     logger.debug('初始化数据库')
-    db = AKShareDB(uri=uri, pool=pool)
+    db = StockDB(uri=uri, pool=pool)
     if not db.init():
         print('初始化数据库失败')
         return

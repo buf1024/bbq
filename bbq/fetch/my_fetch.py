@@ -1,38 +1,19 @@
-import time
-import traceback
 from datetime import datetime, timedelta
-from functools import wraps
 from typing import Optional, List
 
 import akshare as ak
+from opendatatools import stock
 import pandas as pd
+import numpy as np
 
-import bbq.log as log
+from bbq.fetch.base_fetch import BaseFetch
 
 
-class MyAKShare:
+class MyFetch(BaseFetch):
     def __init__(self):
-        self.log = log.get_logger(self.__class__.__name__)
+        super().__init__()
 
-    def _retry_client(func):
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            for i in range(3):
-                try:
-                    res = func(self, *args, **kwargs)
-                    return res
-                except Exception as e:
-                    msg = traceback.format_exc()
-                    # 适当时间长一点
-                    self.log.error('请求 %s akshare 异常: \n%s', func.__name__, msg)
-                    self.log.debug('请求 %s akshare {}s后重试.'.format(((i + 1) * 15) * 5), func.__name__)
-                    time.sleep(((i + 1) * 15) * 5)
-            # todo 邮件预警
-            return None
-
-        return wrapper
-
-    @_retry_client
+    @BaseFetch.retry_client
     def fetch_stock_info(self, codes: List[str] = None) -> Optional[pd.DataFrame]:
         """
         股票信息
@@ -62,6 +43,8 @@ class MyAKShare:
             self.log.error('深证 主板 失败')
             return None
         df['block'] = '主板'
+        df.dropna(subset=['A股代码'], inplace=True)
+        df['A股代码'] = df['公司代码'].astype(str).str.zfill(6)
 
         df2 = ak.stock_info_sz_name_code(indicator="中小企业板")
         if df2 is None:
@@ -90,41 +73,63 @@ class MyAKShare:
         self.log.debug('获取股票成功, count={}'.format(data.shape[0]))
         return data
 
-    @_retry_client
+    @BaseFetch.retry_client
     def fetch_stock_daily(self, code: str, start: datetime = None, end: datetime = None) -> Optional[pd.DataFrame]:
         """
-        股票日线数据
+        股票日线数据,
         :param code:
         :param start:
         :param end:
         :return:
         """
         self.log.debug('获取股票{}未复权数据...'.format(code))
-        df = ak.stock_zh_a_daily(symbol=code)
+        df = None
+        if start is not None or end is not None:
+            start_date = start.strftime('%Y-%m-%d') if start is not None else '1990-01-01'
+            end_date = end.strftime('%Y-%m-%d') if end is not None else datetime.now().strftime('%Y-%m-%d')
+            delta = datetime.strptime(end_date, '%Y-%m-%d') - datetime.strptime(start_date, '%Y-%m-%d')
+            if delta.days <= 365:
+                df, msg = stock.get_daily(symbol=self.sina2xueqiu(code), start_date=start_date, end_date=end_date)
+                if df is not None or not df.empty:
+                    df.rename(columns={'last': 'close', 'turnover_rate': 'turnover'}, inplace=True)
+                    df['date'] = pd.to_datetime(df['time'], format='%Y-%m-%d')
+                    df.drop(columns=['symbol', 'change', 'percent', 'time'], inplace=True)
+                else:
+                    self.log.error('获取股票{}未复权数据失败: {}'.format(code, msg))
+        if df is None:
+            df = ak.stock_zh_a_daily(symbol=code)
+            if df is not None or not df.empty:
+                df.drop(columns=['outstanding_share'], inplace=True)
+                df.reset_index(inplace=True)
+
         if df is None:
             self.log.error('获取股票{}未复权数据失败'.format(code))
             return None
 
-        self.log.debug('获取股票{}后复权因子...'.format(code))
-        df2 = ak.stock_zh_a_daily(symbol=code, adjust='hfq-factor')
-        if df2 is None:
-            self.log.error('获取股票{}后复权因子失败'.format(code))
-            return None
-        df = df.merge(df2, how='left', left_on=['date'], right_on=['date'])
-        df.fillna(method='ffill', inplace=True)
+        try:
+            self.log.debug('获取股票{}后复权因子...'.format(code))
+            df2 = ak.stock_zh_a_daily(symbol=code, adjust='hfq-factor')
+            if df2 is None:
+                self.log.error('获取股票{}后复权因子失败'.format(code))
+                return None
+            df = df.merge(df2, how='left', left_on=['date'], right_on=['date'])
+            df.fillna(method='ffill', inplace=True)
 
-        self.log.debug('获取股票{}前复权因子...'.format(code))
-        df2 = ak.stock_zh_a_daily(symbol=code, adjust='qfq-factor')
-        if df2 is None:
-            self.log.error('获取股票{}前复权因子失败'.format(code))
-            return None
+            self.log.debug('获取股票{}前复权因子...'.format(code))
+            df2 = ak.stock_zh_a_daily(symbol=code, adjust='qfq-factor')
+            if df2 is None:
+                self.log.error('获取股票{}前复权因子失败'.format(code))
+                return None
 
-        df = df.merge(df2, how='left', left_on=['date'], right_on=['date'])
-        df.fillna(method='bfill', inplace=True)
-        df.fillna(method='ffill', inplace=True)
+            df = df.merge(df2, how='left', left_on=['date'], right_on=['date'])
+            df.fillna(method='bfill', inplace=True)
+            df.fillna(method='ffill', inplace=True)
+        except Exception as e:
+            self.log.info('获取股票{}复权数据失败(可能未曾复权)'.format(code))
+            df['qfq_factor'] = np.nan
+            df['hfq_factor'] = np.nan
 
         df['code'] = code
-        df.reset_index(inplace=True)
 
         if start is not None:
             date_str = start.strftime('%Y-%m-%d')
@@ -141,7 +146,7 @@ class MyAKShare:
 
         return df
 
-    @_retry_client
+    @BaseFetch.retry_client
     def fetch_stock_index(self, code: str, start: datetime = None, end: datetime = None) -> Optional[pd.DataFrame]:
         """
         股票指标数据
@@ -174,7 +179,7 @@ class MyAKShare:
         self.log.debug('获取股票{}指标数据, count={}'.format(code, df.shape[0]))
         return df
 
-    @_retry_client
+    @BaseFetch.retry_client
     def fetch_index_daily(self, code: str, start: datetime = None, end: datetime = None) -> Optional[pd.DataFrame]:
         """
         指数日线数据
@@ -184,7 +189,26 @@ class MyAKShare:
         :return:
         """
         self.log.debug('获取指数{}日线数据...'.format(code))
-        df = ak.stock_zh_index_daily(symbol=code)
+        df = None
+        if start is not None or end is not None:
+            start_date = start.strftime('%Y-%m-%d') if start is not None else '1990-01-01'
+            end_date = end.strftime('%Y-%m-%d') if end is not None else datetime.now().strftime('%Y-%m-%d')
+            delta = datetime.strptime(end_date, '%Y-%m-%d') - datetime.strptime(start_date, '%Y-%m-%d')
+            if delta.days <= 365:
+                mk, symbol = code[:2], code[2:]
+                symbol = symbol + '.' + 'SH' if mk == 'sh' else 'SZ'
+                df, msg = stock.get_daily(symbol=symbol, start_date=start_date, end_date=end_date)
+                if df is not None or not df.empty:
+                    df.rename(columns={'last': 'close'}, inplace=True)
+                    df['date'] = pd.to_datetime(df['time'], format='%Y-%m-%d')
+                    df.drop(columns=['symbol', 'change', 'percent', 'time', 'turnover_rate'], inplace=True)
+                else:
+                    self.log.error('获取指数{}日线数据失败: {}'.format(code, msg))
+        if df is None:
+            df = ak.stock_zh_index_daily(symbol=code)
+            if df is not None:
+                df.reset_index(inplace=True)
+
         if df is None:
             self.log.error('获取指数{}日线数据失败'.format(code))
             return None
@@ -198,14 +222,11 @@ class MyAKShare:
             date_str = end.strftime('%Y-%m-%d')
             cond = 'date <= "{}"'.format(date_str)
             df = df.query(cond)
-
-        df.reset_index(inplace=True)
-        df['code'] = code
         df.rename(columns={'date': 'trade_date'}, inplace=True)
         self.log.debug('获取指数{}日线数据, count={}'.format(code, df.shape[0]))
         return df
 
-    @_retry_client
+    @BaseFetch.retry_client
     def fetch_stock_minute(self, code: str, period: str, adjust: str = '', start: datetime = None,
                            end: datetime = None) -> Optional[pd.DataFrame]:
         """
@@ -240,7 +261,7 @@ class MyAKShare:
 
         return df
 
-    @_retry_client
+    @BaseFetch.retry_client
     def fetch_stock_north_south_flow(self, start: datetime = None,
                                      end: datetime = None) -> Optional[pd.DataFrame]:
         """
@@ -310,7 +331,7 @@ class MyAKShare:
 
         return df
 
-    @_retry_client
+    @BaseFetch.retry_client
     def fetch_stock_his_divend(self, codes: List[str] = None) -> Optional[pd.DataFrame]:
         """
         股票历史分红数据，不获取详细的
@@ -338,7 +359,7 @@ class MyAKShare:
 
         return df
 
-    @_retry_client
+    @BaseFetch.retry_client
     def fetch_sw_index_info(self, codes: List[str] = None) -> Optional[pd.DataFrame]:
         """
         申万一级行业信息
@@ -369,7 +390,7 @@ class MyAKShare:
         self.log.debug('获取申万一级行业数据, count={}'.format(data.shape[0]))
         return data
 
-    @_retry_client
+    @BaseFetch.retry_client
     def fetch_sw_index_detail(self, code: str) -> Optional[pd.DataFrame]:
         """
         申万一级行业信息成分
@@ -387,9 +408,24 @@ class MyAKShare:
 
         return df
 
+    def fetch_stock_rt_quote(self, codes: List[str]) -> Optional[pd.DataFrame]:
+        self.log.debug('获取股票{}实时行情...'.format(codes))
+        symbols = []
+        for code in codes:
+            symbols.append(self.sina2xueqiu(code))
+
+        df, msg = stock.get_quote(','.join(symbols))
+        if df is None:
+            self.log.debug('获取股票{}实时行情失败'.format(codes))
+            return None
+        df['symbol'] = df['symbol'].apply(self.xueqiu2sina)
+        df.rename(columns={'last': 'close', 'symbol': 'code'}, inplace=True)
+        self.log.debug('获取股票{}实时行情实时行情, count={}'.format(codes, df.shape[0]))
+        return df
+
 
 if __name__ == '__main__':
-    aks = MyAKShare()
+    aks = MyFetch()
 
     now = datetime.now()
     now_pre = now - timedelta(days=1)
@@ -397,11 +433,24 @@ if __name__ == '__main__':
     # df = aks.fetch_stock_info()
     # print(df)
     #
-    # df = aks.fetch_stock_daily(code='sz000001')
+    # df = aks.fetch_stock_daily(code='sh689009',
+    #                            start=datetime.strptime('2020-01-01', '%Y-%m-%d'),
+    #                            end=datetime.strptime('2020-11-12', '%Y-%m-%d'))
     # print(df)
-    #
-    df = aks.fetch_stock_daily(code='sh689009')
+
+    # df = aks.fetch_index_daily(code='sh000001',
+    #                            start=datetime.strptime('2020-01-01', '%Y-%m-%d'),
+    #                            end=datetime.strptime('2020-11-12', '%Y-%m-%d'))
+    # print(df)
+
+    # df = aks.fetch_stock_rt_quote(codes=['sh000001', 'sz000001', 'sh600688'])
+    # print(df)
+
+    df = aks.fetch_stock_rt_minute('sh600688', '5m')
     print(df)
+
+    # df = aks.fetch_stock_daily(code='sh689009')
+    # print(df)
 
     # df = aks.fetch_stock_his_divend()
     # print(df)
@@ -409,7 +458,7 @@ if __name__ == '__main__':
     # df = aks.fetch_sw_index_info()
     # print(df)
 
-    # df = aks.fetch_index_daily(code='sz000001')
+    # df = aks.fetch_index_daily(code='sh399006')
     # print(df)
 
     # df = aks.fetch_stock_minute(code='sh688008', period='15')
@@ -418,7 +467,7 @@ if __name__ == '__main__':
     # stock_zh_a_spot_df = ak.stock_zh_a_spot()
     # print(stock_zh_a_spot_df)
     #
-    # stock_zh_a_daily_hfq_df = ak.stock_zh_a_daily(symbol="sh600582", adjust="hfq")
+    # stock_zh_a_daily_hfq_df = ak.stock_zh_kcb_daily(symbol="sh688160")
     # print(stock_zh_a_daily_hfq_df)
     #
     # stock_zh_a_minute_df = ak.stock_zh_a_minute(symbol='sh600751', period='1', adjust="qfq")
