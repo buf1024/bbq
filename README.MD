@@ -1,4 +1,6 @@
-barbar用户模型，一个用户对应n个账户，一个账户对应1条交易策略，一条风控策略，一个交易前端(broker)。
+bbq -- baibai quantitative(瞎掰掰量化)
+
+用户模型，一个用户对应n个账户，一个账户对应1条交易策略，一条风控策略，一个交易前端(broker)。
 user(1)->account(N)->strategy(1)
                    ->risk(1)
                    ->broker(1)

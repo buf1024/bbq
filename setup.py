@@ -1,9 +1,9 @@
 from setuptools import find_packages, setup
 
 setup(
-    name='barbar',
+    name='bbq',
     version='1.0.0',
-    packages=find_packages(include=['barbar']),
+    packages=find_packages(include=['bbq']),
     include_package_data=True,
     zip_safe=False,
     platform="any",
@@ -15,18 +15,19 @@ setup(
     install_requires=[
         'numpy',
         'pandas',
-        'pytdx',
-        'Click',
-        'pymongo',
+        'akshare',
+        'opendatatools',
         'tushare',
-        'TA-Lib',
-        'asyncio-nats-client'
+        'aiohttp',
+        'motor',
+        'pymongo',
+        'Click',
     ],
     entry_points={
         'console_scripts': [
-            'quotation=barbar.cmd.quotation:main',
-            'syncstock=barbar.data.stock_sync:main',
-            'syncfund=barbar.data.fund_sync:main'
+            'quotation=bbq.cmd.quotation:main',
+            'syncstock=bbq.data.stock_sync:main',
+            'syncfund=bbq.data.fund_sync:main'
         ]
     },
 )
