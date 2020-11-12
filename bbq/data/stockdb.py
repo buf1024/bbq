@@ -37,7 +37,7 @@ class StockDB(MongoDB):
                           'start_date': '开始日期', 'weight': '权重'}
     }
 
-    _db = 'akshare_db'  # 通用数据库
+    _db = 'bbq_stock_db'  # 通用数据库
 
     def __init__(self, uri='mongodb://localhost:27017/', pool=5):
         super().__init__(uri, pool)
@@ -123,6 +123,7 @@ class StockDB(MongoDB):
 
         if fq == 'qfq' or fq == 'hfq':
             if fq == 'qfq':
+                df['qfq_factor'] = df['qfq_factor'].fillna(1.0)
                 df['open'] = df['open'] * df['qfq_factor']
                 df['high'] = df['high'] * df['qfq_factor']
                 df['low'] = df['low'] * df['qfq_factor']
@@ -130,6 +131,7 @@ class StockDB(MongoDB):
                 df['volume'] = df['volume'] * df['qfq_factor']
 
             if fq == 'hfq':
+                df['hfq_factor'] = df['hfq_factor'].fillna(1.0)
                 df['open'] = df['open'] * df['hfq_factor']
                 df['high'] = df['high'] * df['hfq_factor']
                 df['low'] = df['low'] * df['hfq_factor']

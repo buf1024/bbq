@@ -4,15 +4,16 @@ from .my_trade_date import is_trade_date
 from .my_fetch import MyFetch
 from typing import List
 
-__ak = MyFetch()
+__my_fetch = MyFetch()
 
-fetch_stock_info = __ak.fetch_stock_info
-fetch_stock_daily = __ak.fetch_stock_daily
-fetch_stock_index = __ak.fetch_stock_index
-fetch_index_daily = __ak.fetch_index_daily
-fetch_stock_north_south_flow = __ak.fetch_stock_north_south_flow
-fetch_stock_his_divend = __ak.fetch_stock_his_divend
-fetch_sw_index_info = __ak.fetch_sw_index_info
+fetch_stock_info = __my_fetch.fetch_stock_info
+fetch_stock_daily = __my_fetch.fetch_stock_daily
+fetch_stock_index = __my_fetch.fetch_stock_index
+fetch_index_daily = __my_fetch.fetch_index_daily
+fetch_stock_north_south_flow = __my_fetch.fetch_stock_north_south_flow
+fetch_stock_his_divend = __my_fetch.fetch_stock_his_divend
+fetch_sw_index_info = __my_fetch.fetch_sw_index_info
+fetch_stock_rt_quote = __my_fetch.fetch_stock_rt_quote
 
 
 def fetch_index_info(codes: List[str] = None) -> pd.DataFrame:

@@ -26,8 +26,8 @@ setup(
     entry_points={
         'console_scripts': [
             'quotation=bbq.cmd.quotation:main',
-            'syncstock=bbq.data.stock_sync:main',
-            'syncfund=bbq.data.fund_sync:main'
+            'syncstock=bbq.cmd.stock_sync:main',
+            'syncfund=bbq.cmd.fund_sync:main'
         ]
     },
 )

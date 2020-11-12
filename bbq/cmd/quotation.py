@@ -1,17 +1,18 @@
-from bbq.stock_nats import StockNats
 import asyncio
 import os
-import bbq.log as log
 import traceback
-from bbq.config import conf_dict
-import click
-from bbq.data.stockdb import StockDB
-from collections import OrderedDict
 import uuid
+from collections import OrderedDict
+from datetime import datetime
 from typing import Dict
+
+import click
+
 import bbq.fetch as fetch
-from datetime import datetime, timedelta
-from collections import defaultdict
+import bbq.log as log
+from bbq.config import conf_dict
+from bbq.data.stockdb import StockDB
+from bbq.stock_nats import StockNats
 
 """
 监听topic: topic:bbq.quotation.command

@@ -79,8 +79,3 @@ if __name__ == '__main__':
 
     print('cls b1={}, b2={}'.format(id(B()), id(B())))
 
-    import bbq.fetch as fetch
-    fetch.tdx.join()
-    print(fetch.get_code_list())
-    print(fetch.fetcher)
-
