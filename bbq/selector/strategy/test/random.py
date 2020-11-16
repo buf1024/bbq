@@ -35,7 +35,7 @@ class Random(Strategy):
     def name(self):
         return 'random'
 
-    def usage(self):
+    def desc(self):
         return '名称: 随机策略\n' + \
                '说明: 随机选股测试策略\n' + \
                '参数: count  -- 选择个数(默认10)\n' + \

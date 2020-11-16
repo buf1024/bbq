@@ -1,51 +1,31 @@
-import log
+import bbq.log as log
+from typing import List
 
 
 class Strategy:
-    def __init__(self, repo):
+    def __init__(self, db):
         self.log = log.get_logger(self.__class__.__name__)
-        self.rep = repo
-        self.db = None
-        self.quot = None
+        self.db = db
 
-    def name(self):
-        """
-        策略名称
-        :return:
-        """
-        raise Exception('{} not implement'.format(self.name.__qualname__))
+    def desc(self):
+        pass
 
-    def usage(self):
-        """
-        策略描述，使用方式
-        :return:
-        """
-        raise Exception('{} not implement'.format(self.usage.__qualname__))
-
-    def argument(self):
-        return None
-
-    def init(self, db=None, quot=None, **kwargs):
+    def init(self, **kwargs):
         """
         初始化接口
-        :param db:
-        :param quot:
         :param kwargs:
         :return: True/False
         """
-        self.db = db
-        self.quot = quot
-
         return True
 
-    def stop(self):
+    def destroy(self):
         """
-        停止接口
+        清理接口
         :return: True/False
         """
         return True
 
-    def select(self, **kwargs):
+    def select(self):
         """
         根据策略，选择股票
         :param kwargs:
@@ -53,7 +33,7 @@ class Strategy:
         """
         raise Exception('{} not implement'.format(self.select.__qualname__))
 
-    def regression(self, codes=None, **kwargs):
+    def regression(self, codes: List[str], **kwargs):
         """
         根据策略，对股票进行回归
         :param codes:
@@ -61,4 +41,3 @@ class Strategy:
         :return: 策略匹配度 0 ~ 1
         """
         raise Exception('{} not implement'.format(self.regression.__qualname__))
-

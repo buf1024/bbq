@@ -27,7 +27,8 @@ setup(
         'console_scripts': [
             'quotation=bbq.cmd.quotation:main',
             'syncstock=bbq.cmd.stock_sync:main',
-            'syncfund=bbq.cmd.fund_sync:main'
+            'syncfund=bbq.cmd.fund_sync:main',
+            'selectstock=bbq.cmd.selector:main'
         ]
     },
 )

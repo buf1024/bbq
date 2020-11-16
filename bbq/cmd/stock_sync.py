@@ -2,7 +2,7 @@ from bbq import log
 import click
 from bbq.config import conf_dict
 import os
-from bbq.common import run_until_complete
+from bbq.common import run_until_complete, setup_db, setup_log
 
 import bbq.fetch as fetch
 from bbq.data.data_sync import DataSync
@@ -161,21 +161,9 @@ class AKShareSync(DataSync):
 @click.option('--sw-index/--no-sw-index', default=False, type=bool, help='show debug log')
 @click.option('--debug/--no-debug', default=True, type=bool, help='show debug log')
 def main(uri: str, pool: int, skip_basic: bool, con_fetch_num: int, con_save_num: int, sw_index: bool, debug: bool):
-    uri = conf_dict['mongo']['uri'] if uri is None else uri
-    pool = conf_dict['mongo']['pool'] if pool <= 0 else pool
-
-    file = None
-    level = "critical"
-    if debug:
-        file = conf_dict['log']['path'] + os.sep + 'stock_sync.log'
-        level = conf_dict['log']['level']
-
-    log.setup_logger(file=file, level=level)
-    logger = log.get_logger()
-    logger.debug('初始化数据库')
-    db = StockDB(uri=uri, pool=pool)
-    if not db.init():
-        print('初始化数据库失败')
+    setup_log(debug)
+    db = setup_db(uri, pool, StockDB)
+    if db is None:
         return
     config = dict(skip_basic=skip_basic,
                   con_fetch_num=con_fetch_num,

@@ -2,6 +2,8 @@ from functools import wraps
 import os
 import importlib
 import asyncio
+from bbq.config import conf_dict
+import bbq.log as log
 
 
 def singleton(cls):
@@ -70,6 +72,32 @@ def run_until_complete(*coro):
             loop.close()
 
 
+def setup_log(debug: bool, file_name: str):
+    file = None
+    level = "critical"
+    if debug:
+        file = conf_dict['log']['path'] + os.sep + file_name
+        level = conf_dict['log']['level']
+
+    log.setup_logger(file=file, level=level)
+    logger = log.get_logger()
+    logger.debug('初始化数据库')
+
+    return logger
+
+
+def setup_db(uri: str, pool: int, cls):
+    uri = conf_dict['mongo']['uri'] if uri is None else uri
+    pool = conf_dict['mongo']['pool'] if pool <= 0 else pool
+
+    db = cls(uri=uri, pool=pool)
+    if not db.init():
+        print('初始化数据库失败')
+        return None
+
+    return db
+
+
 if __name__ == '__main__':
     @singleton
     class B:
@@ -78,4 +106,3 @@ if __name__ == '__main__':
 
 
     print('cls b1={}, b2={}'.format(id(B()), id(B())))
-

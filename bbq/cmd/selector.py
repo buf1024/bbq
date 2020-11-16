@@ -15,7 +15,7 @@ from bbq.selector.strategy import strategies
 @click.option('--pool', default=10, type=int, help='mongodb connection pool size, default: 10')
 @click.option('--type', default='stock', type=str, help='selector type, default: stock')
 @click.option('--debug/--no-debug', default=True, type=bool, help='show debug log, default: --debug')
-def cli(ctx, uri: str, pool: int, typ: str, debug: bool):
+def main(ctx, uri: str, pool: int, typ: str, debug: bool):
     ctx.ensure_object(dict)
     logger = setup_log(debug, 'select.log')
     cls = StockDB
@@ -92,4 +92,4 @@ def select(ctx, strategy: str, argument: str, count: int, regression: bool):
 
 
 if __name__ == '__main__':
-    cli()
+    main()

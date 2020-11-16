@@ -90,7 +90,7 @@ class MyFetch(BaseFetch):
             delta = datetime.strptime(end_date, '%Y-%m-%d') - datetime.strptime(start_date, '%Y-%m-%d')
             if delta.days <= 365:
                 df, msg = stock.get_daily(symbol=self.sina2xueqiu(code), start_date=start_date, end_date=end_date)
-                if df is not None or not df.empty:
+                if df is not None:
                     df.rename(columns={'last': 'close', 'turnover_rate': 'turnover'}, inplace=True)
                     df['date'] = pd.to_datetime(df['time'], format='%Y-%m-%d')
                     df.drop(columns=['symbol', 'change', 'percent', 'time'], inplace=True)
@@ -98,7 +98,7 @@ class MyFetch(BaseFetch):
                     self.log.error('获取股票{}未复权数据失败: {}'.format(code, msg))
         if df is None:
             df = ak.stock_zh_a_daily(symbol=code)
-            if df is not None or not df.empty:
+            if df is not None:
                 df.drop(columns=['outstanding_share'], inplace=True)
                 df.reset_index(inplace=True)
 
@@ -198,7 +198,7 @@ class MyFetch(BaseFetch):
                 mk, symbol = code[:2], code[2:]
                 symbol = symbol + '.' + 'SH' if mk == 'sh' else 'SZ'
                 df, msg = stock.get_daily(symbol=symbol, start_date=start_date, end_date=end_date)
-                if df is not None or not df.empty:
+                if df is not None:
                     df.rename(columns={'last': 'close'}, inplace=True)
                     df['date'] = pd.to_datetime(df['time'], format='%Y-%m-%d')
                     df.drop(columns=['symbol', 'change', 'percent', 'time', 'turnover_rate'], inplace=True)

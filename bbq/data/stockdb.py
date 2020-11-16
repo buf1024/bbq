@@ -121,9 +121,13 @@ class StockDB(MongoDB):
             self.log.debug('加载日线数据成功 size=0')
             return None
 
+        # 需按trade_date升序
         if fq == 'qfq' or fq == 'hfq':
+            # sort_df = df.sort_values(by='trade_date')
             if fq == 'qfq':
-                df['qfq_factor'] = df['qfq_factor'].fillna(1.0)
+                # sort_df['qfq_factor'].fillna(method='bfill', inplace=True)
+                # sort_df['qfq_factor'].fillna(method='ffill', inplace=True)
+                # df['qfq_factor'] = sort_df['qfq_factor']
                 df['open'] = df['open'] * df['qfq_factor']
                 df['high'] = df['high'] * df['qfq_factor']
                 df['low'] = df['low'] * df['qfq_factor']
@@ -131,7 +135,8 @@ class StockDB(MongoDB):
                 df['volume'] = df['volume'] * df['qfq_factor']
 
             if fq == 'hfq':
-                df['hfq_factor'] = df['hfq_factor'].fillna(1.0)
+                # sort_df['hfq_factor'].fillna(method='bfill', inplace=True)
+                # df['hfq_factor'] = sort_df['hfq_factor']
                 df['open'] = df['open'] * df['hfq_factor']
                 df['high'] = df['high'] * df['hfq_factor']
                 df['low'] = df['low'] * df['hfq_factor']
