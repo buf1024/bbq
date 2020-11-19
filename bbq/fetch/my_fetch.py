@@ -105,7 +105,8 @@ class MyFetch(BaseFetch):
         return None
 
     @BaseFetch.retry_client
-    def fetch_stock_daily_xueqiu(self, code: str, start: datetime = None, end: datetime = None) -> Optional[pd.DataFrame]:
+    def fetch_stock_daily_xueqiu(self, code: str, start: datetime = None, end: datetime = None) -> Optional[
+        pd.DataFrame]:
         self.log.debug('获取雪球股票{}日线数据...'.format(code))
         if start is None:
             code_info = self.fetch_stock_info(codes=[code])
@@ -132,7 +133,6 @@ class MyFetch(BaseFetch):
             return None
         self.log.debug('获取雪球股票{}日线数据, count={}'.format(code, df.shape[0]))
         return df
-
 
     @BaseFetch.retry_client
     def fetch_stock_daily(self, code: str, start: datetime = None, end: datetime = None) -> Optional[pd.DataFrame]:
@@ -170,7 +170,7 @@ class MyFetch(BaseFetch):
                 if df is not None:
                     df.dropna(inplace=True)
                     df.drop(columns=['outstanding_share'], inplace=True)
-                    df['turnover'] = df['turnover'].apply(lambda x: round(x*100, 2))
+                    df['turnover'] = df['turnover'].apply(lambda x: round(x * 100, 2))
                     df.reset_index(inplace=True)
             except Exception as e:
                 self.log.error('新浪获取日线失败, 尝试雪球')
@@ -508,7 +508,6 @@ class MyFetch(BaseFetch):
 
 
 if __name__ == '__main__':
-
     aks = MyFetch()
 
     now = datetime.now()
