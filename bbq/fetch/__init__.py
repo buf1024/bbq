@@ -14,6 +14,8 @@ fetch_stock_north_south_flow = __my_fetch.fetch_stock_north_south_flow
 fetch_stock_his_divend = __my_fetch.fetch_stock_his_divend
 fetch_sw_index_info = __my_fetch.fetch_sw_index_info
 fetch_stock_rt_quote = __my_fetch.fetch_stock_rt_quote
+fetch_stock_new = __my_fetch.fetch_stock_new
+fetch_stock_adj_factor = __my_fetch.fetch_stock_adj_factor
 
 
 def fetch_index_info(codes: List[str] = None) -> pd.DataFrame:

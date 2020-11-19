@@ -1,0 +1,114 @@
+from bbq.fetch import fetch_stock_new
+from bbq.selector.strategy.strategy import Strategy
+
+
+class NewFresh(Strategy):
+    def __init__(self, db):
+        super().__init__(db)
+        self.trade_date = 60
+        self.ratio_up = 0.5
+        self.low_max_date = 10
+        self.first_up = 3
+
+    async def init(self, **kwargs):
+        self.trade_date = kwargs['trade_date'] if kwargs is not None and 'trade_date' in kwargs else 60
+        self.ratio_up = kwargs['ratio_up'] if kwargs is not None and 'ratio_up' in kwargs else 0.5
+        self.low_max_date = kwargs['low_max_date'] if kwargs is not None and 'low_max_date' in kwargs else 10
+        self.first_up = kwargs['first_up'] if kwargs is not None and 'first_up' in kwargs else 10
+
+        try:
+            self.trade_date = int(self.trade_date)
+            self.ratio_up = float(self.ratio_up)
+            self.low_max_date = int(self.low_max_date)
+            self.first_up = int(self.first_up)
+            if self.trade_date <= 0 or self.ratio_up <= 0 \
+                    or self.low_max_date <= 0 or self.first_up <= 0:
+                self.log.error('策略参数不为正整数')
+                return False
+        except ValueError:
+            self.log.error('策略参数不为整数')
+            return False
+
+        return True
+
+    def desc(self):
+        return '  名称: 次新股板块策略\n' + \
+               '  说明: 第一次新高后，根据新低反弹情况选股\n' + \
+               '  参数: trade_date -- 上市交易最多天数(默认60)\n' \
+               '        low_max_date -- 首低后最多交易天数(默认10)\n' \
+               '        first_up -- 上市后默认上涨天数(默认2)' \
+               '        ratio_up -- 首低后涨跌比(默认0.5)'
+
+    async def select(self):
+        """
+        根据策略，选择股票
+        :return: [(code, info), (code, info)...]/None
+        """
+        quotes = fetch_stock_new()
+        if quotes is None:
+            self.log.error('获取次新股行情失败')
+            return None
+        codes = [code for code in quotes['code'].tolist() if
+                 await self.db.stock_daily.count_documents({'code': code}) <= self.trade_date]
+
+        select_codes = []
+        info_dict = {}
+        for code in codes:
+            daily = await self.db.load_stock_daily(filter={'code': code}, sort=[('trade_date', -1)])
+            if daily is None:
+                self.log.error('没有k线数据')
+                continue
+
+            # 计算第一次新高, 2020-10-10 - 2020-10-11 < 0 + > 0 -
+            diff = daily['close'].diff()[1:]
+            if len(diff) == 0:
+                continue
+            idxmax = daily.shape[0] - 1
+            first_up = 0
+            diff = diff.reset_index(drop=True)
+            for close_diff in reversed(diff):
+                # 开始跌
+                if close_diff > 0:
+                    break
+                idxmax = idxmax - 1
+                first_up = first_up + 1
+
+            if idxmax > 0 and first_up > self.first_up:
+                daily_new = daily[:idxmax]
+                # 计算新高后第一次新低, 2020-10-10 - 2020-10-11  < 0 + > 0 -
+                diff = daily_new['close'].diff()[1:]
+                if len(diff) == 0:
+                    continue
+                idxmin = daily_new.shape[0] - 1
+                diff = diff.reset_index(drop=True)
+                for close_diff in reversed(diff):
+                    # 开始涨
+                    if close_diff < 0:
+                        break
+                    idxmin = idxmin - 1
+                if idxmin < 0:
+                    continue
+                # idxmin = daily_new['close'].idxmin()
+                diff = daily_new[:idxmin + 1]['close'].diff()[1:]
+                diff_up = [x for x in diff if x < 0]
+                total, up, down = len(diff), len(diff_up), len(diff) - len(diff_up)
+                chg = up * 1.0 / total if total > 0 else 0.0
+
+                total_chg = (daily.iloc[0]['close'] - daily_new.iloc[idxmin]['close']) / daily_new.iloc[idxmin]['close']
+                msg = '代码 {}, 上市上涨天数({}), 首高({}, {}), 首低({}, {}), 首低后{}交易日: 上升({}), 下降({}), ' \
+                      '比例({:.2f}%), 涨幅: {:.2f}%'.format(code, first_up,
+                                                        daily.iloc[idxmax]['close'],
+                                                        daily.iloc[idxmax]['trade_date'].strftime('%Y-%m-%d'),
+                                                        daily_new.iloc[idxmin]['close'],
+                                                        daily_new.iloc[idxmin]['trade_date'].strftime('%Y-%m-%d'),
+                                                        total, up, down, chg * 100, total_chg * 100)
+                # self.log.debug(msg)
+                if chg > self.ratio_up and total <= self.low_max_date:
+                    info_dict[code] = dict(chg=chg, msg=msg)
+                    select_codes.append(code)
+        select_codes = sorted(select_codes, key=lambda c: info_dict[c]['chg'], reverse=True)
+
+        for code in select_codes:
+            self.log.info(info_dict[code]['msg'])
+
+        return select_codes

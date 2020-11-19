@@ -7,18 +7,19 @@ class StockDB(MongoDB):
     _meta = {
         # 股票信息
         'stock_info': {'code': '代码', 'name': '名称', 'block': '板块'},
-        # 日线数据, 如: stock_daily_sz000001
+        # 股票日线数据, 如: stock_daily
         'stock_daily': {'code': '代码', 'trade_date': '交易日', 'close': '收盘价', 'open': '开盘价', 'high': '最高价', 'low': '最低价',
-                        'volume': '成交量(股)', 'turn_over': '换手率', 'hfq_factor': '后复权因子',
-                        'qfq_factor': '前复权因子'},
-        # 个股指标, 如: stock_index_sz000001
+                        'volume': '成交量(股)', 'turn_over': '换手率', 'hfq_factor': '后复权因子'},
+        # 股票指标, 如: stock_index
         'stock_index': {'code': '代码', 'trade_date': '交易日', 'pe': '市盈率', 'pe_ttm': '市盈率TTM',
                         'pb': '市净率', 'ps': '市销率', 'ps_ttm': '市销率TTM', 'dv_ratio': '股息率', 'dv_ttm': '股息率TTM',
                         'total_mv': '总市值'},
+        # 股票复权因子
+        'stock_fq_factor': {'code': '代码', 'trade_date': '交易日', 'hfq_factor': '后复权因子', 'qfq_factor': '前复权因子'},
 
         # 日线信息
         'index_info': {'code': '代码', 'name': '名称'},
-        # 指数日线数据, 如: index_daily_sz000001
+        # 指数日线数据, 如: index_daily
         'index_daily': {'code': '代码', 'trade_date': '交易日', 'close': '收盘价', 'open': '开盘价', 'high': '最高价', 'low': '最低价',
                         'volume': '成交量(股)'},
 
@@ -57,6 +58,10 @@ class StockDB(MongoDB):
     @property
     def stock_index(self):
         return self.get_coll(self._db, 'stock_index')
+
+    @property
+    def stock_fq_factor(self):
+        return self.get_coll(self._db, 'stock_fq_factor')
 
     @property
     def index_daily(self):
@@ -123,20 +128,16 @@ class StockDB(MongoDB):
 
         # 需按trade_date升序
         if fq == 'qfq' or fq == 'hfq':
-            # sort_df = df.sort_values(by='trade_date')
             if fq == 'qfq':
-                # sort_df['qfq_factor'].fillna(method='bfill', inplace=True)
-                # sort_df['qfq_factor'].fillna(method='ffill', inplace=True)
-                # df['qfq_factor'] = sort_df['qfq_factor']
-                df['open'] = df['open'] * df['qfq_factor']
-                df['high'] = df['high'] * df['qfq_factor']
-                df['low'] = df['low'] * df['qfq_factor']
-                df['close'] = df['close'] * df['qfq_factor']
-                df['volume'] = df['volume'] * df['qfq_factor']
+                # df['open'] = df['open'] * df['qfq_factor']
+                # df['high'] = df['high'] * df['qfq_factor']
+                # df['low'] = df['low'] * df['qfq_factor']
+                # df['close'] = df['close'] * df['qfq_factor']
+                # df['volume'] = df['volume'] * df['qfq_factor']
+                self.log.error('前复权不常用，计算不方便，有需要自己计算')
+                return None
 
             if fq == 'hfq':
-                # sort_df['hfq_factor'].fillna(method='bfill', inplace=True)
-                # df['hfq_factor'] = sort_df['hfq_factor']
                 df['open'] = df['open'] * df['hfq_factor']
                 df['high'] = df['high'] * df['hfq_factor']
                 df['low'] = df['low'] * df['hfq_factor']
@@ -185,6 +186,31 @@ class StockDB(MongoDB):
         if count > 0:
             inserted_ids = await self.do_insert(coll=self.stock_index, data=data)
         self.log.debug('保存股票指标数据成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
+        return inserted_ids
+
+    async def load_stock_fq_factor(self, **kwargs) -> Optional[pd.DataFrame]:
+        """
+        :param code:
+        :param kwargs:  filter=None, projection=None, skip=0, limit=0, sort=None, to_frame=True
+        :return: DataFrame([code,trade_date,open,high,low,close,vol,amount])
+        """
+        self.log.debug('加载股票复权因子, kwargs={}'.format(kwargs))
+        df = await self.do_load(self.stock_fq_factor, **kwargs)
+        self.log.debug('加载复权因子成功 size={}'.format(df.shape[0] if df is not None else 0))
+        return df
+
+    async def save_stock_fq_factor(self, data: pd.DataFrame) -> List[str]:
+        """
+        :param code:
+        :param data: DataFrame([code,trade_date,open,high,low,close,vol,amt,adj_factor])
+        :return: None/list[_id]
+        """
+        count = data.shape[0] if data is not None else 0
+        inserted_ids = []
+        self.log.debug('保存复权因子数据, count = {} ...'.format(count))
+        if count > 0:
+            inserted_ids = await self.do_insert(coll=self.stock_fq_factor, data=data)
+        self.log.debug('保存复权因子数据成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
     async def load_index_info(self, **kwargs) -> Optional[pd.DataFrame]:
@@ -307,3 +333,17 @@ class StockDB(MongoDB):
             inserted_ids = await self.do_insert(coll=self.sw_index_info, data=data)
         self.log.debug('保存申万一级行业信息成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
+
+
+if __name__ == '__main__':
+    from bbq.common import run_until_complete
+
+    async def test_count(db):
+        count = await db.stock_info.count_documents({})
+        print('count={}'.format(count))
+
+    db = StockDB()
+    db.init()
+    run_until_complete(
+        test_count(db)
+    )

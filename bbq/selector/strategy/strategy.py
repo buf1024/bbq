@@ -10,7 +10,7 @@ class Strategy:
     def desc(self):
         pass
 
-    def init(self, **kwargs):
+    async def init(self, **kwargs):
         """
         初始化接口
         :param kwargs:
@@ -18,14 +18,14 @@ class Strategy:
         """
         return True
 
-    def destroy(self):
+    async def destroy(self):
         """
         清理接口
         :return: True/False
         """
         return True
 
-    def select(self):
+    async def select(self):
         """
         根据策略，选择股票
         :param kwargs:
@@ -33,11 +33,10 @@ class Strategy:
         """
         raise Exception('{} not implement'.format(self.select.__qualname__))
 
-    def regression(self, codes: List[str], **kwargs):
+    async def regression(self, codes: List[str]):
         """
         根据策略，对股票进行回归
         :param codes:
-        :param kwargs:
         :return: 策略匹配度 0 ~ 1
         """
-        raise Exception('{} not implement'.format(self.regression.__qualname__))
+        return 1.0

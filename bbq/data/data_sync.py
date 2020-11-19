@@ -49,6 +49,10 @@ class CommSync(ABC):
         is_synced = self.is_synced(start, end, sync_start_time_func)
 
         if not is_synced:
+            if sync_start_time_func is not None:
+                now_tag = sync_start_time_func(end)
+                if end < now_tag:
+                    end = end + timedelta(days=-1)
             data = fetch_func(start=start, end=end)
             data = filter_data_func(data) if filter_data_func is not None else data
             if data is not None and not data.empty:
@@ -59,7 +63,7 @@ class CommSync(ABC):
     def gen_incr_data(key, data_db, data):
         data_new = data
         if data_db is not None:
-            diff_set = set(data[key].values).difference(set(data_db['code'].values))
+            diff_set = set(data[key].values).difference(set(data_db[key].values))
             if len(diff_set) > 0:
                 diff_values = '["{}"]'.format('","'.join(diff_set))
                 data_new = data.query('{} in {}'.format(key, diff_values))

@@ -1,16 +1,14 @@
-from bbq import log
+from datetime import datetime, timedelta
+from functools import partial
+from typing import Dict
+
 import click
-from bbq.config import conf_dict
-import os
-from bbq.common import run_until_complete, setup_db, setup_log
 
 import bbq.fetch as fetch
+from bbq.common import run_until_complete, setup_db, setup_log
 from bbq.data.data_sync import DataSync
 from bbq.data.data_sync import Task
 from bbq.data.stockdb import StockDB
-from functools import partial
-from typing import Dict
-from datetime import datetime, timedelta
 
 
 class StockDailyTask(Task):
@@ -43,6 +41,27 @@ class StockIndexTask(Task):
         save_func = self.db.save_stock_index
         await self.incr_sync_on_trade_date(query_func=query_func, fetch_func=fetch_func, save_func=save_func)
         self.log.info('股票指标数据task完成, code={}'.format(self.code))
+
+
+class StockFactorTask(Task):
+    def __init__(self, ctx, name: str, code: str):
+        super().__init__(ctx, name)
+        self.code = code
+
+    async def task(self):
+        self.log.info('开始获取复权因子数据')
+        data = fetch.fetch_stock_adj_factor(code=self.code)
+        if data is None:
+            return False
+
+        data_db = await self.db.load_stock_fq_factor(filter={'code': self.code}, projection=['trade_date'])
+        if data_db is None or data_db.shape[0] != data.shape[0]:
+            data_new = self.gen_incr_data('trade_Date', data_db, data)
+            if data_new is not None:
+                self.log.info('删除原有{}复权因子'.format(self.code))
+                self.db.do_delete(self.db.stock_fq_factor, filter={'code': self.code}, just_one=False)
+                await self.db.save_stock_fq_factor(data)
+        self.log.info('获取复权因子数据完成')
 
 
 class IndexDailyTask(Task):
@@ -106,12 +125,13 @@ class SWIndexInfoTask(Task):
         self.log.info('获取获取申万一级行业数据完成')
 
 
-class AKShareSync(DataSync):
+class StockSync(DataSync):
     def __init__(self, db: StockDB, config: Dict):
         super().__init__(db=db,
                          concurrent_fetch_count=config['con_fetch_num'],
                          concurrent_save_count=config['con_save_num'])
         self.config = config
+        self.funcs = self.config['function'].split(',') if self.config['function'] is not None else None
 
     async def prepare_tasks(self) -> bool:
         codes = None
@@ -133,18 +153,29 @@ class AKShareSync(DataSync):
             return False
 
         self.log.info('开始准备task...')
-        for _, item in codes.iterrows():
-            self.add_task(StockDailyTask(self, name='stack_daily_{}'.format(item['code']), code=item['code']))
-            self.add_task(StockIndexTask(self, name='stack_index_{}'.format(item['code']), code=item['code']))
+        if self.funcs is None or 'stock_daily' in self.funcs:
+            for _, item in codes.iterrows():
+                self.add_task(StockDailyTask(self, name='stack_daily_{}'.format(item['code']), code=item['code']))
 
-        for _, item in indexes.iterrows():
-            self.add_task(IndexDailyTask(self, name='index_daily_{}'.format(item['code']), code=item['code']))
+        if self.funcs is None or 'stock_index' in self.funcs:
+            for _, item in codes.iterrows():
+                self.add_task(StockIndexTask(self, name='stack_index_{}'.format(item['code']), code=item['code']))
 
-        self.add_task(StockNorthFlowTask(self))
-        self.add_task(StockHisDivEndTask(self))
+        if self.funcs is None or 'index_daily' in self.funcs:
+            for _, item in indexes.iterrows():
+                self.add_task(IndexDailyTask(self, name='index_daily_{}'.format(item['code']), code=item['code']))
 
-        # 耗时操作
-        if self.config['sw_index']:
+        if self.funcs is None or 'stack_qf_factor' in self.funcs:
+            for _, item in codes.iterrows():
+                self.add_task(StockFactorTask(self, name='stack_qf_factor_{}'.format(item['code']), code=item['code']))
+
+        if self.funcs is None or 'stack_north_flow' in self.funcs:
+            self.add_task(StockNorthFlowTask(self))
+
+        if self.funcs is None or 'stack_his_divend' in self.funcs:
+            self.add_task(StockHisDivEndTask(self))
+
+        if self.funcs is not None and 'sw_index_info' in self.funcs:
             self.add_task(SWIndexInfoTask(self))
 
         self.log.info('task count={}'.format(len(self.tasks)))
@@ -156,20 +187,22 @@ class AKShareSync(DataSync):
 @click.option('--uri', type=str, default='mongodb://localhost:27017/', help='mongodb connection uri')
 @click.option('--pool', default=10, type=int, help='mongodb connection pool size')
 @click.option('--skip-basic/--no-skip-basic', default=False, type=bool, help='skip sync basic')
-@click.option('--con-fetch-num', default=5, type=int, help='concurrent net fetch number')
+@click.option('--con-fetch-num', default=15, type=int, help='concurrent net fetch number')
 @click.option('--con-save-num', default=100, type=int, help='concurrent db save number')
-@click.option('--sw-index/--no-sw-index', default=False, type=bool, help='show debug log')
+@click.option('--function', type=str,
+              help='sync one, split by ",", available: stock_daily,stock_index,index_daily,stack_qf_factor,'
+                   'stack_north_flow,stack_his_divend,sw_index_info')
 @click.option('--debug/--no-debug', default=True, type=bool, help='show debug log')
-def main(uri: str, pool: int, skip_basic: bool, con_fetch_num: int, con_save_num: int, sw_index: bool, debug: bool):
-    setup_log(debug)
+def main(uri: str, pool: int, skip_basic: bool, con_fetch_num: int, con_save_num: int, function: str, debug: bool):
+    setup_log(debug, 'stock_sync.log')
     db = setup_db(uri, pool, StockDB)
     if db is None:
         return
     config = dict(skip_basic=skip_basic,
                   con_fetch_num=con_fetch_num,
                   con_save_num=con_save_num,
-                  sw_index=sw_index)
-    sync = AKShareSync(db=db, config=config)
+                  function=function)
+    sync = StockSync(db=db, config=config)
     run_until_complete(sync.sync())
 
 

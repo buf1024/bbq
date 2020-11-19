@@ -50,9 +50,10 @@ def load_strategy(dir_path, package, exclude=()):
             cls_name = ''.join(name_list)
             cls = module.__getattribute__(cls_name)
             if cls is not None:
-                if len(package_suf) > 0:
-                    package_suf = package_suf[1:] + '.'
-                strategy[package_suf + cls_name] = cls
+                suffix = package_suf
+                if len(suffix) > 0:
+                    suffix = suffix[1:] + '.'
+                strategy[suffix + cls_name] = cls
             else:
                 print(
                     'warning: file {} not following strategy naming convention'.format(root_path + os.sep + file_name))
