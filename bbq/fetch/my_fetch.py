@@ -157,12 +157,13 @@ class MyFetch(BaseFetch):
 
         self.log.debug('获取股票{}未复权数据...'.format(code))
         df = None
-        if start is not None or end is not None:
-            start_date = df_hfq_factor.index[0] if df_hfq_factor is not None else start
-            if start < start_date:
-                start_date = start
-            end_date = end
-            df = self.fetch_stock_daily_xueqiu(code, start=start_date, end=end_date)
+        if start is not None and end is not None:
+            # start_date = df_hfq_factor.index[0]
+            # start_date = datetime(year=start_date.year, month=start_date.month, day=start_date.day)
+            # if start < start_date:
+            #     start_date = start
+            # end_date = end
+            df = self.fetch_stock_daily_xueqiu(code, start=start, end=end)
 
         if df is None:
             try:
@@ -185,6 +186,11 @@ class MyFetch(BaseFetch):
             # 后复权上市日往后复权，上市当日复权因子为1.0 数据不会变更, 可以填充返回
             df = df.merge(df_hfq_factor, how='left', left_on=['date'], right_on=['date'])
             df.fillna(method='ffill', inplace=True)
+
+            # df 有最旧到最新
+            # 区间查询 可能复权不到
+            if df.iloc[0].isna()['hfq_factor']:
+                df['hfq_factor'] = df_hfq_factor.iloc[0]['hfq_factor']
 
             # 前复权当日往上市日复权，当日复权因子为1.0 数据会变更, 不用填充返回
             # df = df.merge(df_qfq_factor, how='left', left_on=['date'], right_on=['date'])
@@ -525,8 +531,14 @@ if __name__ == '__main__':
     # df = ak.stock_zh_a_daily(symbol='sz000001', adjust='qfq')
     # print(df)
 
-    df = aks.fetch_stock_daily(code='sh680009')
+    # df = aks.fetch_stock_daily_xueqiu(code='sz000001', start=datetime(year=2020, month=9, day=3), end=datetime.now())
+    # print(df)
+
+    df = aks.fetch_stock_daily(code='sz000001', start=datetime(year=2020, month=11, day=19), end=datetime.now())
     print(df)
+
+    # df = ak.stock_zh_a_daily(symbol='sz000001')
+    # print(df)
 
     # df = aks.fetch_stock_info()
     # print(df)
