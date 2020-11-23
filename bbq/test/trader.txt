@@ -1,5 +1,0 @@
-nats-pub 'topic:barbar.trader.command' '{"cmd": "backtest", "data": {"ss": "ab", "yy": {"a": 1}}}'
-
-nats-pub 'topic:barbar.trader.command' '{"cmd": "trade", "data": {"ss": "ab", "yy": {"a": 1}}}'
-
-nats-pub 'topic:barbar.trader.trade.command.9c8387c0-e389-4e80-80e9-f5ea85d05756' '{"cmd": "cancel", "data": {"ss": "ab", "yy": {"a": 1}}}'

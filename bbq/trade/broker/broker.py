@@ -1,6 +1,7 @@
 import bbq.log as log
 from bbq.data.stockdb import StockDB
 
+
 class Broker:
     """
     券商交易接口
