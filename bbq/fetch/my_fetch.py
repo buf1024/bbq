@@ -4,7 +4,6 @@ from typing import Optional, List
 import akshare as ak
 from opendatatools import stock
 import pandas as pd
-import numpy as np
 
 from bbq.fetch.base_fetch import BaseFetch
 
@@ -107,13 +106,16 @@ class MyFetch(BaseFetch):
     @BaseFetch.retry_client
     def fetch_stock_daily_xueqiu(self, code: str, start: datetime = None, end: datetime = None) -> Optional[
         pd.DataFrame]:
+        if not self.is_trade(start, end):
+            self.log.info('code={}, start={}, end{}, 非交易日不同步...'.format(code, start, end))
+            return None
         self.log.debug('获取雪球股票{}日线数据...'.format(code))
         if start is None:
             code_info = self.fetch_stock_info(codes=[code])
             if code_info is None or code_info.empty:
                 self.log.debug('获取股票{}日线数据失败: 无股票信息'.format(code))
                 return None
-            start = code_info['listing_date']
+            start = code_info.iloc[0]['listing_date']
         if end is None:
             now = datetime.now()
             end = now
@@ -143,6 +145,10 @@ class MyFetch(BaseFetch):
         :param end:
         :return:
         """
+        if not self.is_trade(start, end):
+            self.log.debug('code={}, start={}, end{}, 非交易日不同步...'.format(code, start, end))
+            return None
+
         df_hfq_factor = None
         try:
             self.log.debug('获取股票{}后复权因子...'.format(code))
@@ -230,6 +236,10 @@ class MyFetch(BaseFetch):
         :param end:
         :return:
         """
+        if not self.is_trade(start, end):
+            self.log.info('code={}, start={}, end{}, 非交易日不同步...'.format(code, start, end))
+            return None
+
         self.log.debug('获取股票{}指标数据...'.format(code))
         code_ak = code
         if code.startswith('sh') or code.startswith('sz'):
@@ -263,6 +273,9 @@ class MyFetch(BaseFetch):
         :param end:
         :return:
         """
+        if not self.is_trade(start, end):
+            self.log.info('code={}, start={}, end{}, 非交易日不同步...'.format(code, start, end))
+            return None
         self.log.debug('获取指数{}日线数据...'.format(code))
         df = None
         if start is not None or end is not None:
@@ -313,6 +326,9 @@ class MyFetch(BaseFetch):
         :param end:
         :return:
         """
+        if not self.is_trade(start, end):
+            self.log.info('code={}, start={}, end{}, 非交易日不同步...'.format(code, start, end))
+            return None
         self.log.debug('获取股票{} {}分钟数据...'.format(code, period))
         df = ak.stock_zh_a_minute(symbol=code, period=period, adjust=adjust)
         if df is None:
@@ -346,6 +362,10 @@ class MyFetch(BaseFetch):
         :param end:
         :return:
         """
+        if not self.is_trade(start, end):
+            self.log.info('start={}, end{}, 非交易日不同步...'.format(start, end))
+            return None
+
         self.log.debug('获取股票北向资金 沪股通...')
         df = ak.stock_em_hsgt_north_net_flow_in(indicator='沪股通')
         if df is None:
@@ -538,7 +558,7 @@ if __name__ == '__main__':
     # df = aks.fetch_stock_daily_xueqiu(code='sz000001', start=datetime(year=2020, month=9, day=3), end=datetime.now())
     # print(df)
 
-    df = aks.fetch_stock_daily(code='sh600026', start=datetime(year=2020, month=11, day=19), end=datetime.now())
+    df = aks.fetch_stock_daily(code='sh689009', start=None, end=datetime.now())
     print(df)
 
     # df = ak.stock_zh_a_daily(symbol='sz000001')

@@ -4,6 +4,9 @@ from abc import ABC
 from functools import wraps
 import time
 
+from bbq.fetch.my_trade_date import is_trade_date
+from datetime import datetime, timedelta
+
 
 class BaseFetch(ABC):
     def __init__(self):
@@ -36,3 +39,16 @@ class BaseFetch(ABC):
     def xueqiu2sina(code: str):
         mk, symbol = code[-2:], code[:-3]
         return 'sh' + symbol if mk == 'SH' else 'sz' + symbol
+
+    @staticmethod
+    def is_trade(start: datetime, end: datetime) -> bool:
+        if start is None or end is None:
+            return True
+        if end < start:
+            return False
+        tmp = start
+        while tmp < end:
+            if is_trade_date(tmp):
+                return True
+            tmp = tmp + timedelta(days=1)
+        return False
