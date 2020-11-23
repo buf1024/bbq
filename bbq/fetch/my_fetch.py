@@ -181,6 +181,10 @@ class MyFetch(BaseFetch):
             self.log.error('获取股票{}未复权数据失败'.format(code))
             return None
 
+        if df.empty:
+            self.log.debug('获取股票{}日线数据, count={}'.format(code, df.shape[0]))
+            return None
+
         if df_hfq_factor is not None:
 
             # 后复权上市日往后复权，上市当日复权因子为1.0 数据不会变更, 可以填充返回
@@ -190,7 +194,7 @@ class MyFetch(BaseFetch):
             # df 有最旧到最新
             # 区间查询 可能复权不到
             if df.iloc[0].isna()['hfq_factor']:
-                df['hfq_factor'] = df_hfq_factor.iloc[0]['hfq_factor']
+                df['hfq_factor'].fillna(value=df_hfq_factor.iloc[0]['hfq_factor'])
 
             # 前复权当日往上市日复权，当日复权因子为1.0 数据会变更, 不用填充返回
             # df = df.merge(df_qfq_factor, how='left', left_on=['date'], right_on=['date'])
@@ -534,7 +538,7 @@ if __name__ == '__main__':
     # df = aks.fetch_stock_daily_xueqiu(code='sz000001', start=datetime(year=2020, month=9, day=3), end=datetime.now())
     # print(df)
 
-    df = aks.fetch_stock_daily(code='sz000001', start=datetime(year=2020, month=11, day=19), end=datetime.now())
+    df = aks.fetch_stock_daily(code='sh600026', start=datetime(year=2020, month=11, day=19), end=datetime.now())
     print(df)
 
     # df = ak.stock_zh_a_daily(symbol='sz000001')
