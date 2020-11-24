@@ -165,14 +165,14 @@ class StockSync(DataSync):
             for _, item in indexes.iterrows():
                 self.add_task(IndexDailyTask(self, name='index_daily_{}'.format(item['code']), code=item['code']))
 
-        if self.funcs is None or 'stack_qf_factor' in self.funcs:
+        if self.funcs is None or 'stock_qf_factor' in self.funcs:
             for _, item in codes.iterrows():
-                self.add_task(StockFactorTask(self, name='stack_qf_factor_{}'.format(item['code']), code=item['code']))
+                self.add_task(StockFactorTask(self, name='stock_qf_factor_{}'.format(item['code']), code=item['code']))
 
-        if self.funcs is None or 'stack_north_flow' in self.funcs:
+        if self.funcs is None or 'stock_north_flow' in self.funcs:
             self.add_task(StockNorthFlowTask(self))
 
-        if self.funcs is None or 'stack_his_divend' in self.funcs:
+        if self.funcs is None or 'stock_his_divend' in self.funcs:
             self.add_task(StockHisDivEndTask(self))
 
         if self.funcs is not None and 'sw_index_info' in self.funcs:
@@ -190,8 +190,8 @@ class StockSync(DataSync):
 @click.option('--con-fetch-num', default=15, type=int, help='concurrent net fetch number')
 @click.option('--con-save-num', default=100, type=int, help='concurrent db save number')
 @click.option('--function', type=str,
-              help='sync one, split by ",", available: stock_daily,stock_index,index_daily,stack_qf_factor,'
-                   'stack_north_flow,stack_his_divend,sw_index_info')
+              help='sync one, split by ",", available: stock_daily,stock_index,index_daily,stock_qf_factor,'
+                   'stock_north_flow,stock_his_divend,sw_index_info')
 @click.option('--debug/--no-debug', default=True, type=bool, help='show debug log')
 def main(uri: str, pool: int, skip_basic: bool, con_fetch_num: int, con_save_num: int, function: str, debug: bool):
     setup_log(debug, 'stock_sync.log')

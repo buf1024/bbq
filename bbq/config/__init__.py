@@ -8,15 +8,26 @@ def __init_config__() -> Tuple:
     __home = os.path.expanduser('~')
 
     __bbq_path = __home + os.sep + '.config' + os.sep + 'bbq'
-    log_path = __bbq_path + os.sep + 'logs'
+    __log_path = __bbq_path + os.sep + 'logs'
     __conf_file = __bbq_path + os.sep + 'config.json'
 
+    __strategy_base_path = __bbq_path + os.sep + 'strategy'
+    __strategy_select_path = __bbq_path + os.sep + 'strategy' + os.sep + 'select'
+    __strategy_trade_path = __bbq_path + os.sep + 'strategy' + os.sep + 'trade'
+    __strategy_risk_path = __bbq_path + os.sep + 'strategy' + os.sep + 'risk'
+
     os.makedirs(__bbq_path, exist_ok=True)
-    os.makedirs(log_path, exist_ok=True)
+    os.makedirs(__log_path, exist_ok=True)
+    os.makedirs(__strategy_select_path, exist_ok=True)
+    os.makedirs(__strategy_trade_path, exist_ok=True)
+    os.makedirs(__strategy_risk_path, exist_ok=True)
 
     __conf_dict = dict(
-        log=dict(level='debug', path=log_path),
+        log=dict(level='debug', path=__log_path),
         mongo=dict(uri='mongodb://localhost:27017/', pool=5),
+        strategy=dict(select=dict(path=__strategy_select_path),
+                      trade=dict(path=__strategy_trade_path),
+                      risk=dict(path=__strategy_risk_path))
     )
 
     if not os.path.exists(__conf_file):

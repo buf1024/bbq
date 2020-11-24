@@ -22,6 +22,7 @@ setup(
         'motor',
         'pymongo',
         'Click',
+        'protobuf',
     ],
     entry_points={
         'console_scripts': [

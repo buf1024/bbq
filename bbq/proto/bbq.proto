@@ -1,0 +1,43 @@
+syntax = "proto3";
+package bbq.proto;
+
+/*
+ * head: cmd(4字节), body_len(4字节), sid(32字节)
+ * body: pb serialize 串
+ *
+ * 00 00 00 00
+ * cmd: 0x00 通用协议
+ *      0x01 行情中心
+ *      0x02 交易
+ */
+
+/*
+ * 0x0000001 心跳请求
+ * 0x0000002 心跳应答
+ */
+
+    "type": "realtime" | "backtest",
+    "frequency": "1min", "5min", '15min', '30min', '60min',
+    "start": yyyy-mm-dd hh:mm:ss, backtest
+    "end": yyyy-mm-dd hh:mm:ss, backtest
+    "index_list": ["000001.SH"],
+    "stock_list": ["000001.SZ"]
+
+message Status {
+    string status = 1; // OK 为成功，其他为失败
+    string message = 2; // 信息
+}
+
+/* 0x010001 行情订阅请求*/
+message SubscribeQuoReq {
+  string type = 1; // 订阅类型 realtime / backtest
+  string frequency = 2; // 频率 1min, 5min, 15min, 30min, 60min,
+  string start = 3; // 开始时间 用于backtest
+  string end = 4; // 结束时间 用于backtest
+  repeated string index = 5; // 订阅指数列表
+  repeated string stock = 6; // 订阅股票列表
+}
+/* 0x010002 行情订阅应答*/
+message SubscribeQuoRsp {
+  Status status = 1; // 应答结果
+}

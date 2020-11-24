@@ -79,12 +79,6 @@ class StockDB(MongoDB):
     def sw_index_info(self):
         return self.get_coll(self._db, 'sw_index_info')
 
-    def get_coll(self, db: str, col: str):
-        client = self.get_client()
-        if client is None:
-            return None
-        return client[db][col]
-
     async def load_stock_info(self, **kwargs) -> Optional[pd.DataFrame]:
         """
         kwargs参数同pymongo参数, 另外增加to_frame

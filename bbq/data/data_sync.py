@@ -54,6 +54,12 @@ class CommSync(ABC):
                 if end < now_tag:
                     end = end + timedelta(days=-1)
             data = fetch_func(start=start, end=end)
+
+            async def _test_async():
+                pass
+
+            if type(_test_async()) == type(data):
+                data = await data
             data = filter_data_func(data) if filter_data_func is not None else data
             if data is not None and not data.empty:
                 save_func = partial(save_func, data=data)
@@ -80,7 +86,8 @@ class CommSync(ABC):
         if data_db is None or data_db.shape[0] != data.shape[0]:
             data_new = self.gen_incr_data(key, data_db, data)
             if data_new is not None:
-                await save_func(data=data_new)
+                save_func = partial(save_func, data=data_new)
+                await self.ctx.submit_db(save_func)
         return data
 
 

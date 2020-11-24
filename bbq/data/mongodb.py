@@ -47,6 +47,12 @@ class MongoDB(ABC):
     def get_client(self, **kwargs):
         return kwargs['__client'] if '__client' in kwargs else None
 
+    def get_coll(self, db: str, col: str):
+        client = self.get_client()
+        if client is None:
+            return None
+        return client[db][col]
+
     async def do_load(self, coll, filter=None, projection=None, skip=0, limit=0, sort=None, to_frame=True):
         for i in range(5):
             try:

@@ -3,41 +3,46 @@ import pandas as pd
 
 
 class FundDB(MongoDB):
-    _fund_db = 'fund_db'  # 通用数据库
-    _fund_info_col = 'fund_info'  # 基金信息
-    _fund_block_col = 'fund_block'  # 基金板块信息
-    _fund_net_db = 'fund_net_db'  # 通用数据库
-    _fund_net_col = 'fund_net'  # 基金净值信息
+    _meta = {
+        # 基金信息
+        'fund_info': {
+            'code': '基金代码', 'full_name': '基金全称', 'short_name': '基金简称', 'type': '基金类型',
+            'issue_date': '发行日期', 'found_date': '成立日期', 'found_scale': '规模', 'scale': '资产规模',
+            'scale_date': '资产规模时间', 'share': '份额规模', 'share_date': '份额规模时间', 'company': '基金管理人',
+            'bank': '基金托管人', 'manager': '基金经理人', 'dividend': '成立来分红', 'dividend_count': '成立来分红次数',
+            'date': '交易日', 'net': '净值', 'net_accumulate': '累计净值',
+            'rise_1d': '当日涨幅', 'rise_1m': '最近1月涨幅', 'rise_3m': '最近3月涨幅', 'rise_6m': '最近3月涨幅',
+            'rise_1y': '最近1年涨幅', 'rise_3y': '最近3年涨幅', 'rise_found': '成立以来涨幅',
+            'stock_codes': '最新持仓股票diam', 'stock_names': '最新持仓股票名称', 'stock_annotate': '最新持仓股票注解'
+        },
+
+        # 基金板块信息
+        'fund_block': {
+            'plate': '板块类别', 'class': '板块名称', 'day': '日涨幅', 'week': '周涨幅', 'month': '月涨幅',
+            '3month': '3月涨幅', '6month': '6月涨幅', 'year': '年涨幅', 'date': '更新日期'
+         },
+        # 基金净值信息
+        'fund_net': {
+            'code': '基金代码', 'short_name': '基金简称', 'net': '净值', 'net_accumulate': '累计净值',
+            'day_grow_rate': '日增长率', 'apply_status': '申购状态', 'redeem_status': '赎回状态', 'dividend': '分红送配'
+        }
+    }
+    _db = 'bbq_fund_db'
 
     def __init__(self, uri='mongodb://localhost:27017/', pool=5):
         super().__init__(uri, pool)
 
     @property
     def fund_info(self):
-        return self.get_coll(self._fund_db, self._fund_info_col)
+        return self.get_coll(self._db, 'fund_info')
 
     @property
     def fund_block(self):
-        return self.get_coll(self._fund_db, self._fund_block_col)
+        return self.get_coll(self._db, 'fund_block')
 
-    def fund_net(self, code):
-        return self.get_coll(self._fund_net_db, self._fund_net_col + '_' + code)
-
-    def get_coll(self, db: str, col: str):
-        client = self.get_client()
-        if client is None:
-            return None
-        return client[db][col]
-
-    async def build_index(self):
-        self.log.debug('创建基金索引...')
-        await self.fund_info.create_index(index=[('code', 1)], unique=True)
-        await self.fund_block.create_index(index=[('plate', -1), ('name', -1)], unique=False)
-        datas = await self.load_fund_info(projection=['code'])
-        if datas is not None:
-            for data in datas.to_dict('records'):
-                await self.fund_net(data['code']).create_index(index=[('date', -1)], unique=True)
-        self.log.debug('创建基金索引完成')
+    @property
+    def fund_net(self):
+        return self.get_coll(self._db, 'fund_net')
 
     async def load_block_list(self, **kwargs):
         self.log.debug('加载基金板块列表, kwargs={}'.format(kwargs))
@@ -66,16 +71,18 @@ class FundDB(MongoDB):
         self.log.debug('保存基金列表成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
-    async def load_fund_net(self, code: str, **kwargs):
+    async def load_fund_net(self, **kwargs):
         self.log.debug('加载基金净值数据, kwargs={}'.format(kwargs))
-        df = await self.do_load(self.fund_net(code=code), **kwargs)
+        df = await self.do_load(self.fund_net, **kwargs)
         self.log.debug('加载基金净值数据,成功, size={}'.format(df.shape[0] if df is not None else 0))
         return df
 
-    async def save_fund_net(self, code: str, data: pd.DataFrame):
+    async def save_fund_net(self, data: pd.DataFrame):
+        count = data.shape[0] if data is not None else 0
+        inserted_ids = []
         self.log.debug('保存基金净值数据, count = {} ...'.format(data.shape[0]))
-        inserted_ids = await self.do_batch_update(data=data,
-                                                  func=lambda x: (self.fund_net(code=code), {'date': x['date']}, x))
+        if count > 0:
+            inserted_ids = await self.do_insert(coll=self.fund_net, data=data)
         self.log.debug('保存基金净值成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
@@ -95,6 +102,7 @@ if __name__ == '__main__':
 
             df = await db.load_fund_info(filter={'code': '160220'})
             print('test_fund_info db:\n', df)
+
 
     async def test_fund_block_info(db, east):
         df = await east.get_block_list()
@@ -121,6 +129,7 @@ if __name__ == '__main__':
     async def test_build_index(db, east):
         await db.build_index()
         print('done')
+
 
     mongo = FundDB(uri=conf_dict['mongo']['uri'], pool=conf_dict['mongo']['pool'])
     if not mongo.init():

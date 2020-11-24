@@ -152,12 +152,12 @@ class FundEastmoney:
             frame = frame[[x.strip() for x in fields.split(',')]]
         return frame
 
-    async def get_fund_net(self, code, start_date=None, end_date=None, fields=None):
+    async def get_fund_net(self, code, start=None, end=None, fields=None):
         """
         基金净值
         :param code: 基金代码
-        :param start_date: 开始时间 datetime
-        :param end_date: 结束时间 datetime
+        :param start: 开始时间 datetime
+        :param end: 结束时间 datetime
         :param fields: 过滤字段: 代码(code) 净值日期(date) 单位净值(net) 累计净值(net_accumulate) 日增长率(day_grow_rate)
                        申购状态(apply_status) 赎回状态(redeem_status) 分红送配(dividend)
 
@@ -167,10 +167,10 @@ class FundEastmoney:
 
         def build_url():
             url = '{url}{code}&page={page}&per={per}'.format(url=self.fund_net_url, code=code, page=page, per=per)
-            if start_date is not None:
-                url = url + '&sdate=' + start_date.strftime('%Y-%m-%d')
-            if end_date is not None:
-                url = url + '&edate=' + end_date.strftime('%Y-%m-%d')
+            if start is not None:
+                url = url + '&sdate=' + start.strftime('%Y-%m-%d')
+            if end is not None:
+                url = url + '&edate=' + end.strftime('%Y-%m-%d')
 
             return url
 
@@ -350,9 +350,13 @@ class FundEastmoney:
             v1 = re.findall(r'单位净值.*?(\-*\d+-\d+-\d+)\).*?(\-*\d+\.\d+).*?(\-*\d+\.\d+|--).*?累计净值.*?(\-*\d+\.\d+)', s1)
 
             if len(v1) > 0:
-                t, r1d, net, net_acc = None if v1[0][0] == '--' else datetime.strptime(v1[0][0], '%Y-%m-%d'), float(v1[0][2]), float(v1[0][1]), float(v1[0][3])
-                if r1d == '--':
-                    r1d = 0.0
+                t = None if v1[0][0] == '--' else datetime.strptime(v1[0][0], '%Y-%m-%d')
+                r1d = 0.0 if v1[0][2] == '--' else float(v1[0][2])
+                net = 0.0 if v1[0][1] == '--' else float(v1[0][1])
+                net_acc = 0.0 if v1[0][3] == '--' else float(v1[0][3])
+                # t, r1d, net, net_acc = None if v1[0][0] == '--' else datetime.strptime(v1[0][0], '%Y-%m-%d'), float(v1[0][2]), float(v1[0][1]), float(v1[0][3])
+                # if r1d == '--':
+                #     r1d = 0.0
 
             res1 = r'.*?(\-*\d+.\d+|--).*?'.join(['近1月', '近1年', '近3月', '近3年', '近6月', '成立', ''])
             v1 = re.findall(res1, s1)
@@ -413,8 +417,8 @@ if __name__ == '__main__':
         # frame = await f.get_fund_net(code='160220')
         # print(frame.head())
 
-        frame = await f.get_fund_net(code='160220', start_date=datetime.strptime('20191201', '%Y%m%d'),
-                                     end_date=datetime.strptime('2020220', '%Y%m%d'), fields='code,date,net')
+        frame = await f.get_fund_net(code='160220', start=datetime.strptime('20191201', '%Y%m%d'),
+                                     end=datetime.strptime('2020220', '%Y%m%d'), fields='code,date,net')
         print(frame.head())
 
 

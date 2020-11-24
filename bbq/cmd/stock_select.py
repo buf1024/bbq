@@ -96,7 +96,7 @@ def select(ctx, strategy: str, argument: str, count: int, regression: bool):
         for i in range(2):
             try:
                 if i != 0:
-                    js = base64.b64decode(str.encode(js))
+                    argument = base64.b64decode(str.encode(argument, encoding='utf-8'))
                 js = json.loads(argument)
             except Exception as e:
                 if i != 0:
