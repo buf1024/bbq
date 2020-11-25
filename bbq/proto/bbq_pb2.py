@@ -19,24 +19,31 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n\tbbq.proto\x12\tbbq.proto\"\x1d\n\x0b\x41\x64\x64ressBook\x12\x0e\n\x06people\x18\x01 \x03(\tb\x06proto3'
+  serialized_pb=b'\n\tbbq.proto\x12\tbbq.proto\")\n\x06Status\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x0f\n\x07message\x18\x02 \x01(\t\"m\n\x10QuotSubscribeReq\x12\x0c\n\x04type\x18\x01 \x01(\t\x12\x11\n\tfrequency\x18\x02 \x01(\t\x12\r\n\x05start\x18\x03 \x01(\t\x12\x0b\n\x03\x65nd\x18\x04 \x01(\t\x12\r\n\x05index\x18\x05 \x03(\t\x12\r\n\x05stock\x18\x06 \x03(\t\"E\n\x10QuotSubscribeRsp\x12!\n\x06status\x18\x01 \x01(\x0b\x32\x11.bbq.proto.Status\x12\x0e\n\x06sub_id\x18\x02 \x01(\t\"$\n\x12QuotUnsubscribeReq\x12\x0e\n\x06sub_id\x18\x01 \x01(\t\"7\n\x12QuotUnsubscribeRsp\x12!\n\x06status\x18\x01 \x01(\x0b\x32\x11.bbq.proto.Status\"\x0b\n\tQuotation\"\xb2\x01\n\x0fQuotDispatchReq\x12\x0c\n\x04type\x18\x01 \x01(\t\x12\r\n\x05start\x18\x02 \x01(\t\x12\x0b\n\x03\x65nd\x18\x03 \x01(\t\x12\x32\n\x04quot\x18\x04 \x03(\x0b\x32$.bbq.proto.QuotDispatchReq.QuotEntry\x1a\x41\n\tQuotEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12#\n\x05value\x18\x02 \x01(\x0b\x32\x14.bbq.proto.Quotation:\x02\x38\x01\"4\n\x0fQuotDispatchRsp\x12!\n\x06status\x18\x01 \x01(\x0b\x32\x11.bbq.proto.Status\"\x0f\n\rTradeOrderReq\"2\n\rTradeOrderRsp\x12!\n\x06status\x18\x01 \x01(\x0b\x32\x11.bbq.proto.Statusb\x06proto3'
 )
 
 
 
 
-_ADDRESSBOOK = _descriptor.Descriptor(
-  name='AddressBook',
-  full_name='bbq.proto.AddressBook',
+_STATUS = _descriptor.Descriptor(
+  name='Status',
+  full_name='bbq.proto.Status',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   create_key=_descriptor._internal_create_key,
   fields=[
     _descriptor.FieldDescriptor(
-      name='people', full_name='bbq.proto.AddressBook.people', index=0,
-      number=1, type=9, cpp_type=9, label=3,
-      has_default_value=False, default_value=[],
+      name='status', full_name='bbq.proto.Status.status', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='message', full_name='bbq.proto.Status.message', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
@@ -53,18 +60,481 @@ _ADDRESSBOOK = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=24,
-  serialized_end=53,
+  serialized_end=65,
 )
 
-DESCRIPTOR.message_types_by_name['AddressBook'] = _ADDRESSBOOK
+
+_QUOTSUBSCRIBEREQ = _descriptor.Descriptor(
+  name='QuotSubscribeReq',
+  full_name='bbq.proto.QuotSubscribeReq',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='type', full_name='bbq.proto.QuotSubscribeReq.type', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='frequency', full_name='bbq.proto.QuotSubscribeReq.frequency', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='start', full_name='bbq.proto.QuotSubscribeReq.start', index=2,
+      number=3, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='end', full_name='bbq.proto.QuotSubscribeReq.end', index=3,
+      number=4, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='index', full_name='bbq.proto.QuotSubscribeReq.index', index=4,
+      number=5, type=9, cpp_type=9, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='stock', full_name='bbq.proto.QuotSubscribeReq.stock', index=5,
+      number=6, type=9, cpp_type=9, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=67,
+  serialized_end=176,
+)
+
+
+_QUOTSUBSCRIBERSP = _descriptor.Descriptor(
+  name='QuotSubscribeRsp',
+  full_name='bbq.proto.QuotSubscribeRsp',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='status', full_name='bbq.proto.QuotSubscribeRsp.status', index=0,
+      number=1, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='sub_id', full_name='bbq.proto.QuotSubscribeRsp.sub_id', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=178,
+  serialized_end=247,
+)
+
+
+_QUOTUNSUBSCRIBEREQ = _descriptor.Descriptor(
+  name='QuotUnsubscribeReq',
+  full_name='bbq.proto.QuotUnsubscribeReq',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='sub_id', full_name='bbq.proto.QuotUnsubscribeReq.sub_id', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=249,
+  serialized_end=285,
+)
+
+
+_QUOTUNSUBSCRIBERSP = _descriptor.Descriptor(
+  name='QuotUnsubscribeRsp',
+  full_name='bbq.proto.QuotUnsubscribeRsp',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='status', full_name='bbq.proto.QuotUnsubscribeRsp.status', index=0,
+      number=1, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=287,
+  serialized_end=342,
+)
+
+
+_QUOTATION = _descriptor.Descriptor(
+  name='Quotation',
+  full_name='bbq.proto.Quotation',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=344,
+  serialized_end=355,
+)
+
+
+_QUOTDISPATCHREQ_QUOTENTRY = _descriptor.Descriptor(
+  name='QuotEntry',
+  full_name='bbq.proto.QuotDispatchReq.QuotEntry',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='key', full_name='bbq.proto.QuotDispatchReq.QuotEntry.key', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='value', full_name='bbq.proto.QuotDispatchReq.QuotEntry.value', index=1,
+      number=2, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=b'8\001',
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=471,
+  serialized_end=536,
+)
+
+_QUOTDISPATCHREQ = _descriptor.Descriptor(
+  name='QuotDispatchReq',
+  full_name='bbq.proto.QuotDispatchReq',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='type', full_name='bbq.proto.QuotDispatchReq.type', index=0,
+      number=1, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='start', full_name='bbq.proto.QuotDispatchReq.start', index=1,
+      number=2, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='end', full_name='bbq.proto.QuotDispatchReq.end', index=2,
+      number=3, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='quot', full_name='bbq.proto.QuotDispatchReq.quot', index=3,
+      number=4, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[_QUOTDISPATCHREQ_QUOTENTRY, ],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=358,
+  serialized_end=536,
+)
+
+
+_QUOTDISPATCHRSP = _descriptor.Descriptor(
+  name='QuotDispatchRsp',
+  full_name='bbq.proto.QuotDispatchRsp',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='status', full_name='bbq.proto.QuotDispatchRsp.status', index=0,
+      number=1, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=538,
+  serialized_end=590,
+)
+
+
+_TRADEORDERREQ = _descriptor.Descriptor(
+  name='TradeOrderReq',
+  full_name='bbq.proto.TradeOrderReq',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=592,
+  serialized_end=607,
+)
+
+
+_TRADEORDERRSP = _descriptor.Descriptor(
+  name='TradeOrderRsp',
+  full_name='bbq.proto.TradeOrderRsp',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  create_key=_descriptor._internal_create_key,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='status', full_name='bbq.proto.TradeOrderRsp.status', index=0,
+      number=1, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  serialized_options=None,
+  is_extendable=False,
+  syntax='proto3',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=609,
+  serialized_end=659,
+)
+
+_QUOTSUBSCRIBERSP.fields_by_name['status'].message_type = _STATUS
+_QUOTUNSUBSCRIBERSP.fields_by_name['status'].message_type = _STATUS
+_QUOTDISPATCHREQ_QUOTENTRY.fields_by_name['value'].message_type = _QUOTATION
+_QUOTDISPATCHREQ_QUOTENTRY.containing_type = _QUOTDISPATCHREQ
+_QUOTDISPATCHREQ.fields_by_name['quot'].message_type = _QUOTDISPATCHREQ_QUOTENTRY
+_QUOTDISPATCHRSP.fields_by_name['status'].message_type = _STATUS
+_TRADEORDERRSP.fields_by_name['status'].message_type = _STATUS
+DESCRIPTOR.message_types_by_name['Status'] = _STATUS
+DESCRIPTOR.message_types_by_name['QuotSubscribeReq'] = _QUOTSUBSCRIBEREQ
+DESCRIPTOR.message_types_by_name['QuotSubscribeRsp'] = _QUOTSUBSCRIBERSP
+DESCRIPTOR.message_types_by_name['QuotUnsubscribeReq'] = _QUOTUNSUBSCRIBEREQ
+DESCRIPTOR.message_types_by_name['QuotUnsubscribeRsp'] = _QUOTUNSUBSCRIBERSP
+DESCRIPTOR.message_types_by_name['Quotation'] = _QUOTATION
+DESCRIPTOR.message_types_by_name['QuotDispatchReq'] = _QUOTDISPATCHREQ
+DESCRIPTOR.message_types_by_name['QuotDispatchRsp'] = _QUOTDISPATCHRSP
+DESCRIPTOR.message_types_by_name['TradeOrderReq'] = _TRADEORDERREQ
+DESCRIPTOR.message_types_by_name['TradeOrderRsp'] = _TRADEORDERRSP
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
-AddressBook = _reflection.GeneratedProtocolMessageType('AddressBook', (_message.Message,), {
-  'DESCRIPTOR' : _ADDRESSBOOK,
+Status = _reflection.GeneratedProtocolMessageType('Status', (_message.Message,), {
+  'DESCRIPTOR' : _STATUS,
   '__module__' : 'bbq_pb2'
-  # @@protoc_insertion_point(class_scope:bbq.proto.AddressBook)
+  # @@protoc_insertion_point(class_scope:bbq.proto.Status)
   })
-_sym_db.RegisterMessage(AddressBook)
+_sym_db.RegisterMessage(Status)
+
+QuotSubscribeReq = _reflection.GeneratedProtocolMessageType('QuotSubscribeReq', (_message.Message,), {
+  'DESCRIPTOR' : _QUOTSUBSCRIBEREQ,
+  '__module__' : 'bbq_pb2'
+  # @@protoc_insertion_point(class_scope:bbq.proto.QuotSubscribeReq)
+  })
+_sym_db.RegisterMessage(QuotSubscribeReq)
+
+QuotSubscribeRsp = _reflection.GeneratedProtocolMessageType('QuotSubscribeRsp', (_message.Message,), {
+  'DESCRIPTOR' : _QUOTSUBSCRIBERSP,
+  '__module__' : 'bbq_pb2'
+  # @@protoc_insertion_point(class_scope:bbq.proto.QuotSubscribeRsp)
+  })
+_sym_db.RegisterMessage(QuotSubscribeRsp)
+
+QuotUnsubscribeReq = _reflection.GeneratedProtocolMessageType('QuotUnsubscribeReq', (_message.Message,), {
+  'DESCRIPTOR' : _QUOTUNSUBSCRIBEREQ,
+  '__module__' : 'bbq_pb2'
+  # @@protoc_insertion_point(class_scope:bbq.proto.QuotUnsubscribeReq)
+  })
+_sym_db.RegisterMessage(QuotUnsubscribeReq)
+
+QuotUnsubscribeRsp = _reflection.GeneratedProtocolMessageType('QuotUnsubscribeRsp', (_message.Message,), {
+  'DESCRIPTOR' : _QUOTUNSUBSCRIBERSP,
+  '__module__' : 'bbq_pb2'
+  # @@protoc_insertion_point(class_scope:bbq.proto.QuotUnsubscribeRsp)
+  })
+_sym_db.RegisterMessage(QuotUnsubscribeRsp)
+
+Quotation = _reflection.GeneratedProtocolMessageType('Quotation', (_message.Message,), {
+  'DESCRIPTOR' : _QUOTATION,
+  '__module__' : 'bbq_pb2'
+  # @@protoc_insertion_point(class_scope:bbq.proto.Quotation)
+  })
+_sym_db.RegisterMessage(Quotation)
+
+QuotDispatchReq = _reflection.GeneratedProtocolMessageType('QuotDispatchReq', (_message.Message,), {
+
+  'QuotEntry' : _reflection.GeneratedProtocolMessageType('QuotEntry', (_message.Message,), {
+    'DESCRIPTOR' : _QUOTDISPATCHREQ_QUOTENTRY,
+    '__module__' : 'bbq_pb2'
+    # @@protoc_insertion_point(class_scope:bbq.proto.QuotDispatchReq.QuotEntry)
+    })
+  ,
+  'DESCRIPTOR' : _QUOTDISPATCHREQ,
+  '__module__' : 'bbq_pb2'
+  # @@protoc_insertion_point(class_scope:bbq.proto.QuotDispatchReq)
+  })
+_sym_db.RegisterMessage(QuotDispatchReq)
+_sym_db.RegisterMessage(QuotDispatchReq.QuotEntry)
+
+QuotDispatchRsp = _reflection.GeneratedProtocolMessageType('QuotDispatchRsp', (_message.Message,), {
+  'DESCRIPTOR' : _QUOTDISPATCHRSP,
+  '__module__' : 'bbq_pb2'
+  # @@protoc_insertion_point(class_scope:bbq.proto.QuotDispatchRsp)
+  })
+_sym_db.RegisterMessage(QuotDispatchRsp)
+
+TradeOrderReq = _reflection.GeneratedProtocolMessageType('TradeOrderReq', (_message.Message,), {
+  'DESCRIPTOR' : _TRADEORDERREQ,
+  '__module__' : 'bbq_pb2'
+  # @@protoc_insertion_point(class_scope:bbq.proto.TradeOrderReq)
+  })
+_sym_db.RegisterMessage(TradeOrderReq)
+
+TradeOrderRsp = _reflection.GeneratedProtocolMessageType('TradeOrderRsp', (_message.Message,), {
+  'DESCRIPTOR' : _TRADEORDERRSP,
+  '__module__' : 'bbq_pb2'
+  # @@protoc_insertion_point(class_scope:bbq.proto.TradeOrderRsp)
+  })
+_sym_db.RegisterMessage(TradeOrderRsp)
 
 
+_QUOTDISPATCHREQ_QUOTENTRY._options = None
 # @@protoc_insertion_point(module_scope)

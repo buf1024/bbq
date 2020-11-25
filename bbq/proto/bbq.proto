@@ -6,22 +6,15 @@ package bbq.proto;
  * body: pb serialize 串
  *
  * 00 00 00 00
- * cmd: 0x00 通用协议
- *      0x01 行情中心
- *      0x02 交易
+ * cmd: 00 通用协议
+ *      01 行情中心
+ *      02 交易
  */
 
 /*
- * 0x0000001 心跳请求
- * 0x0000002 心跳应答
+ * 0x000001 心跳请求 message HeartbeatReq {}
+ * 0x000002 心跳应答 message HeartbeatRsp {}
  */
-
-    "type": "realtime" | "backtest",
-    "frequency": "1min", "5min", '15min', '30min', '60min',
-    "start": yyyy-mm-dd hh:mm:ss, backtest
-    "end": yyyy-mm-dd hh:mm:ss, backtest
-    "index_list": ["000001.SH"],
-    "stock_list": ["000001.SZ"]
 
 message Status {
     string status = 1; // OK 为成功，其他为失败
@@ -29,15 +22,53 @@ message Status {
 }
 
 /* 0x010001 行情订阅请求*/
-message SubscribeQuoReq {
-  string type = 1; // 订阅类型 realtime / backtest
-  string frequency = 2; // 频率 1min, 5min, 15min, 30min, 60min,
+message QuotSubscribeReq {
+  string type = 1; // 订阅类型 rt / bt
+  string frequency = 2; // 频率 1m, 5m, 15m, 30m, 60m,
   string start = 3; // 开始时间 用于backtest
   string end = 4; // 结束时间 用于backtest
   repeated string index = 5; // 订阅指数列表
   repeated string stock = 6; // 订阅股票列表
 }
 /* 0x010002 行情订阅应答*/
-message SubscribeQuoRsp {
+message QuotSubscribeRsp {
   Status status = 1; // 应答结果
+  string sub_id = 2; // 订阅id
+}
+
+/* 0x010003 行情取消订阅请求*/
+message QuotUnsubscribeReq {
+  string sub_id = 1; // 订阅id
+}
+/* 0x010004 行情取消订阅应答*/
+message QuotUnsubscribeRsp {
+  Status status = 1; // 应答结果
+}
+
+message Quotation {
+
+}
+
+/* 0x010005 行情下发请求*/
+message QuotDispatchReq {
+  string type = 1; // 下发类型: start, morning_start, morning_end, noon_start, noon_end, end, quot
+  string start = 2; // 开始时间
+  string end = 3; // 结束时间
+  map<string, Quotation> quot = 4; // 行情数据
+
+}
+/* 0x010006 行情下发应答*/
+message QuotDispatchRsp {
+  Status status = 1; // 应答结果
+}
+
+
+/* 0x020001 下单请求*/
+message TradeOrderReq {
+
+}
+
+/* 0x020002 下单应答*/
+message TradeOrderRsp {
+    Status status = 1; // 应答结果
 }
