@@ -59,7 +59,7 @@ class FundEastmoney:
                 continue
         raise ex
 
-    async def get_block_list(self, fields=None, sync_fund=False):
+    async def fetch_block_list(self, fields=None, sync_fund=False):
         """
         板块列表
         :param sync_fund:
@@ -122,7 +122,7 @@ class FundEastmoney:
             frame = frame[[x.strip() for x in fields.split(',')]]
         return frame
 
-    async def get_fund_list(self, fields=None):
+    async def fetch_fund_list(self, fields=None):
         """
         基金列表
         :param fields: 过滤字段: 代码(code) 名称代码(name_code) 名称(name) 类型(type)
@@ -152,7 +152,7 @@ class FundEastmoney:
             frame = frame[[x.strip() for x in fields.split(',')]]
         return frame
 
-    async def get_fund_net(self, code, start=None, end=None, fields=None):
+    async def fetch_fund_net(self, code, start=None, end=None, fields=None):
         """
         基金净值
         :param code: 基金代码
@@ -213,7 +213,7 @@ class FundEastmoney:
             frame = frame[[x.strip() for x in fields.split(',')]]
         return frame
 
-    async def get_fund_info(self, code, fields=None):
+    async def fetch_fund_info(self, code, fields=None):
         """
         基金基本信息
         :param code: 基金代码
@@ -406,28 +406,28 @@ class FundEastmoney:
 
 if __name__ == '__main__':
     async def test_fund_list(f):
-        frame = await f.get_fund_list()
+        frame = await f.fetch_fund_list()
         print(frame.head())
 
-        frame = await f.get_fund_list(fields='code,name')
+        frame = await f.fetch_fund_list(fields='code,name')
         print(frame.head())
 
 
     async def test_fund_net(f):
-        # frame = await f.get_fund_net(code='160220')
+        # frame = await f.fetch_fund_net(code='160220')
         # print(frame.head())
 
-        frame = await f.get_fund_net(code='160220', start=datetime.strptime('20191201', '%Y%m%d'),
+        frame = await f.fetch_fund_net(code='160220', start=datetime.strptime('20191201', '%Y%m%d'),
                                      end=datetime.strptime('2020220', '%Y%m%d'), fields='code,date,net')
         print(frame.head())
 
 
     async def test_fund_info(f):
-        frame = await f.get_fund_info(code='001054')
+        frame = await f.fetch_fund_info(code='001054')
         print(frame)
 
     async def test_block_list(f):
-        frame = await f.get_block_list()
+        frame = await f.fetch_block_list()
         print(frame)
 
 

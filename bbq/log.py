@@ -10,7 +10,7 @@ from logging.handlers import TimedRotatingFileHandler
 _g_logs = {}
 
 _g_file = None
-_g_level = logging.DEBUG
+_g_level = logging.ERROR
 
 
 def _get_logger(name, level, file):

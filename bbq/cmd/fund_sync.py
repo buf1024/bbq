@@ -24,7 +24,7 @@ class FundInfoTask(Task):
                 # self.log.debug('忽略基金类型: {}, {}'.format(code, typ))
                 continue
 
-            fund_info = await self.ctx.fetch.get_fund_info(code=code)
+            fund_info = await self.ctx.fetch.fetch_fund_info(code=code)
             if fund_info is None:
                 self.log.error('获取基金{}({})信息失败'.format(name, code))
                 continue
@@ -42,7 +42,7 @@ class FundNetTask(Task):
         self.log.info('开始基金净值{}({})同步任务'.format(self.name, self.code))
         query_func = partial(self.ctx.db.load_fund_net, filter={'code': self.code}, projection=['date'],
                              sort=[('date', -1)], limit=1)
-        fetch_func = partial(self.ctx.fetch.get_fund_net, code=self.code)
+        fetch_func = partial(self.ctx.fetch.fetch_fund_net, code=self.code)
         save_func = self.db.save_fund_net
         await self.incr_sync_on_trade_date(query_func=query_func, fetch_func=fetch_func, save_func=save_func,
                                            key='date',
@@ -57,7 +57,7 @@ class FundBlockTask(Task):
 
     async def task(self):
         self.log.info('同步基金板块列表...')
-        funds = await self.ctx.fetch.get_block_list(sync_fund=True)
+        funds = await self.ctx.fetch.fetch_block_list(sync_fund=True)
         save_func = partial(self.db.save_block_list, data=funds)
         await self.ctx.submit_db(save_func)
         self.log.info('基金板块数据task完成')
@@ -97,7 +97,7 @@ class FundSync(DataSync):
 
     async def prepare_tasks(self) -> bool:
         self.log.info('获取基金列表...')
-        funds = await self.fetch.get_fund_list(fields='code,name,type')
+        funds = await self.fetch.fetch_fund_list(fields='code,name,type')
         if funds is None:
             self.log.error('获取基金列表信息失败')
             return False
