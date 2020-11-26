@@ -12,8 +12,8 @@ class Position:
         self.code = ''  # 股票代码
         self.time = datetime.now()  # 首次建仓时间
 
-        self.volume = 0   # 持仓量
-        self.volume_available = 0   # 可用持仓量
+        self.volume = 0  # 持仓量
+        self.volume_available = 0  # 可用持仓量
 
         self.cost = 0.0  # 平均持仓成本
         self.price = 0.0  # 平均持仓价
@@ -30,9 +30,8 @@ class Position:
         self.max_profit = 0.0  # 最大盈利
         self.min_profit = 0.0  # 最小盈利
 
-        self.adj_factor = 1.0
-
-        # self._adj_check_date = []
+        self.max_profit_time = None  # 最大盈利时间
+        self.min_profit_time = None  # 最小盈利时间
 
     # def _get_adj_factor(self, codes, trade_date, pre_close):
     #     if trade_date in self._adj_check_date:

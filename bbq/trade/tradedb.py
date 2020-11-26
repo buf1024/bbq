@@ -4,86 +4,148 @@ import pandas as pd
 
 
 class TradeDB(MongoDB):
-    _trade_db = 'trade_db'  # 通用数据库
-    _broker_info = 'broker_info'
-    _user_info = 'user_info'
-    _strategy_info = 'strategy_info'
-    _account_info = 'account_info'  # 股票信息
-    _entrust_info = 'entrust_info'
-    _position_info = 'position_info'
-    _signal_info = 'signal_info'
-    _deal_info = 'deal_info'
+    _meta = {
+        # 账户信息
+        'account_info': {'account_id': '账户id', 'status': '账户状态(0正常 其他停止)', 'type': '账户类型: real, sim, backtest',
+                         'strategy_id': '交易策略id', 'broker_id': '券商id', 'risk_id': '风控id',
+                         'cash_init': '初始资金', 'cash_available': '可用资金', 'cost': '持仓成本',
+                         'profit': '盈利', 'profit_rate': '盈利比例'},
+        # 策略信号
+        'signal_info': {'account_id': '账户id', 'signal_id': '信号id', 'source': '信号源, risk, strategy, broker, manual',
+                        'signal': '信号: sell, buy, cancel', 'name': '股票名称', 'code': '股票代码',
+                        'price': '价', 'volume': '量', 'entrust_id': '委托ID', 'time': '信号时间'},
+
+        # 委托信息
+        'entrust_info': {'account_id': '账户id', 'entrust_id': '委托ID', 'name': '股票名称', 'code': '股票代码',
+                         'broker_entrust_id': 'broker对应的委托id', 'broker_id': '对应的broker',
+                         'type': '委托类型: buy, sell, cancel',
+                         'status': '委托状态: commit 已提交 deal 已成 part_deal 部成 cancel 已取消',
+                         'price': '价', 'volume': '量', 'volume_deal': '已成量', 'volume_cancel': '已取消量',
+                         'time': '委托时间'},
+
+        # 成交历史
+        'deal_info': {'account_id': '账户id', 'deal_id': '成交ID', 'entrust_id': '委托ID',
+                      'name': '股票名称', 'code': '股票代码', 'price': '价', 'volume': '量',
+                      'time': '成交时间'},
+
+        # 持仓信息
+        'position_info': {'account_id': '账户id', 'position_id': '持仓ID',  'name': '股票名称', 'code': '股票代码',
+                          'volume': '持仓量', 'volume_available': '可用持仓量', 'cost': '平均持仓成本', 'price': '平均持仓价',
+                          'profit_rate': '盈利比例', 'max_profit_rate': '最大盈利比例', 'min_profit_rate': '最小盈利比例',
+                          'profit': '盈利比例', 'max_profit': '最大盈利', 'min_profit': '最小盈利',
+                          'now_price': '最新价', 'max_price': '最高价', 'min_price': '最低价',
+                          'max_profit_time': '最大盈利时间', 'min_profit_time': '最小盈利时间',
+                          'time': '首次建仓时间'},
+
+        # 策略相关信息
+        'strategy_info': {'account_id': '账户id',
+                          'strategy_opt': '策略参数', 'broker_opt': '券商参数', 'risk_opt': '风控参数'}
+
+    }
+
+    _db = 'bbq_trade_db'  # 交易数据库
 
     def __init__(self, uri='mongodb://localhost:27017/', pool=5):
         super().__init__(uri, pool)
 
     @property
-    def user_info(self):
-        return self.get_coll(self._trade_db, self._user_info)
-
-    @property
-    def strategy_info(self):
-        return self.get_coll(self._trade_db, self._strategy_info)
-
-    @property
     def account_info(self):
-        return self.get_coll(self._trade_db, self._account_info)
-
-    @property
-    def entrust_info(self):
-        return self.get_coll(self._trade_db, self._entrust_info)
-
-    @property
-    def position_info(self):
-        return self.get_coll(self._trade_db, self._position_info)
-
-    @property
-    def deal_info(self):
-        return self.get_coll(self._trade_db, self._deal_info)
+        return self.get_coll(self._db, 'account_info')
 
     @property
     def signal_info(self):
-        return self.get_coll(self._trade_db, self._signal_info)
+        return self.get_coll(self._db, 'signal_info')
 
-    async def build_index(self):
-        self.log.debug('创建索引...')
+    @property
+    def entrust_info(self):
+        return self.get_coll(self._db, 'entrust_info')
 
-        self.log.debug('创建索引完成')
+    @property
+    def deal_info(self):
+        return self.get_coll(self._db, 'deal_info')
 
-    def get_coll(self, db: str, col: str):
-        client = self.get_client()
-        if client is None:
-            return None
-        return client[db][col]
+    @property
+    def position_info(self):
+        return self.get_coll(self._db, 'position_info')
 
-    async def load_user(self, **kwargs) -> Optional[Dict]:
-        """
-        :param kwargs:
-        :return:
-        """
-        self.log.debug('查询用户, kwargs={} ...'.format(kwargs))
-        data = await self.do_load(self.user_info, to_frame=False, **kwargs)
-        self.log.debug('查询成功 data={}'.format(data))
-        return data
-
-    async def save_user(self, data: Dict) -> Optional[List[str]]:
-        """
-        :param
-        :return: list[_id]
-        """
-        self.log.debug('保存用户信息, data = {} ...'.format(data))
-        if data is not None:
-            inserted_ids = await self.do_update(self.user_info, filter={'user_id': data['user_id']}, update=data)
-            self.log.debug('保存用户信息成功, inserted_ids = {}'.format(inserted_ids))
-            return inserted_ids
-        return None
+    @property
+    def strategy_info(self):
+        return self.get_coll(self._db, 'strategy_info')
 
     async def load_account(self, **kwargs) -> Optional[Dict]:
-        """
-        :param kwargs:
-        :return:
-        """
         self.log.debug('查询账户, kwargs={} ...'.format(kwargs))
         data = await self.do_load(self.account_info, to_frame=False, **kwargs)
         self.log.debug('查询账户成功 size={}'.format(len(data) if data is not None else 0))
         return data
+
+    async def save_account(self, data: Dict):
+        self.log.debug('保存账户信息, data = {}'.format(data))
+        inserted_ids = await self.do_update(coll=self.account_info,
+                                            filter={'account_id': data['account_id']}, update=data)
+        self.log.debug('保存账户信息成功')
+        return inserted_ids
+
+    async def load_signal(self, **kwargs) -> Optional[Dict]:
+        self.log.debug('查询信号信息, kwargs={} ...'.format(kwargs))
+        data = await self.do_load(self.signal_info, to_frame=False, **kwargs)
+        self.log.debug('查询信号信息成功 size={}'.format(len(data) if data is not None else 0))
+        return data
+
+    async def save_signal(self, data: Dict):
+        self.log.debug('保存信号信息, data = {}'.format(data))
+        inserted_ids = await self.do_update(coll=self.signal_info,
+                                            filter={'signal_id': data['signal_id']}, update=data)
+        self.log.debug('保存信号信息成功')
+        return inserted_ids
+
+    async def load_entrust(self, **kwargs) -> Optional[Dict]:
+        self.log.debug('查询委托信息, kwargs={} ...'.format(kwargs))
+        data = await self.do_load(self.entrust_info, to_frame=False, **kwargs)
+        self.log.debug('查询委托信息成功 size={}'.format(len(data) if data is not None else 0))
+        return data
+
+    async def save_entrust(self, data: Dict):
+        self.log.debug('保存信号信息, data = {}'.format(data))
+        inserted_ids = await self.do_update(coll=self.entrust_info,
+                                            filter={'entrust_id': data['entrust_id']}, update=data)
+        self.log.debug('保存信号信息成功')
+        return inserted_ids
+
+    async def load_deal(self, **kwargs) -> Optional[Dict]:
+        self.log.debug('查询成交历史, kwargs={} ...'.format(kwargs))
+        data = await self.do_load(self.deal_info, to_frame=False, **kwargs)
+        self.log.debug('查询成交历史成功 size={}'.format(len(data) if data is not None else 0))
+        return data
+
+    async def save_deal(self, data: Dict):
+        self.log.debug('保存成交历史, data = {}'.format(data))
+        inserted_ids = await self.do_update(coll=self.deal_info,
+                                            filter={'deal_id': data['deal_id']}, update=data)
+        self.log.debug('保存成交历史成功')
+        return inserted_ids
+
+    async def load_position(self, **kwargs) -> Optional[Dict]:
+        self.log.debug('查询持仓信息, kwargs={} ...'.format(kwargs))
+        data = await self.do_load(self.position_info, to_frame=False, **kwargs)
+        self.log.debug('查询持仓信息成功 size={}'.format(len(data) if data is not None else 0))
+        return data
+
+    async def save_position(self, data: Dict):
+        self.log.debug('保存持仓信息, data = {}'.format(data))
+        inserted_ids = await self.do_update(coll=self.position_info,
+                                            filter={'signal_id': data['signal_id']}, update=data)
+        self.log.debug('保存持仓信息成功')
+        return inserted_ids
+
+    async def load_strategy(self, **kwargs) -> Optional[Dict]:
+        self.log.debug('查询策略信息, kwargs={} ...'.format(kwargs))
+        data = await self.do_load(self.signal_info, to_frame=False, **kwargs)
+        self.log.debug('查询策略信息成功 size={}'.format(len(data) if data is not None else 0))
+        return data
+
+    async def save_strategy(self, data: Dict):
+        self.log.debug('保存策略信息, data = {}'.format(data))
+        inserted_ids = await self.do_update(coll=self.signal_info,
+                                            filter={'signal_id': data['signal_id']}, update=data)
+        self.log.debug('保存策略信息成功')
+        return inserted_ids

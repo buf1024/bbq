@@ -38,7 +38,7 @@ class StockDB(MongoDB):
                           'start_date': '开始日期', 'weight': '权重'}
     }
 
-    _db = 'bbq_stock_db'  # 通用数据库
+    _db = 'bbq_stock_db'  # 股票数据库
 
     def __init__(self, uri='mongodb://localhost:27017/', pool=5):
         super().__init__(uri, pool)

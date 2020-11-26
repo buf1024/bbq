@@ -1,8 +1,9 @@
 import bbq.log as log
-from bbq.data.stockdb import StockDB
+from bbq.data.mongodb import MongoDB
+from abc import ABC
 
 
-class Broker:
+class Broker(ABC):
     """
     券商交易接口
 
@@ -17,20 +18,19 @@ class Broker:
     4. 持仓同步事件
     """
 
-    def __init__(self, db: StockDB, **options):
+    def __init__(self, db: MongoDB):
         self.log = log.get_logger(self.__class__.__name__)
         self.db = db
         # self.account = Account(repo)
         # self.strategy = None
 
-    @property
-    def name(self):
-        return 'aa'
-
-    def init(self, **kwargs):
+    def desc(self):
         pass
 
-    def serialize(self):
+    def init(self, **options):
+        pass
+
+    def destroy(self):
         pass
 
     def on_strategy(self, payload):

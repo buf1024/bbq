@@ -7,9 +7,9 @@ from bbq.trade.broker.broker import Broker
 class Account:
     def __init__(self, account_id: str, db: StockDB):
         self.log = log.get_logger(self.__class__.__name__)
+        self.db = db
 
         self.account_id = account_id
-        self.db = db
 
         self.cash_init = 0
         self.cash_available = 0

@@ -43,6 +43,11 @@ class BaseProto(asyncio.Protocol):
     def connection_lost(self, exc):
         for sid, task in self.tasks.items():
             task.cancel()
+        self.transport = None
+
+    def write(self, data: bytes):
+        if self.transport is not None:
+            self.transport.write(data)
 
     async def handle(self, proto, req):
         self.log.info('req: {}'.format(req))

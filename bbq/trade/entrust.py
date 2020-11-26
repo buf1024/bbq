@@ -17,5 +17,6 @@ class Entrust:
 
         self.price = 0.0  # 价格
         self.volume = 0  # 量
+
         self.volume_deal = 0  # 已成量
         self.volume_cancel = 0  # 已取消量

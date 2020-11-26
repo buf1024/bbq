@@ -28,7 +28,6 @@ class Strategy:
     async def select(self):
         """
         根据策略，选择股票
-        :param kwargs:
         :return: [code, code, ...]/None
         """
         raise Exception('{} not implement'.format(self.select.__qualname__))

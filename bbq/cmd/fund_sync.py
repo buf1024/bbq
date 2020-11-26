@@ -118,6 +118,7 @@ class FundSync(DataSync):
 
         return True
 
+
 @click.command()
 @click.option('--uri', type=str, help='mongodb connection uri')
 @click.option('--pool', default=0, type=int, help='mongodb connection pool size')

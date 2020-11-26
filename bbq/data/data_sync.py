@@ -155,6 +155,7 @@ class DataSync(CommSync):
 
             await self.queue.join()
             await self.queue_db.join()
+            self.log.info('同步完成')
 
         except Exception as e:
             self.log.error('同步数据失败: ex={}, stack={}'.format(e, traceback.format_exc()))

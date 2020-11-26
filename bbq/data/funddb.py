@@ -27,7 +27,7 @@ class FundDB(MongoDB):
             'day_grow_rate': '日增长率', 'apply_status': '申购状态', 'redeem_status': '赎回状态', 'dividend': '分红送配'
         }
     }
-    _db = 'bbq_fund_db'
+    _db = 'bbq_fund_db'  # 基金数据库
 
     def __init__(self, uri='mongodb://localhost:27017/', pool=5):
         super().__init__(uri, pool)
