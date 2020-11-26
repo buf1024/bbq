@@ -1,6 +1,5 @@
 from bbq.data.mongodb import MongoDB
-from typing import Dict, List, Optional
-import pandas as pd
+from typing import Dict, Optional
 
 
 class TradeDB(MongoDB):
@@ -75,7 +74,7 @@ class TradeDB(MongoDB):
     async def load_account(self, **kwargs) -> Optional[Dict]:
         self.log.debug('查询账户, kwargs={} ...'.format(kwargs))
         data = await self.do_load(self.account_info, to_frame=False, **kwargs)
-        self.log.debug('查询账户成功 size={}'.format(len(data) if data is not None else 0))
+        self.log.debug('查询账户成功 data={}'.format(data))
         return data
 
     async def save_account(self, data: Dict):
@@ -88,7 +87,7 @@ class TradeDB(MongoDB):
     async def load_signal(self, **kwargs) -> Optional[Dict]:
         self.log.debug('查询信号信息, kwargs={} ...'.format(kwargs))
         data = await self.do_load(self.signal_info, to_frame=False, **kwargs)
-        self.log.debug('查询信号信息成功 size={}'.format(len(data) if data is not None else 0))
+        self.log.debug('查询信号信息成功 data={}'.format(data))
         return data
 
     async def save_signal(self, data: Dict):
@@ -101,7 +100,7 @@ class TradeDB(MongoDB):
     async def load_entrust(self, **kwargs) -> Optional[Dict]:
         self.log.debug('查询委托信息, kwargs={} ...'.format(kwargs))
         data = await self.do_load(self.entrust_info, to_frame=False, **kwargs)
-        self.log.debug('查询委托信息成功 size={}'.format(len(data) if data is not None else 0))
+        self.log.debug('查询委托信息成功 data={}'.format(data))
         return data
 
     async def save_entrust(self, data: Dict):
@@ -114,7 +113,7 @@ class TradeDB(MongoDB):
     async def load_deal(self, **kwargs) -> Optional[Dict]:
         self.log.debug('查询成交历史, kwargs={} ...'.format(kwargs))
         data = await self.do_load(self.deal_info, to_frame=False, **kwargs)
-        self.log.debug('查询成交历史成功 size={}'.format(len(data) if data is not None else 0))
+        self.log.debug('查询成交历史成功 data={}'.format(data))
         return data
 
     async def save_deal(self, data: Dict):
@@ -127,7 +126,7 @@ class TradeDB(MongoDB):
     async def load_position(self, **kwargs) -> Optional[Dict]:
         self.log.debug('查询持仓信息, kwargs={} ...'.format(kwargs))
         data = await self.do_load(self.position_info, to_frame=False, **kwargs)
-        self.log.debug('查询持仓信息成功 size={}'.format(len(data) if data is not None else 0))
+        self.log.debug('查询持仓信息成功 data={}'.format(data))
         return data
 
     async def save_position(self, data: Dict):
@@ -140,7 +139,7 @@ class TradeDB(MongoDB):
     async def load_strategy(self, **kwargs) -> Optional[Dict]:
         self.log.debug('查询策略信息, kwargs={} ...'.format(kwargs))
         data = await self.do_load(self.signal_info, to_frame=False, **kwargs)
-        self.log.debug('查询策略信息成功 size={}'.format(len(data) if data is not None else 0))
+        self.log.debug('查询策略信息成功 data={}'.format(data))
         return data
 
     async def save_strategy(self, data: Dict):
