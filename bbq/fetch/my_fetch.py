@@ -109,7 +109,7 @@ class MyFetch(BaseFetch):
         if not self.is_trade(start, end):
             self.log.info('code={}, start={}, end{}, 非交易日不同步...'.format(code, start, end))
             return None
-        self.log.debug('获取雪球股票{}日线数据...'.format(code))
+        self.log.debug('获取雪球股票{}日线数据, start={}, end={}...'.format(code, start, end))
         if start is None:
             code_info = self.fetch_stock_info(codes=[code])
             if code_info is None or code_info.empty:
@@ -200,7 +200,7 @@ class MyFetch(BaseFetch):
             # df 有最旧到最新
             # 区间查询 可能复权不到
             if df.iloc[0].isna()['hfq_factor']:
-                df['hfq_factor'].fillna(value=df_hfq_factor.iloc[0]['hfq_factor'])
+                df['hfq_factor'].fillna(value=df_hfq_factor.iloc[0]['hfq_factor'], inplace=True)
 
             # 前复权当日往上市日复权，当日复权因子为1.0 数据会变更, 不用填充返回
             # df = df.merge(df_qfq_factor, how='left', left_on=['date'], right_on=['date'])
@@ -558,7 +558,7 @@ if __name__ == '__main__':
     # df = aks.fetch_stock_daily_xueqiu(code='sz000001', start=datetime(year=2020, month=9, day=3), end=datetime.now())
     # print(df)
 
-    df = aks.fetch_stock_daily(code='sh689009', start=None, end=datetime.now())
+    df = aks.fetch_stock_daily(code='sh600350', start=datetime(year=2020, month=11, day=23), end=datetime.now())
     print(df)
 
     # df = ak.stock_zh_a_daily(symbol='sz000001')

@@ -20,7 +20,7 @@ class StockDailyTask(Task):
         self.log.info('开始同步股票日线数据, code={}'.format(self.code))
         query_func = partial(self.ctx.db.load_stock_daily, filter={'code': self.code}, projection=['trade_date'],
                              sort=[('trade_date', -1)], limit=1)
-        fetch_func = partial(fetch.fetch_stock_daily, code=self.code)
+        fetch_func = partial(self.to_async, func=partial(fetch.fetch_stock_daily, code=self.code))
         save_func = self.db.save_stock_daily
         await self.incr_sync_on_trade_date(query_func=query_func, fetch_func=fetch_func, save_func=save_func,
                                            sync_start_time_func=lambda now: datetime(year=now.year, month=now.month,
@@ -37,7 +37,7 @@ class StockIndexTask(Task):
         self.log.info('开始同步股票指标数据, code={}'.format(self.code))
         query_func = partial(self.ctx.db.load_stock_index, filter={'code': self.code}, projection=['trade_date'],
                              sort=[('trade_date', -1)], limit=1)
-        fetch_func = partial(fetch.fetch_stock_index, code=self.code)
+        fetch_func = partial(self.to_async, func=partial(fetch.fetch_stock_index, code=self.code))
         save_func = self.db.save_stock_index
         await self.incr_sync_on_trade_date(query_func=query_func, fetch_func=fetch_func, save_func=save_func)
         self.log.info('股票指标数据task完成, code={}'.format(self.code))
@@ -73,7 +73,7 @@ class IndexDailyTask(Task):
         self.log.info('开始同步指数日线数据, code={}'.format(self.code))
         query_func = partial(self.ctx.db.load_index_daily, filter={'code': self.code}, projection=['trade_date'],
                              sort=[('trade_date', -1)], limit=1)
-        fetch_func = partial(fetch.fetch_index_daily, code=self.code)
+        fetch_func = partial(self.to_async, func=partial(fetch.fetch_index_daily, code=self.code))
         save_func = self.db.save_index_daily
         await self.incr_sync_on_trade_date(query_func=query_func, fetch_func=fetch_func, save_func=save_func)
         self.log.info('指数日线数据task完成, code={}'.format(self.code))
@@ -93,7 +93,7 @@ class StockNorthFlowTask(Task):
             if now < datetime(year=now.year, month=now.month, day=now.day, hour=15, minute=30):
                 end = now - timedelta(days=1)
                 filter_cond = 'trade_date <= "{}"'.format(end.strftime('%Y-%m-%d'))
-        fetch_func = fetch.fetch_stock_north_south_flow
+        fetch_func = partial(self.to_async, func=fetch.fetch_stock_north_south_flow)
         save_func = self.db.save_stock_north_south_flow
         await self.incr_sync_on_trade_date(query_func=query_func, fetch_func=fetch_func, save_func=save_func,
                                            filter_data_func=lambda data: data.query(filter_cond) if (
@@ -187,7 +187,7 @@ class StockSync(DataSync):
 @click.option('--uri', type=str, default='mongodb://localhost:27017/', help='mongodb connection uri')
 @click.option('--pool', default=10, type=int, help='mongodb connection pool size')
 @click.option('--skip-basic/--no-skip-basic', default=False, type=bool, help='skip sync basic')
-@click.option('--con-fetch-num', default=15, type=int, help='concurrent net fetch number')
+@click.option('--con-fetch-num', default=10, type=int, help='concurrent net fetch number')
 @click.option('--con-save-num', default=100, type=int, help='concurrent db save number')
 @click.option('--function', type=str,
               help='sync one, split by ",", available: stock_daily,stock_index,index_daily,stock_qf_factor,'

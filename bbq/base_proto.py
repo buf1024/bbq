@@ -48,6 +48,11 @@ class BaseProto(asyncio.Protocol):
         self.log.info('req: {}'.format(req))
 
 
+class BaseClient:
+    def __init__(self):
+        pass
+
+
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     server = loop.run_until_complete(loop.create_server(BaseProto, '127.0.0.1', 37017))

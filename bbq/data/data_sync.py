@@ -53,13 +53,7 @@ class CommSync(ABC):
                 now_tag = sync_start_time_func(end)
                 if end < now_tag:
                     end = end + timedelta(days=-1)
-            data = fetch_func(start=start, end=end)
-
-            async def _test_async():
-                pass
-
-            if type(_test_async()) == type(data):
-                data = await data
+            data = await fetch_func(start=start, end=end)
             data = filter_data_func(data) if filter_data_func is not None else data
             if data is not None and not data.empty:
                 save_func = partial(save_func, data=data)
@@ -89,6 +83,10 @@ class CommSync(ABC):
                 save_func = partial(save_func, data=data_new)
                 await self.ctx.submit_db(save_func)
         return data
+
+    @staticmethod
+    async def to_async(func, *args, **kwargs):
+        return func(*args, **kwargs)
 
 
 class Task(CommSync):
