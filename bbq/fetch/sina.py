@@ -21,7 +21,8 @@ class Sina:
             quot_dict = {}
             for match_obj in group_objs:
                 quots = match_obj.groups()
-                code = quots[0][2:] + '.' + quots[0][:2].upper()
+                # code = quots[0][2:] + '.' + quots[0][:2].upper()
+                code = quots[0]
                 quot_dict[code] = dict(
                     code=code,
                     name=quots[1],
@@ -51,7 +52,8 @@ class Sina:
         quot_dict = {}
         for match_obj in group_objs:
             quots = match_obj.groups()
-            code = quots[0][2:] + '.' + quots[0][:2].upper()
+            # code = quots[0][2:] + '.' + quots[0][:2].upper()
+            code = quots[0]
             quot_dict[code] = dict(
                 code=code,
                 name=quots[1],
@@ -73,22 +75,22 @@ class Sina:
     async def get_rt_quot(self, codes):
         if codes is None:
             return None
-        params = []
-        for code in codes:
-            p = code.lower().split('.')
-            params.append(p[1] + p[0])
-        code_list = ','.join(params)
+        # params = []
+        # for code in codes:
+        #     p = code.lower().split('.')
+        #     params.append(p[1] + p[0])
+        code_list = ','.join(codes)
 
         return await self._get_quot(code_list)
 
     def get_rt_quot_sync(self, codes):
         if codes is None:
             return None
-        params = []
-        for code in codes:
-            p = code.lower().split('.')
-            params.append(p[1] + p[0])
-        code_list = ','.join(params)
+        # params = []
+        # for code in codes:
+        #     p = code.lower().split('.')
+        #     params.append(p[1] + p[0])
+        code_list = ','.join(codes)
 
         # try:
         #     evt_loop = asyncio.get_event_loop()
@@ -105,5 +107,5 @@ class Sina:
 
 if __name__ == '__main__':
     q = Sina()
-    quot = q.get_rt_quot_sync(codes=['000001.SZ', '601099.SH'])
+    quot = q.get_rt_quot_sync(codes=['sh515330', 'sh601099'])
     print(quot)

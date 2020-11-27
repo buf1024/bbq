@@ -104,6 +104,37 @@ class MyFetch(BaseFetch):
         return None
 
     @BaseFetch.retry_client
+    def fetch_fund_daily_xueqiu(self, code: str, start: datetime = None, end: datetime = None) -> Optional[pd.DataFrame]:
+        if not self.is_trade(start, end):
+            self.log.info('code={}, start={}, end{}, 非交易日不同步...'.format(code, start, end))
+            return None
+        self.log.debug('获取雪球场内基金{}日线数据, start={}, end={}...'.format(code, start, end))
+        if start is None:
+            self.log.error('开始日期不能为空')
+            return None
+
+        if end is None:
+            now = datetime.now()
+            end = now
+            if now < datetime(year=now.year, month=now.month, day=now.day, hour=15, minute=30):
+                end = now - timedelta(days=1)
+
+        start_date, end_date = start.strftime('%Y-%m-%d'), end.strftime('%Y-%m-%d')
+        df, msg = stock.get_daily(symbol=self.fund2xueqiu(code), start_date=start_date, end_date=end_date)
+        if df is not None:
+            df.dropna(inplace=True)
+            df.rename(columns={'last': 'close', 'turnover_rate': 'turnover'}, inplace=True)
+            df['turnover'] = df['turnover']
+            df['trade_date'] = pd.to_datetime(df['time'], format='%Y-%m-%d')
+            df.drop(columns=['symbol', 'change', 'percent', 'time'], inplace=True)
+            df['code'] = code
+        else:
+            self.log.error('获取基金{}日线数据失败: {}'.format(code, msg))
+            return None
+        self.log.debug('获取雪球场内基金{}日线数据, count={}'.format(code, df.shape[0]))
+        return df
+
+    @BaseFetch.retry_client
     def fetch_stock_daily_xueqiu(self, code: str, start: datetime = None, end: datetime = None) -> Optional[
         pd.DataFrame]:
         if not self.is_trade(start, end):
@@ -552,14 +583,23 @@ if __name__ == '__main__':
     # df = ak.stock_zh_a_daily(symbol='sz000001', adjust='qfq-factor')
     # print(df)
 
-    # df = ak.stock_zh_a_daily(symbol='sz000001', adjust='qfq')
+    # df = ak.stock_zh_a_daily(symbol='159949', adjust='qfq')
     # print(df)
 
-    # df = aks.fetch_stock_daily_xueqiu(code='sz000001', start=datetime(year=2020, month=9, day=3), end=datetime.now())
+    # df = ak.fund_etf_hist_sina(symbol='sz159949')
     # print(df)
 
-    df = aks.fetch_stock_daily(code='sh600350', start=datetime(year=2020, month=11, day=23), end=datetime.now())
+    df = aks.fetch_fund_daily_xueqiu(code='159824',
+                                     start=datetime(year=2020, month=11, day=23),
+                                     end=datetime(year=2020, month=11, day=27))
+
     print(df)
+
+    # df = aks.fetch_stock_daily_xueqiu(code='sz159949')
+    # print(df)
+
+    # df = aks.fetch_stock_daily(code='sh600350', start=datetime(year=2020, month=11, day=23), end=datetime.now())
+    # print(df)
 
     # df = ak.stock_zh_a_daily(symbol='sz000001')
     # print(df)

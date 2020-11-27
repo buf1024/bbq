@@ -20,12 +20,15 @@ class FundDB(MongoDB):
         'fund_block': {
             'plate': '板块类别', 'class': '板块名称', 'day': '日涨幅', 'week': '周涨幅', 'month': '月涨幅',
             '3month': '3月涨幅', '6month': '6月涨幅', 'year': '年涨幅', 'date': '更新日期'
-         },
+        },
         # 基金净值信息
         'fund_net': {
             'code': '基金代码', 'short_name': '基金简称', 'net': '净值', 'net_accumulate': '累计净值',
             'day_grow_rate': '日增长率', 'apply_status': '申购状态', 'redeem_status': '赎回状态', 'dividend': '分红送配'
-        }
+        },
+        # 场内基金日线数据
+        'fund_daily': {'code': '代码', 'trade_date': '交易日', 'close': '收盘价', 'open': '开盘价', 'high': '最高价', 'low': '最低价',
+                       'volume': '成交量(股)', 'turn_over': '换手率'},
     }
     _db = 'bbq_fund_db'  # 基金数据库
 
@@ -43,6 +46,10 @@ class FundDB(MongoDB):
     @property
     def fund_net(self):
         return self.get_coll(self._db, 'fund_net')
+
+    @property
+    def fund_daily(self):
+        return self.get_coll(self._db, 'fund_daily')
 
     async def load_block_list(self, **kwargs):
         self.log.debug('加载基金板块列表, kwargs={}'.format(kwargs))
@@ -84,6 +91,21 @@ class FundDB(MongoDB):
         if count > 0:
             inserted_ids = await self.do_insert(coll=self.fund_net, data=data)
         self.log.debug('保存基金净值成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
+        return inserted_ids
+
+    async def load_fund_daily(self, **kwargs):
+        self.log.debug('加载场内基金日线数据, kwargs={}'.format(kwargs))
+        df = await self.do_load(self.fund_daily, **kwargs)
+        self.log.debug('加载场内基金日线数据,成功, size={}'.format(df.shape[0] if df is not None else 0))
+        return df
+
+    async def save_fund_daily(self, data: pd.DataFrame):
+        count = data.shape[0] if data is not None else 0
+        inserted_ids = []
+        self.log.debug('保存场内基金日线数据, count = {} ...'.format(data.shape[0]))
+        if count > 0:
+            inserted_ids = await self.do_insert(coll=self.fund_daily, data=data)
+        self.log.debug('保存场内基金日线数据成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
 

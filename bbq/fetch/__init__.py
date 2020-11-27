@@ -20,10 +20,11 @@ fetch_stock_rt_quote = __my_fetch.fetch_stock_rt_quote
 fetch_stock_new = __my_fetch.fetch_stock_new
 fetch_stock_adj_factor = __my_fetch.fetch_stock_adj_factor
 
-fetch_fund_block_list = __fund_fetch.fetch_block_list
-fetch_fund_list = __fund_fetch.fetch_block_list
+fetch_fund_block_list = __fund_fetch.fetch_fund_block_list
+fetch_fund_list = __fund_fetch.fetch_fund_list
 fetch_fund_net = __fund_fetch.fetch_fund_net
 fetch_fund_info = __fund_fetch.fetch_fund_info
+fetch_fund_daily = __my_fetch.fetch_fund_daily_xueqiu
 
 
 def fetch_index_info(codes: List[str] = None) -> pd.DataFrame:

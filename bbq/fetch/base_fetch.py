@@ -36,6 +36,11 @@ class BaseFetch(ABC):
         return symbol
 
     @staticmethod
+    def fund2xueqiu(code: str):
+        symbol = code + '.' + 'SH' if code.startswith('5') else code + '.' + 'SZ'
+        return symbol
+
+    @staticmethod
     def xueqiu2sina(code: str):
         mk, symbol = code[-2:], code[:-3]
         return 'sh' + symbol if mk == 'SH' else 'sz' + symbol

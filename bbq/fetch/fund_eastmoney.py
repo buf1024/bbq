@@ -59,12 +59,12 @@ class FundEastmoney:
                 continue
         raise ex
 
-    async def fetch_block_list(self, fields=None, sync_fund=False):
+    async def fetch_fund_block_list(self, fields=None, sync_fund=False):
         """
         板块列表
         :param sync_fund:
         :param fields: 过滤字段: 板块类别(plate) 板块名称(class) 日涨幅(day) 周涨幅(week) 月涨幅(month) 3月涨幅(3month)
-                                6月涨幅(6month) 年涨幅(year) 跟新时间(date)
+                                6月涨幅(6month) 年涨幅(year) 跟新时间(trade_date)
 
         :return DataFrame
         """
@@ -91,7 +91,7 @@ class FundEastmoney:
                     info_d['plate'] = tt_v
                     info_d['name'] = name
                     info_d[sort_v] = rise
-                    info_d['date'] = datetime.strptime(datetime.now().strftime('%Y%m%d'), '%Y%m%d')
+                    info_d['trade_date'] = datetime.strptime(datetime.now().strftime('%Y%m%d'), '%Y%m%d')
             if sync_fund:
                 for tp in d.keys():
                     self.log.debug('获取tp: {} 基金明细'.format(d[tp]['name']))
@@ -158,7 +158,7 @@ class FundEastmoney:
         :param code: 基金代码
         :param start: 开始时间 datetime
         :param end: 结束时间 datetime
-        :param fields: 过滤字段: 代码(code) 净值日期(date) 单位净值(net) 累计净值(net_accumulate) 日增长率(day_grow_rate)
+        :param fields: 过滤字段: 代码(code) 净值日期(trade_date) 单位净值(net) 累计净值(net_accumulate) 日增长率(day_grow_rate)
                        申购状态(apply_status) 赎回状态(redeem_status) 分红送配(dividend)
 
         :return DataFrame
@@ -187,7 +187,7 @@ class FundEastmoney:
                     break
 
                 net_list.append(dict(code=code,
-                                     date=datetime.strptime(details[0], '%Y-%m-%d'),
+                                     trade_date=datetime.strptime(details[0], '%Y-%m-%d'),
                                      net=0.0 if len(details[1].strip()) == 0 else float(details[1]),
                                      net_accumulate=0.0 if len(details[2].strip()) == 0 else float(details[2]),
                                      day_grow_rate=float(details[3][:-1]) if details[3].find('%') > 0 else 0.0,
@@ -361,7 +361,7 @@ class FundEastmoney:
             res1 = r'.*?(\-*\d+.\d+|--).*?'.join(['近1月', '近1年', '近3月', '近3年', '近6月', '成立', ''])
             v1 = re.findall(res1, s1)
             if len(v1) > 0:
-                r1m, r1y, r3m, r3y, r6m, r = float(0 if v1[0][0].find('--') >= 0 else v1[0][0]),\
+                r1m, r1y, r3m, r3y, r6m, r = float(0 if v1[0][0].find('--') >= 0 else v1[0][0]), \
                                              float(0 if v1[0][1].find('--') >= 0 else v1[0][1]), \
                                              float(0 if v1[0][2].find('--') >= 0 else v1[0][2]), \
                                              float(0 if v1[0][3].find('--') >= 0 else v1[0][3]), \
@@ -382,7 +382,7 @@ class FundEastmoney:
             s_names.append(code[1])
             s_repr.append('{}({}, {}%)'.format(code[1], s_code, code[2]))
 
-        info_dict['date'] = t
+        info_dict['trade_date'] = t
         info_dict['net'] = net
         info_dict['net_accumulate'] = net_acc
 
@@ -417,17 +417,17 @@ if __name__ == '__main__':
         # frame = await f.fetch_fund_net(code='160220')
         # print(frame.head())
 
-        frame = await f.fetch_fund_net(code='160220', start=datetime.strptime('20191201', '%Y%m%d'),
-                                     end=datetime.strptime('2020220', '%Y%m%d'), fields='code,date,net')
+        frame = await f.fetch_fund_net(code='159949')
         print(frame.head())
 
 
     async def test_fund_info(f):
-        frame = await f.fetch_fund_info(code='001054')
+        frame = await f.fetch_fund_info(code='159949')
         print(frame)
 
+
     async def test_block_list(f):
-        frame = await f.fetch_block_list()
+        frame = await f.fetch_fund_block_list()
         print(frame)
 
 
@@ -437,8 +437,8 @@ if __name__ == '__main__':
         loop = asyncio.get_event_loop()
         if loop.run_until_complete(
                 # test_fund_list(fund)
-                # test_fund_net(fund)
-                test_fund_info(fund)
+                test_fund_net(fund)
+                # test_fund_info(fund)
                 # test_block_list(fund)
         ):
             loop.run_forever()
