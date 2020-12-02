@@ -1,13 +1,15 @@
 from bbq.data.mongodb import MongoDB
-from typing import Dict, Optional
+from typing import List, Dict
 
 
 class TradeDB(MongoDB):
     _meta = {
         # 账户信息
-        'account_info': {'account_id': '账户id', 'status': '账户状态(0正常 其他停止)', 'type': '账户类型: real, sim, backtest',
+        'account_info': {'account_id': '账户id', 'status': '账户状态(0正常 其他停止)',
+                         'kind': '交易种类: stock, fund', 'type': '账户类型: real, simulate, backtest',
                          'strategy_id': '交易策略id', 'broker_id': '券商id', 'risk_id': '风控id',
                          'cash_init': '初始资金', 'cash_available': '可用资金', 'cost': '持仓成本',
+                         'broker_fee': '手续费', "transfer_fee": '过户费', "tax_fee": '印花税',
                          'profit': '盈利', 'profit_rate': '盈利比例'},
         # 策略信号
         'signal_info': {'account_id': '账户id', 'signal_id': '信号id', 'source': '信号源, risk, strategy, broker, manual',
@@ -71,7 +73,7 @@ class TradeDB(MongoDB):
     def strategy_info(self):
         return self.get_coll(self._db, 'strategy_info')
 
-    async def load_account(self, **kwargs) -> Optional[Dict]:
+    async def load_account(self, **kwargs) -> List:
         self.log.debug('查询账户, kwargs={} ...'.format(kwargs))
         data = await self.do_load(self.account_info, to_frame=False, **kwargs)
         self.log.debug('查询账户成功 data={}'.format(data))
@@ -84,7 +86,7 @@ class TradeDB(MongoDB):
         self.log.debug('保存账户信息成功')
         return inserted_ids
 
-    async def load_signal(self, **kwargs) -> Optional[Dict]:
+    async def load_signal(self, **kwargs) -> List:
         self.log.debug('查询信号信息, kwargs={} ...'.format(kwargs))
         data = await self.do_load(self.signal_info, to_frame=False, **kwargs)
         self.log.debug('查询信号信息成功 data={}'.format(data))
@@ -97,7 +99,7 @@ class TradeDB(MongoDB):
         self.log.debug('保存信号信息成功')
         return inserted_ids
 
-    async def load_entrust(self, **kwargs) -> Optional[Dict]:
+    async def load_entrust(self, **kwargs) -> List:
         self.log.debug('查询委托信息, kwargs={} ...'.format(kwargs))
         data = await self.do_load(self.entrust_info, to_frame=False, **kwargs)
         self.log.debug('查询委托信息成功 data={}'.format(data))
@@ -110,7 +112,7 @@ class TradeDB(MongoDB):
         self.log.debug('保存信号信息成功')
         return inserted_ids
 
-    async def load_deal(self, **kwargs) -> Optional[Dict]:
+    async def load_deal(self, **kwargs) -> List:
         self.log.debug('查询成交历史, kwargs={} ...'.format(kwargs))
         data = await self.do_load(self.deal_info, to_frame=False, **kwargs)
         self.log.debug('查询成交历史成功 data={}'.format(data))
@@ -123,7 +125,7 @@ class TradeDB(MongoDB):
         self.log.debug('保存成交历史成功')
         return inserted_ids
 
-    async def load_position(self, **kwargs) -> Optional[Dict]:
+    async def load_position(self, **kwargs) -> List:
         self.log.debug('查询持仓信息, kwargs={} ...'.format(kwargs))
         data = await self.do_load(self.position_info, to_frame=False, **kwargs)
         self.log.debug('查询持仓信息成功 data={}'.format(data))
@@ -136,7 +138,7 @@ class TradeDB(MongoDB):
         self.log.debug('保存持仓信息成功')
         return inserted_ids
 
-    async def load_strategy(self, **kwargs) -> Optional[Dict]:
+    async def load_strategy(self, **kwargs) -> List:
         self.log.debug('查询策略信息, kwargs={} ...'.format(kwargs))
         data = await self.do_load(self.signal_info, to_frame=False, **kwargs)
         self.log.debug('查询策略信息成功 data={}'.format(data))
@@ -148,3 +150,25 @@ class TradeDB(MongoDB):
                                             filter={'signal_id': data['signal_id']}, update=data)
         self.log.debug('保存策略信息成功')
         return inserted_ids
+
+
+if __name__ == '__main__':
+    import uuid
+    from bbq.common import run_until_complete
+    acct1 = dict(account_id=str(uuid.uuid4()), status=0, kind='fund', type='stock', data=123)
+    acct2 = dict(account_id=str(uuid.uuid4()), status=0, kind='fund', type='stock', data=456)
+
+    db = TradeDB()
+    db.init()
+
+    async def test_save():
+        await db.save_account(data=acct1)
+        await db.save_account(data=acct2)
+
+    async def test_load():
+        data = await db.load_account(filter=dict(status=0, kind='fund', type='stock'), limit=1)
+        print(data)
+
+    run_until_complete(
+        test_load()
+    )

@@ -9,6 +9,7 @@ from bbq.common import run_until_complete, setup_db, setup_log
 from bbq.data.data_sync import DataSync
 from bbq.data.data_sync import Task
 from bbq.data.stockdb import StockDB
+from bbq.config import init_def_config
 
 
 class StockDailyTask(Task):
@@ -194,8 +195,11 @@ class StockSync(DataSync):
                    'stock_north_flow,stock_his_divend,sw_index_info')
 @click.option('--debug/--no-debug', default=True, type=bool, help='show debug log')
 def main(uri: str, pool: int, skip_basic: bool, con_fetch_num: int, con_save_num: int, function: str, debug: bool):
-    setup_log(debug, 'stock_sync.log')
-    db = setup_db(uri, pool, StockDB)
+    _, conf_dict = init_def_config()
+    conf_dict['mongo'].update(dict(uri=uri, pool=pool))
+    conf_dict['log'].update(dict(level="debug" if debug else "critical"))
+    setup_log(conf_dict, 'stock_sync.log')
+    db = setup_db(conf_dict, StockDB)
     if db is None:
         return
     config = dict(skip_basic=skip_basic,

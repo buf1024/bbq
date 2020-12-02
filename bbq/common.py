@@ -2,9 +2,9 @@ from functools import wraps
 import os
 import importlib
 import asyncio
-from bbq.config import conf_dict
 import bbq.log as log
-
+import base64
+import json
 
 def singleton(cls):
     insts = {}
@@ -73,30 +73,34 @@ def run_until_complete(*coro):
             loop.close()
 
 
-def setup_log(debug: bool, file_name: str):
-    file = None
-    level = "critical"
-    if debug:
-        file = conf_dict['log']['path'] + os.sep + file_name
-        level = conf_dict['log']['level']
-
-    log.setup_logger(file=file, level=level)
+def setup_log(conf_dict, file_name):
+    log.setup_logger(file=conf_dict['log']['path'] + os.sep + file_name, level=conf_dict['log']['level'])
     logger = log.get_logger()
-    logger.debug('初始化数据库')
+    logger.debug('初始化数日志')
 
     return logger
 
 
-def setup_db(uri: str, pool: int, cls):
-    uri = conf_dict['mongo']['uri'] if uri is None else uri
-    pool = conf_dict['mongo']['pool'] if pool <= 0 else pool
-
-    db = cls(uri=uri, pool=pool)
+def setup_db(conf_dict, cls):
+    db = cls(uri=conf_dict['mongo']['uri'], pool=conf_dict['mongo']['pool'])
     if not db.init():
         print('初始化数据库失败')
         return None
 
     return db
+
+
+def load_cmd_js(value):
+    js = None
+    for i in range(2):
+        try:
+            if i != 0:
+                value = base64.b64decode(str.encode(value, encoding='utf-8'))
+            js = json.loads(value)
+        except Exception as e:
+            if i != 0:
+                print('not legal json string/base64 encode json string, please check')
+    return js
 
 
 if __name__ == '__main__':

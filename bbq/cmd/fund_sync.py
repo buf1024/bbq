@@ -7,29 +7,24 @@ from bbq.common import setup_log, setup_db
 from bbq.data.data_sync import DataSync, Task
 from typing import Dict
 import bbq.fetch as fetch
+from bbq.config import init_def_config
 
 
 class FundInfoTask(Task):
-    def __init__(self, ctx, name: str, funds):
+    def __init__(self, ctx, name: str, code):
         super().__init__(ctx, name)
-        self.funds = funds
+        self.code = code
 
     async def task(self):
-        self.log.info('开始基金基本信息同步任务: name={}'.format(self.name))
-        for _, fund in self.funds.iterrows():
-            code, typ, name = fund['code'], fund['type'], fund['name']
-            if not self.ctx.filter_type(typ):
-                # self.log.debug('忽略基金类型: {}, {}'.format(code, typ))
-                continue
+        self.log.info('开始基金基本信息同步任务: {}({})'.format(self.name, self.code))
+        fund_info = await fetch.fetch_fund_info(code=self.code)
+        if fund_info is None:
+            self.log.error('获取基金{}({})信息失败'.format(self.name, self.code))
+            return
+        save_func = partial(self.db.save_fund_info, data=fund_info)
+        await self.ctx.submit_db(save_func)
 
-            fund_info = await fetch.fetch_fund_info(code=code)
-            if fund_info is None:
-                self.log.error('获取基金{}({})信息失败'.format(name, code))
-                continue
-            save_func = partial(self.db.save_fund_info, data=fund_info)
-            await self.ctx.submit_db(save_func)
-
-        self.log.info('基金基本信息{}, task完成'.format(self.name))
+        self.log.info('基金基本信息{}({}), task完成'.format(self.name, self.code))
 
 
 class FundDailyTask(Task):
@@ -106,8 +101,9 @@ class FundSync(DataSync):
         self.config = config
         self.funcs = self.config['function'].split(',') if self.config['function'] is not None else None
 
-    @staticmethod
-    def filter_type(typ):
+        self.log.debug('sync only etf: {}'.format(self.config['etf_only']))
+
+    def filter_type(self, typ):
         # "ETF-场内",
         # "QDII",
         # "QDII-ETF",
@@ -126,8 +122,10 @@ class FundSync(DataSync):
         # "货币型"
         # return False if typ in ['QDII', 'QDII-ETF', 'QDII-指数', '债券型', '债券指数', '固定收益', '定开债券',
         #                         '理财型', '货币型'] else True
-        return False if typ in ['QDII', 'QDII-ETF', 'QDII-指数', '债券型', '债券指数', '定开债券',
-                                '理财型', '货币型'] else True
+        if not self.config['etf_only']:
+            return False if typ in ['QDII', 'QDII-ETF', 'QDII-指数', '债券型', '债券指数', '定开债券',
+                                    '理财型', '货币型'] else True
+        return True if typ in ['ETF-场内'] else False
 
     async def prepare_tasks(self) -> bool:
         self.log.info('获取基金列表...')
@@ -137,7 +135,12 @@ class FundSync(DataSync):
             return False
 
         if self.funcs is None or 'fund_info' in self.funcs:
-            self.add_task(FundInfoTask(self, name='fund_info', funds=funds))
+            for _, fund in funds.iterrows():
+                code, typ, name = fund['code'], fund['type'], fund['name']
+                if not self.ctx.filter_type(typ):
+                    # self.log.debug('忽略基金类型: {}, {}'.format(code, typ))
+                    continue
+                self.add_task(FundInfoTask(self, name=name, code=code))
 
         if self.funcs is None or 'fund_daily' in self.funcs:
             for _, fund in funds.iterrows():
@@ -160,21 +163,26 @@ class FundSync(DataSync):
 
 
 @click.command()
-@click.option('--uri', type=str, help='mongodb connection uri')
-@click.option('--pool', default=0, type=int, help='mongodb connection pool size')
+@click.option('--uri', type=str, default='mongodb://localhost:27017/', help='mongodb connection uri')
+@click.option('--pool', default=10, type=int, help='mongodb connection pool size')
 @click.option('--con-fetch-num', default=20, type=int, help='concurrent net fetch number')
 @click.option('--con-save-num', default=100, type=int, help='concurrent db save number')
 @click.option('--function', type=str,
               help='sync one, split by ",", available: fund_info,fund_net,fund_block,fund_daily')
+@click.option('--etf-only/--all', default=True, help='only sync trade etf')
 @click.option('--debug/--no-debug', default=True, help='show debug log')
-def main(uri: str, pool: int, con_fetch_num: int, con_save_num: int, function: str, debug: bool):
-    setup_log(debug, 'fund_sync.log')
-    db = setup_db(uri, pool, FundDB)
+def main(uri: str, pool: int, con_fetch_num: int, con_save_num: int, function: str, etf_only: bool, debug: bool):
+    _, conf_dict = init_def_config()
+    conf_dict['mongo'].update(dict(uri=uri, pool=pool))
+    conf_dict['log'].update(dict(level="debug" if debug else "critical"))
+    setup_log(conf_dict, 'fund_sync.log')
+    db = setup_db(conf_dict, FundDB)
     if db is None:
         return
     config = dict(con_fetch_num=con_fetch_num,
                   con_save_num=con_save_num,
-                  function=function)
+                  function=function,
+                  etf_only=etf_only)
     fund_sync = FundSync(db=db, config=config)
     run_until_complete(fund_sync.sync())
 

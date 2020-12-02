@@ -1,13 +1,12 @@
 import bbq.log as log
-import uuid
-from bbq.data.stockdb import StockDB
-from bbq.trade.broker.broker import Broker
+from bbq.data.mongodb import MongoDB
+from bbq.trade.tradedb import TradeDB
+from bbq.trade.base_obj import BaseObj
 
 
-class Account:
-    def __init__(self, account_id: str, db: StockDB):
-        self.log = log.get_logger(self.__class__.__name__)
-        self.db = db
+class Account(BaseObj):
+    def __init__(self, account_id: str, typ: str, db_data: MongoDB, db_trade: TradeDB):
+        super().__init__(typ=typ, db_data=db_data, db_trade=db_trade)
 
         self.account_id = account_id
 
@@ -20,6 +19,29 @@ class Account:
 
         self.position = {}
         self.entrust = {}
+
+    async def sync_from_db(self) -> bool:
+        pass
+
+    @BaseObj.discard_saver
+    async def sync_to_db(self) -> bool:
+        pass
+
+    @property
+    def strategy(self):
+        return None
+
+    @property
+    def broker(self):
+        return None
+
+    @property
+    def risk(self):
+        return None
+
+    @property
+    def robot(self):
+        return None
 
     def _update_position_quot(self, code, quot):
         self.position[code].on_quot(quot)

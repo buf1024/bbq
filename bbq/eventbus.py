@@ -538,7 +538,7 @@ _bus = eventbus()
 
 def on(func=None, *, cat=None, event=None, thread=False, **_):
     """
-    注册事件装饰器
+    注册事件装饰器, 参数*表示后面参数需要用关键字传递
     :param func: 装饰的函数或实现__call__的类或类中的成员函数(需绑定target)
     :param cat: eventbus的类别
     :param event: event的名称

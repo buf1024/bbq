@@ -6,6 +6,8 @@ from bbq.data.funddb import FundDB
 from bbq.data.stockdb import StockDB
 from bbq.selector.strategy import strategies
 import base64
+from bbq.config import init_def_config
+
 
 async def select_async(js, config):
     ctx = config['ctx']
@@ -40,11 +42,14 @@ async def select_async(js, config):
 @click.option('--debug/--no-debug', default=True, type=bool, help='show debug log, default: --debug')
 def main(ctx, uri: str, pool: int, syn_type: str, debug: bool):
     ctx.ensure_object(dict)
-    logger = setup_log(debug, 'select.log')
+    _, conf_dict = init_def_config()
+    conf_dict['mongo'].update(dict(uri=uri, pool=pool))
+    conf_dict['log'].update(dict(level="debug" if debug else "critical"))
+    logger = setup_log(conf_dict, 'select.log')
     cls = StockDB
     if syn_type != 'stock':
         cls = FundDB
-    db = setup_db(uri, pool, cls)
+    db = setup_db(conf_dict, cls)
     if db is None:
         return
 

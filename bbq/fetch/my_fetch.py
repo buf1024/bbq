@@ -589,7 +589,7 @@ if __name__ == '__main__':
     # df = ak.fund_etf_hist_sina(symbol='sz159949')
     # print(df)
 
-    df = aks.fetch_fund_daily_xueqiu(code='159824',
+    df = aks.fetch_fund_daily_xueqiu(code='159805',
                                      start=datetime(year=2020, month=11, day=23),
                                      end=datetime(year=2020, month=11, day=27))
 

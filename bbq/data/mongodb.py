@@ -68,8 +68,9 @@ class MongoDB(ABC):
                                 df.drop(columns=['_id'], inplace=True)
                             return df
                     else:
-                        if data is not None:
-                            del data['_id']
+                        if len(data) > 0:
+                            for item in data:
+                                del item['_id']
                         return data
             except (ServerSelectionTimeoutError, AutoReconnect) as e:
                 self.log.error('mongodb 调用 {}, 连接异常: ex={}, call {}, {}s后重试'.format(self.do_load.__name__,
@@ -85,7 +86,9 @@ class MongoDB(ABC):
                 if update is None:
                     return None
                 res = await coll.update_one(filter, {'$set': update}, upsert=upsert)
-                return res.upserted_id
+                # return res.upserted_id
+                return res.matched_count if res.matched_count > 0 else (
+                    res.upserted_id if res.upserted_id is not None else 0)
             except (ServerSelectionTimeoutError, AutoReconnect) as e:
                 self.log.error('mongodb 调用 {}, 连接异常: ex={}, call {}, {}s后重试'.format(self.do_update.__name__,
                                                                                     e, traceback.format_exc(),
