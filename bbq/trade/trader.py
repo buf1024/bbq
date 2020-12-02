@@ -10,12 +10,14 @@ from bbq.trade.tradedb import TradeDB
 from bbq.config import init_config
 from multiprocessing import Process
 import multiprocessing as mp
-from typing import Dict
+from typing import Dict, Optional
 import signal
 from bbq.trade.account import Account
-from bbq.trade.broker import init_broker
-from bbq.trade.risk import init_risk
-from bbq.trade.strategy import init_strategy
+from bbq.trade.broker import init_broker, get_broker
+from bbq.trade.risk import init_risk, get_risk
+from bbq.trade.strategy import init_strategy, get_strategy
+from datetime import datetime
+from bbq.trade.strategy_info import StrategyInfo
 
 
 class Trader:
@@ -57,15 +59,85 @@ class Trader:
         print('catch signal: {}, stop trader...'.format(signum))
         self.loop.create_task(self.stop())
 
-    async def create_new_account(self) -> Account:
+    async def create_new_account(self) -> Optional[Account]:
         typ = self.config['trade']['type']
         account = Account(typ=typ, account_id=str(uuid.uuid4()).replace('-', ''),
                           db_data=self.db_data, db_trade=self.db_trade)
 
+        trade_dict = self.config['trade']
+        account.kind = trade_dict['kind']
+
+        account.cash_init = trade_dict['kind']
+        account.cash_available = account.cash_init
+
+        account.cost = 0
+        account.profit = 0
+        account.profit_rate = 0
+
+        account.broker_fee = trade_dict['broker-fee'] if 'broker-fee' in trade_dict else 0.00025
+        account.transfer_fee = trade_dict['transfer-fee'] if 'transfer-fee' in trade_dict else 0.00002
+        account.tax_fee = trade_dict['tax_fee'] if 'tax_fee' in trade_dict else 0.001
+
+        account.start_time = datetime.now()
+        account.end_time = None
+
+        strategy_id = trade_dict['strategy']['id']
+        strategy_opt = trade_dict['strategy']['option']
+        broker_id = trade_dict['broker']['id']
+        broker_opt = trade_dict['broker']['option']
+        risk_id = trade_dict['risk']['id']
+        risk_opt = trade_dict['risk']['option']
+
+        cls = get_broker(broker_id)
+        if cls is None:
+            self.log.error('broker_id={} not data found'.format(broker_id))
+            return None
+
+        broker = cls(broker_id=broker_id, account=account)
+        is_init = await broker.init(opt=broker_opt)
+        if not is_init:
+            self.log.error('init broker failed')
+            return None
+        account.broker = broker
+
+        cls = get_risk(risk_id)
+        if cls is None:
+            self.log.error('risk_id={} not data found'.format(risk_id))
+            return None
+        risk = cls(risk_id=risk_id, account=account)
+        is_init = await risk.init(opt=risk_opt)
+        if not is_init:
+            self.log.error('init risk failed')
+            return None
+        account.risk = risk
+
+        cls = get_strategy(strategy_id)
+        if cls is None:
+            self.log.error('strategy_id={} not data found'.format(strategy_id))
+            return None
+        strategy = cls(strategy_id=strategy_id, account=account)
+        is_init = await strategy.init(opt=strategy_opt)
+        if not is_init:
+            self.log.error('init strategy failed')
+            return None
+        account.strategy = strategy
+
+        strategy_info = StrategyInfo(account=account)
+        strategy_info.strategy_id = strategy_id
+        strategy_info.strategy_opt = strategy_opt
+        strategy_info.broker_id = broker_id
+        strategy_info.broker_opt = broker_opt
+        strategy_info.risk_id = risk_id
+        strategy_info.risk_opt = risk_opt
+
+        await account.sync_to_db()
+        await strategy_info.sync_to_db()
+
         return account
 
     async def init_account(self):
-        acct_id, kind, typ = self.config['trade']['account-id'], self.config['trade']['kind'], self.config['trade']['type']
+        acct_id, kind, typ = self.config['trade']['account-id'], self.config['trade']['kind'], self.config['trade'][
+            'type']
         if acct_id is not None and len(acct_id) > 0:
             # 直接load数据库
             accounts = await self.db_trade.load_account(filter=dict(status=0, kind=kind, type=typ, account_id=acct_id))
@@ -80,7 +152,8 @@ class Trader:
                 return False
             return True
 
-        strategy_js, risk_js, broker_js = self.config['trade']['strategy'], self.config['trade']['risk'], self.config['trade']['broker']
+        strategy_js, risk_js, broker_js = self.config['trade']['strategy'], self.config['trade']['risk'], \
+                                          self.config['trade']['broker']
         if typ == 'real' or typ == 'simulate':
             if strategy_js is None or risk_js is None or broker_js is None:
                 # fork 多个进程数据库存在的
@@ -109,7 +182,7 @@ class Trader:
             self.log.info('创建account失败')
             return None
 
-        return self.account.sync_to_db()
+        return True
 
     async def init_strategy(self):
         init_risk(self.config['strategy']['risk'])

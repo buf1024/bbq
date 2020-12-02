@@ -72,7 +72,7 @@ class Position(BaseObj):
         self.max_profit_rate = self.profit if self.profit_rate > self.max_profit_rate else self.max_profit_rate
 
     async def sync_from_db(self) -> bool:
-        position = await self.db_trade.load_strategy(filter={'position_id': self.position_id}, limit=1)
+        position = await self.db_trade.load_position(filter={'position_id': self.position_id}, limit=1)
         position = None if len(position) == 0 else position[0]
         if position is None:
             self.log.error('position from db not found: {}'.format(self.position_id))
