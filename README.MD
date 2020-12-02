@@ -1,3 +1,21 @@
+opendatatools修改:
+```python
+# opendatatools/stock/stock_agent.py
+# L354
+if len(jsonobj['data']) <= 0:
+    return None, jsonobj['error_description']
+for rsp in jsonobj['data']['item']:
+
+# opendatatools/stock/stock_agent.py
+# L201
+if df is not None and len(df) != 0:
+
+#->
+
+
+```
+
+
 bbq -- baibai quantitative(瞎掰掰量化)
 
 用户模型，一个用户对应n个账户，一个账户对应1条交易策略，一条风控策略，一个交易前端(broker)。

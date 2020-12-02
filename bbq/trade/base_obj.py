@@ -25,9 +25,8 @@ class BaseObj(ABC):
         return wrapper
 
     async def sync_from_db(self) -> bool:
-        pass
+        return True
 
     async def sync_to_db(self) -> bool:
-        print('base saver')
         return True
 

@@ -10,7 +10,7 @@ class TradeDB(MongoDB):
                          'strategy_id': '交易策略id', 'broker_id': '券商id', 'risk_id': '风控id',
                          'cash_init': '初始资金', 'cash_available': '可用资金', 'cost': '持仓成本',
                          'broker_fee': '手续费', "transfer_fee": '过户费', "tax_fee": '印花税',
-                         'profit': '盈利', 'profit_rate': '盈利比例'},
+                         'profit': '盈利', 'profit_rate': '盈利比例', 'start_time': '开始时间', 'end_time': '结束时间'},
         # 策略信号
         'signal_info': {'account_id': '账户id', 'signal_id': '信号id', 'source': '信号源, risk, strategy, broker, manual',
                         'signal': '信号: sell, buy, cancel', 'name': '股票名称', 'code': '股票代码',
@@ -40,7 +40,9 @@ class TradeDB(MongoDB):
 
         # 策略相关信息
         'strategy_info': {'account_id': '账户id',
-                          'strategy_opt': '策略参数', 'broker_opt': '券商参数', 'risk_opt': '风控参数'}
+                          'strategy_id': '策略名称id', 'strategy_opt': '策略参数',
+                          'broker_id': '券商名称id', 'broker_opt': '券商参数',
+                          'risk_id': '风控名称id', 'risk_opt': '风控参数'}
 
     }
 
@@ -147,7 +149,7 @@ class TradeDB(MongoDB):
     async def save_strategy(self, data: Dict):
         self.log.debug('保存策略信息, data = {}'.format(data))
         inserted_ids = await self.do_update(coll=self.signal_info,
-                                            filter={'signal_id': data['signal_id']}, update=data)
+                                            filter={'account_id': data['account_id']}, update=data)
         self.log.debug('保存策略信息成功')
         return inserted_ids
 

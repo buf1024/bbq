@@ -1,12 +1,15 @@
+from bbq.trade.account import Account
+from bbq.trade.base_obj import BaseObj
 from datetime import datetime, timedelta
-from bbq.data.stockdb import StockDB
 import uuid
 
 
-class Position:
-    def __init__(self, db: StockDB):
-        self.db = db
-        self.position_id = str(uuid.uuid4()).replace('-', '')
+class Position(BaseObj):
+    def __init__(self, position_id: str, account: Account):
+        super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade)
+        self.account = account
+
+        self.position_id = position_id
 
         self.name = ''  # 股票名称
         self.code = ''  # 股票代码
@@ -67,3 +70,20 @@ class Position:
 
         self.profit_rate = self.profit / (self.cost * self.volume)
         self.max_profit_rate = self.profit if self.profit_rate > self.max_profit_rate else self.max_profit_rate
+
+    async def sync_from_db(self) -> bool:
+        position = await self.db_trade.load_strategy(filter={'position_id': self.position_id}, limit=1)
+        position = None if len(position) == 0 else position[0]
+        if position is None:
+            self.log.error('position from db not found: {}'.format(self.position_id))
+            return False
+        # todo
+        return True
+
+    @BaseObj.discard_saver
+    async def sync_to_db(self) -> bool:
+        # data = {'account_id': self.account.account_id,
+        #         'strategy_id': self.strategy_id,
+        #         'strategy_opt': json.dumps(self.opt) if self.opt is not None else None}
+        # await self.db_trade.save_strategy(data=data)
+        return True

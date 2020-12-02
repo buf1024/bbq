@@ -6,6 +6,7 @@ import bbq.log as log
 import base64
 import json
 
+
 def singleton(cls):
     insts = {}
 
@@ -42,8 +43,10 @@ def load_strategy(dir_path, package, exclude=()):
 
             if file_name.startswith('__') or file_name.startswith('.') or file_name in exclude:
                 continue
-
-            module = importlib.import_module('{}.{}'.format(package + package_suf, file_name[:-3]))
+            module_str = '{}.{}'.format(package + package_suf, file_name[:-3])
+            if module_str.startswith('.'):
+                module_str=module_str[1:]
+            module = importlib.import_module(module_str)
 
             file_names = file_name[:-3].split('_')
             name_list = [file_name.capitalize() for file_name in file_names]
@@ -99,11 +102,16 @@ def load_cmd_js(value):
             js = json.loads(value)
         except Exception as e:
             if i != 0:
-                print('not legal json string/base64 encode json string, please check')
+                print('e={}, not legal json string/base64 encode json string, please check'.format(e))
     return js
 
 
 if __name__ == '__main__':
+    import sys
+
+    sys.path.append('/Users/luoguochun/tmp/hellome')
+
+
     @singleton
     class B:
         def __init__(self, js=None):
@@ -111,3 +119,7 @@ if __name__ == '__main__':
 
 
     print('cls b1={}, b2={}'.format(id(B()), id(B())))
+
+    st = load_strategy('/Users/luoguochun/tmp/hellome', '')
+
+    print(st)

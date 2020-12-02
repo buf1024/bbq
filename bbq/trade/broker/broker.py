@@ -1,9 +1,10 @@
-import bbq.log as log
-from bbq.data.mongodb import MongoDB
-from abc import ABC
+import json
+from bbq.trade.base_obj import BaseObj
+from bbq.trade.account import Account
+from typing import Optional, Dict
 
 
-class Broker(ABC):
+class Broker(BaseObj):
     """
     券商交易接口
 
@@ -18,19 +19,17 @@ class Broker(ABC):
     4. 持仓同步事件
     """
 
-    def __init__(self, db: MongoDB):
-        self.log = log.get_logger(self.__class__.__name__)
-        self.db = db
-        # self.account = Account(repo)
-        # self.strategy = None
+    def __init__(self, broker_id, account: Account):
+        super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade)
+        self.account = account
+        self.broker_id = broker_id
 
-    def desc(self):
-        pass
+        self.opt = None
 
-    def init(self, **options):
-        pass
+    async def init(self, opt: Optional[Dict]):
+        return True
 
-    def destroy(self):
+    async def destroy(self):
         pass
 
     def on_strategy(self, payload):
@@ -40,3 +39,23 @@ class Broker(ABC):
         # if self.account is not None:
         #     self.account.on_quot(payload=payload)
         pass
+
+    async def sync_from_db(self) -> bool:
+        opt = await self.db_trade.load_strategy(filter={'account_id': self.account.account_id},
+                                                projection=['broker_opt'], limit=1)
+        opt = None if len(opt) == 0 else opt[0]
+        if opt is not None and 'broker_opt' in opt:
+            try:
+                opt['broker_opt'] = json.loads(opt['broker_opt'])
+            except Exception as e:
+                self.log.error('broker from db to json error: {}, str={}'.format(e, opt['broker_opt']))
+                return False
+        return await self.init(opt=opt['broker_opt'])
+
+    @BaseObj.discard_saver
+    async def sync_to_db(self) -> bool:
+        data = {'account_id': self.account.account_id,
+                'broker_id': self.broker_id,
+                'broker_opt': json.dumps(self.opt) if self.opt is not None else None}
+        await self.db_trade.save_strategy(data=data)
+        return True

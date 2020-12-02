@@ -11,8 +11,11 @@ from bbq.config import init_config
 from multiprocessing import Process
 import multiprocessing as mp
 from typing import Dict
-
+import signal
 from bbq.trade.account import Account
+from bbq.trade.broker import init_broker
+from bbq.trade.risk import init_risk
+from bbq.trade.strategy import init_strategy
 
 
 class Trader:
@@ -39,6 +42,8 @@ class Trader:
             self.log.error('初始化异常')
             return None
 
+        await self.init_strategy()
+
         self.loop.create_task(self.quot_subs_task())
         self.loop.create_task(self.quot_disp_task())
         self.loop.create_task(self.signal_task())
@@ -47,6 +52,10 @@ class Trader:
     async def stop(self):
         self.running = False
         await asyncio.sleep(0.5)
+
+    def signal_handler(self, signum, frame):
+        print('catch signal: {}, stop trader...'.format(signum))
+        self.loop.create_task(self.stop())
 
     async def create_new_account(self) -> Account:
         typ = self.config['trade']['type']
@@ -71,9 +80,9 @@ class Trader:
                 return False
             return True
 
-        strategy, risk, broker = self.config['trade']['strategy'], self.config['trade']['risk'], self.config['trade']['broker']
+        strategy_js, risk_js, broker_js = self.config['trade']['strategy'], self.config['trade']['risk'], self.config['trade']['broker']
         if typ == 'real' or typ == 'simulate':
-            if strategy is None or risk is None or broker is None:
+            if strategy_js is None or risk_js is None or broker_js is None:
                 # fork 多个进程数据库存在的
                 accounts = await self.db_trade.load_account(filter=dict(status=0, kind=kind, type=typ))
                 if len(accounts) == 0:
@@ -88,7 +97,7 @@ class Trader:
                                                          uri=self.config['log']['uri'],
                                                          pool=self.config['log']['pool'],
                                                          strategy_path=self.config['strategy']['trade'],
-                                                         select_path=self.config['strategy']['select'],
+                                                         broker_path=self.config['strategy']['broker'],
                                                          risk_path=self.config['strategy']['risk'],
                                                          trade_kind=kind, trade_type=typ))
                     self.log.info('process pid={}'.format(p.pid))
@@ -101,6 +110,11 @@ class Trader:
             return None
 
         return self.account.sync_to_db()
+
+    async def init_strategy(self):
+        init_risk(self.config['strategy']['risk'])
+        init_broker(self.config['strategy']['broker'])
+        init_strategy(self.config['strategy']['trade'])
 
     async def quot_subs_task(self):
         while self.running:
@@ -131,10 +145,10 @@ class Trader:
 @click.option('--pool', default=10, type=int, help='mongodb connection pool size')
 @click.option('--strategy-path', type=str, help='strategy extra path')
 @click.option('--risk-path', type=str, help='risk extra path')
-@click.option('--select-path', type=str, help='select extra path')
+@click.option('--broker-path', type=str, help='broker extra path')
 @click.option('--init-cash', type=float, help='init cash')
 @click.option('--transfer-fee', type=float, default=0.00002, help='transfer fee')
-@click.option('--tax-fee', type=float, default=0.00025, help='tax fee')
+@click.option('--tax-fee', type=float, default=0.001, help='tax fee')
 @click.option('--broker-fee', type=float, default=0.00025, help='broker fee')
 @click.option('--account-id', type=str, help='trade account_id')
 @click.option('--trade-kind', type=str, default='stock', help='trade catalogue: stock,fund, default stock')
@@ -144,7 +158,7 @@ class Trader:
 @click.option('--broker', type=str, help='broker config, js or base64 encode js, should provide if trade-type is real')
 def main(conf: str, log_path: str, log_level: str,
          uri: str, pool: int,
-         strategy_path: str, risk_path: str, select_path: str,
+         strategy_path: str, risk_path: str, broker_path: str,
          init_cash: float, transfer_fee: float, tax_fee: float, broker_fee: float,
          account_id: str, trade_kind: str, trade_type: str,
          strategy: str, risk: str, broker: str):
@@ -152,7 +166,7 @@ def main(conf: str, log_path: str, log_level: str,
 
     strategy_path = strategy_path.split(',') if strategy_path is not None else None
     risk_path = risk_path.split(',') if risk_path is not None else None
-    select_path = select_path.split(',') if select_path is not None else None
+    broker_path = broker_path.split(',') if broker_path is not None else None
 
     strategy_js = load_cmd_js(strategy) if strategy is not None else None
     risk_js = load_cmd_js(risk) if risk is not None else None
@@ -165,7 +179,7 @@ def main(conf: str, log_path: str, log_level: str,
 
     conf_cmd = dict(log=dict(path=log_path, level=log_level),
                     mongo=dict(uri=uri, pool=pool),
-                    strategy=dict(select=select_path, trade=strategy_path, risk=risk_path),
+                    strategy=dict(broker=broker_path, trade=strategy_path, risk=risk_path),
                     trade={'account-id': account_id, 'kind': trade_kind, 'type': trade_type,
                            'init-cash': init_cash,
                            'transfer-fee': transfer_fee, 'tax-fee': tax_fee, 'broker-fee': broker_fee,
@@ -189,6 +203,7 @@ def main(conf: str, log_path: str, log_level: str,
         return
 
     trader = Trader(db_trade=db_trade, db_data=db_data, config=conf_dict)
+    signal.signal(signal.SIGTERM, trader.signal_handler)
     run_until_complete(trader.start())
 
 
