@@ -60,13 +60,10 @@ class Strategy(BaseObj):
         opt = await self.db_trade.load_strategy(filter={'account_id': self.account.account_id},
                                                 projection=['strategy_opt'], limit=1)
         opt = None if len(opt) == 0 else opt[0]
+        strategy_opt = None
         if opt is not None and 'strategy_opt' in opt:
-            try:
-                opt['strategy_opt'] = json.loads(opt['strategy_opt'])
-            except Exception as e:
-                self.log.error('strategy from db to json error: {}, str={}'.format(e, opt['strategy_opt']))
-                return False
-        return await self.init(opt=opt['strategy_opt'])
+            strategy_opt = opt['strategy_opt']
+        return await self.init(opt=strategy_opt)
 
     @BaseObj.discard_saver
     async def sync_to_db(self) -> bool:

@@ -44,13 +44,10 @@ class Broker(BaseObj):
         opt = await self.db_trade.load_strategy(filter={'account_id': self.account.account_id},
                                                 projection=['broker_opt'], limit=1)
         opt = None if len(opt) == 0 else opt[0]
+        broker_opt = None
         if opt is not None and 'broker_opt' in opt:
-            try:
-                opt['broker_opt'] = json.loads(opt['broker_opt'])
-            except Exception as e:
-                self.log.error('broker from db to json error: {}, str={}'.format(e, opt['broker_opt']))
-                return False
-        return await self.init(opt=opt['broker_opt'])
+            broker_opt = opt['broker_opt']
+        return await self.init(opt=broker_opt)
 
     @BaseObj.discard_saver
     async def sync_to_db(self) -> bool:

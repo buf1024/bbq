@@ -142,13 +142,13 @@ class TradeDB(MongoDB):
 
     async def load_strategy(self, **kwargs) -> List:
         self.log.debug('查询策略信息, kwargs={} ...'.format(kwargs))
-        data = await self.do_load(self.signal_info, to_frame=False, **kwargs)
+        data = await self.do_load(self.strategy_info, to_frame=False, **kwargs)
         self.log.debug('查询策略信息成功 data={}'.format(data))
         return data
 
     async def save_strategy(self, data: Dict):
         self.log.debug('保存策略信息, data = {}'.format(data))
-        inserted_ids = await self.do_update(coll=self.signal_info,
+        inserted_ids = await self.do_update(coll=self.strategy_info,
                                             filter={'account_id': data['account_id']}, update=data)
         self.log.debug('保存策略信息成功')
         return inserted_ids

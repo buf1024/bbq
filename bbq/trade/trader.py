@@ -18,6 +18,8 @@ from bbq.trade.risk import init_risk, get_risk
 from bbq.trade.strategy import init_strategy, get_strategy
 from datetime import datetime
 from bbq.trade.strategy_info import StrategyInfo
+import os
+import sys
 
 
 class Trader:
@@ -36,28 +38,40 @@ class Trader:
             signal=asyncio.Queue()
         )
 
+        self.task_queue = asyncio.Queue()
+
         self.running = False
 
     async def start(self):
+        await self.init_strategy()
+
         is_init = await self.init_account()
         if not is_init:
             self.log.error('初始化异常')
             return None
 
-        await self.init_strategy()
+        self.running = True
 
+        await self.task_queue.put('quot_subs_task')
         self.loop.create_task(self.quot_subs_task())
+
+        await self.task_queue.put('quot_disp_task')
         self.loop.create_task(self.quot_disp_task())
+
+        await self.task_queue.put('signal_task')
         self.loop.create_task(self.signal_task())
+
+        await self.task_queue.put('risk_task')
         self.loop.create_task(self.risk_task())
 
-    async def stop(self):
+        await self.task_queue.join()
+
+    def stop(self):
         self.running = False
-        await asyncio.sleep(0.5)
 
     def signal_handler(self, signum, frame):
-        print('catch signal: {}, stop trader...'.format(signum))
-        self.loop.create_task(self.stop())
+        print('catch signal: {}, stop trade...'.format(signum))
+        self.stop()
 
     async def create_new_account(self) -> Optional[Account]:
         typ = self.config['trade']['type']
@@ -81,12 +95,20 @@ class Trader:
         account.start_time = datetime.now()
         account.end_time = None
 
-        strategy_id = trade_dict['strategy']['id']
-        strategy_opt = trade_dict['strategy']['option']
-        broker_id = trade_dict['broker']['id']
-        broker_opt = trade_dict['broker']['option']
-        risk_id = trade_dict['risk']['id']
-        risk_opt = trade_dict['risk']['option']
+        strategy_id = trade_dict['strategy']['id'] if trade_dict['strategy'] is not None else None
+        strategy_opt = trade_dict['strategy']['option'] if trade_dict['strategy'] is not None else None
+        broker_id = trade_dict['broker']['id'] if trade_dict['broker'] is not None else None
+        broker_opt = trade_dict['broker']['option'] if trade_dict['broker'] is not None else None
+        risk_id = trade_dict['risk']['id'] if trade_dict['risk'] is not None else None
+        risk_opt = trade_dict['risk']['option'] if trade_dict['risk'] is not None else None
+
+        if broker_id is None:
+            if typ in ['backtest', 'simulate']:
+                broker_id = 'builtin:BrokerSimulate'
+                broker_opt = {}
+        if broker_id is None:
+            self.log.error('broker_id not specific')
+            return None
 
         cls = get_broker(broker_id)
         if cls is None:
@@ -100,6 +122,10 @@ class Trader:
             return None
         account.broker = broker
 
+        if risk_id is None:
+            self.log.error('risk_id not specific')
+            return None
+
         cls = get_risk(risk_id)
         if cls is None:
             self.log.error('risk_id={} not data found'.format(risk_id))
@@ -110,6 +136,10 @@ class Trader:
             self.log.error('init risk failed')
             return None
         account.risk = risk
+
+        if strategy_id is None:
+            self.log.error('strategy_id not specific')
+            return None
 
         cls = get_strategy(strategy_id)
         if cls is None:
@@ -136,8 +166,8 @@ class Trader:
         return account
 
     async def init_account(self):
-        acct_id, kind, typ = self.config['trade']['account-id'], self.config['trade']['kind'], self.config['trade'][
-            'type']
+        trade_dict = self.config['trade']
+        acct_id, kind, typ = trade_dict['account-id'], trade_dict['kind'], trade_dict['type']
         if acct_id is not None and len(acct_id) > 0:
             # 直接load数据库
             accounts = await self.db_trade.load_account(filter=dict(status=0, kind=kind, type=typ, account_id=acct_id))
@@ -146,35 +176,41 @@ class Trader:
                 return
 
             self.account = Account(account_id=acct_id, typ=typ, db_data=self.db_data, db_trade=self.db_trade)
-            if not self.account.sync_from_db():
+            if not await self.account.sync_from_db():
                 self.log.info('从数据库中初始或account失败, account_id={}'.format(acct_id))
                 self.account = None
                 return False
             return True
 
-        strategy_js, risk_js, broker_js = self.config['trade']['strategy'], self.config['trade']['risk'], \
-                                          self.config['trade']['broker']
+        strategy_js, risk_js, broker_js = trade_dict['strategy'], trade_dict['risk'], trade_dict['broker']
         if typ == 'real' or typ == 'simulate':
-            if strategy_js is None or risk_js is None or broker_js is None:
+            if strategy_js is None and risk_js is None and broker_js is None:
                 # fork 多个进程数据库存在的
                 accounts = await self.db_trade.load_account(filter=dict(status=0, kind=kind, type=typ))
                 if len(accounts) == 0:
                     self.log.info('数据中没有已运行的real/simulate数据')
                     return False
-
+                path_dict = self.config['strategy']
                 for account in accounts:
                     self.log.info('开始fork程序运行account_id={}'.format(account['account_id']))
-                    p = Process(target=main, kwargs=dict(account_id=account['account_id'],
-                                                         log_path=self.config['log']['path'],
-                                                         log_level=self.config['log']['level'],
-                                                         uri=self.config['log']['uri'],
-                                                         pool=self.config['log']['pool'],
-                                                         strategy_path=self.config['strategy']['trade'],
-                                                         broker_path=self.config['strategy']['broker'],
-                                                         risk_path=self.config['strategy']['risk'],
-                                                         trade_kind=kind, trade_type=typ))
-                    self.log.info('process pid={}'.format(p.pid))
-                return True
+                    p = Process(target=entry,
+                                kwargs=dict(conf=None,
+                                            log_path=self.config['log']['path'],
+                                            log_level=self.config['log']['level'],
+                                            uri=self.config['mongo']['uri'],
+                                            pool=self.config['mongo']['pool'],
+                                            strategy_path=self.config['strategy']['trade'],
+                                            broker_path=self.config['strategy']['broker'],
+                                            risk_path=self.config['strategy']['risk'],
+                                            init_cash=0, transfer_fee=0, tax_fee=0, broker_fee=0,
+                                            account_id=account['account_id'], trade_kind=kind,
+                                            trade_type=typ,
+                                            strategy=None, risk=None, broker=None),
+                                daemon=False)
+                    p.start()
+                    self.log.info('process pid={}, alive={}'.format(p.pid, p.is_alive()))
+                self.log.info('main process exit')
+                sys.exit(0)
 
         # 新生成trade / backtest
         self.account = await self.create_new_account()
@@ -190,29 +226,41 @@ class Trader:
         init_strategy(self.config['strategy']['trade'])
 
     async def quot_subs_task(self):
+        await self.task_queue.get()
         while self.running:
+            self.log.info('quot_subs_task...')
             await asyncio.sleep(1)
+
+        self.task_queue.task_done()
 
     async def quot_disp_task(self):
+        await self.task_queue.get()
         while self.running:
+            self.log.info('quot_disp_task...')
             await asyncio.sleep(1)
+
+        self.task_queue.task_done()
 
     async def signal_task(self):
+        await self.task_queue.get()
         while self.running:
+            self.log.info('signal_task...')
             await asyncio.sleep(1)
+
+        self.task_queue.task_done()
 
     async def risk_task(self):
+        await self.task_queue.get()
         while self.running:
+            self.log.info('risk_task...')
             await asyncio.sleep(1)
 
-    async def robot_task(self):
-        while self.running:
-            await asyncio.sleep(1)
+        self.task_queue.task_done()
 
 
 @click.command()
 @click.option('--conf', type=str, help='config file, default location: ~')
-@click.option('--log-path', type=str, default='./', help='log path')
+@click.option('--log-path', type=str, default=None, help='log path')
 @click.option('--log-level', type=str, default='debug', help='log level')
 @click.option('--uri', type=str, default='mongodb://localhost:27017/', help='mongodb connection uri')
 @click.option('--pool', default=10, type=int, help='mongodb connection pool size')
@@ -236,6 +284,26 @@ def main(conf: str, log_path: str, log_level: str,
          account_id: str, trade_kind: str, trade_type: str,
          strategy: str, risk: str, broker: str):
     mp.set_start_method('spawn')
+    entry(conf=conf, log_path=log_path, log_level=log_level,
+          uri=uri, pool=pool,
+          strategy_path=strategy_path, risk_path=risk_path, broker_path=broker_path,
+          init_cash=init_cash, transfer_fee=transfer_fee, tax_fee=tax_fee, broker_fee=broker_fee,
+          account_id=account_id, trade_kind=trade_kind, trade_type=trade_type,
+          strategy=strategy, risk=risk, broker=broker)
+
+
+def entry(**opts):
+    conf, log_path, log_level = opts['conf'], opts['log_path'], opts['log_level']
+    uri, pool = opts['uri'], opts['pool']
+    strategy_path, risk_path, broker_path = opts['strategy_path'], opts['risk_path'], opts['broker_path']
+    init_cash = opts['init_cash']
+    transfer_fee, tax_fee, broker_fee = opts['transfer_fee'], opts['tax_fee'], opts['broker_fee']
+    account_id, trade_kind, trade_type = opts['account_id'], opts['trade_kind'], opts['trade_type']
+    strategy, risk, broker = opts['strategy'], opts['risk'], opts['broker']
+
+    if log_path is None:
+        home = os.path.expanduser('~')
+        log_path = home + os.sep + os.sep.join(['.config', 'bbq', 'logs'])
 
     strategy_path = strategy_path.split(',') if strategy_path is not None else None
     risk_path = risk_path.split(',') if risk_path is not None else None
@@ -277,6 +345,7 @@ def main(conf: str, log_path: str, log_level: str,
 
     trader = Trader(db_trade=db_trade, db_data=db_data, config=conf_dict)
     signal.signal(signal.SIGTERM, trader.signal_handler)
+    signal.signal(signal.SIGINT, trader.signal_handler)
     run_until_complete(trader.start())
 
 

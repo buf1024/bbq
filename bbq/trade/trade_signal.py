@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 
-class Signal:
+class TradeSignal:
     def __init__(self):
         self.signal_id = str(uuid.uuid4()).replace('-', '')
 

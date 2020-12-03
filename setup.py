@@ -26,10 +26,10 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'quotation=bbq.cmd.quotation:main',
-            'stocksync=bbq.cmd.stock_sync:main',
             'fundsync=bbq.cmd.fund_sync:main',
-            'stockselect=bbq.cmd.stock_select:main'
+            'stocksync=bbq.cmd.stock_sync:main',
+            'stockselect=bbq.cmd.stock_select:main',
+            'trader=bbq.trade.trader:main'
         ]
     },
 )

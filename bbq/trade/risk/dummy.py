@@ -1,15 +1,10 @@
-from trader.risk.risk import Risk
+from .risk import Risk
+from ..account import Account
 
 
 class Dummy(Risk):
-    def __init__(self, repo, account, **kwargs):
-        super().__init__(repo, account, **kwargs)
-
-    def name(self):
-        return 'dummy'
-
-    def desc(self):
-        return 'dummy risk strategy'
+    def __init__(self, risk_id, account: Account):
+        super().__init__(risk_id=risk_id, account=account)
 
     def on_broker(self, payload):
         print('risk on_broker: {}'.format(payload))

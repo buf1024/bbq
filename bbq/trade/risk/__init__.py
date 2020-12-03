@@ -9,17 +9,18 @@ def init_risk(paths):
     builtin_dict = risks['builtin']
     if len(builtin_dict) == 0:
         file_path = dirname(__file__)
-        strategy = load_strategy(file_path, 'trader.risk', ('risk.py', ))
+        strategy = load_strategy(file_path, 'bbq.trade.risk', ('risk.py', ))
         if len(strategy) > 0:
             builtin_dict.update(strategy)
 
     external_dict = risks['external']
-    for path in paths:
-        if path not in sys.path:
-            sys.path.append(path)
-        strategy = load_strategy(path, '')
-        if len(strategy) > 0:
-            external_dict.update(strategy)
+    if paths is not None:
+        for path in paths:
+            if path not in sys.path:
+                sys.path.append(path)
+            strategy = load_strategy(path, '')
+            if len(strategy) > 0:
+                external_dict.update(strategy)
 
 
 def get_risk(name):

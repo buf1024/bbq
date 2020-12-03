@@ -1,11 +1,10 @@
-from bbq.trade.account import Account
 from bbq.trade.base_obj import BaseObj
 from datetime import datetime, timedelta
 import uuid
 
 
 class Position(BaseObj):
-    def __init__(self, position_id: str, account: Account):
+    def __init__(self, position_id: str, account):
         super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade)
         self.account = account
 
@@ -77,13 +76,38 @@ class Position(BaseObj):
         if position is None:
             self.log.error('position from db not found: {}'.format(self.position_id))
             return False
-        # todo
+        self.name = position['name']
+        self.code = position['code']
+        self.volume = position['volume']
+        self.volume_available = position['volume_available']
+        self.cost = position['cost']
+        self.price = position['price']
+        self.profit_rate = position['profit_rate']
+        self.max_profit_rate = position['max_profit_rate']
+        self.min_profit_rate = position['min_profit_rate']
+        self.profit = position['profit']
+        self.max_profit = position['max_profit']
+        self.min_profit = position['min_profit']
+        self.now_price = position['now_price']
+        self.max_price = position['max_price']
+        self.min_price = position['min_price']
+        self.max_profit_time = position['max_profit_time']
+        self.min_profit_time = position['min_profit_time']
+        self.time = position['time']
         return True
 
     @BaseObj.discard_saver
     async def sync_to_db(self) -> bool:
-        # data = {'account_id': self.account.account_id,
-        #         'strategy_id': self.strategy_id,
-        #         'strategy_opt': json.dumps(self.opt) if self.opt is not None else None}
-        # await self.db_trade.save_strategy(data=data)
+        data = {'account_id': self.account.account_id,
+                'position_id': self.position_id, 'name': self.name, 'code': self.code,
+                'volume': self.volume, 'volume_available': self.volume_available,
+                'cost': self.cost, 'price': self.price,
+                'profit_rate': self.profit_rate,
+                'max_profit_rate': self.max_profit_rate, 'min_profit_rate': self.min_profit_rate,
+                'profit': self.profit, 'max_profit': self.max_profit, 'min_profit': self.min_profit,
+                'now_price': self.now_price, 'max_price': self.max_price, 'min_price': self.min_price,
+                'max_profit_time': self.max_profit_time, 'min_profit_time': self.min_profit_time,
+                'time': self.time
+                }
+        await self.db_trade.save_position(data=data)
         return True

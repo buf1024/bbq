@@ -1,19 +1,9 @@
 from .broker import Broker
+from bbq.trade.account import Account
 
 
 class BrokerSimulate(Broker):
 
-    def __init__(self, repo):
-        super().__init__(repo)
+    def __init__(self, broker_id, account: Account):
+        super().__init__(broker_id=broker_id, account=account)
 
-    def init(self, **kwargs):
-        super().init(**kwargs)
-
-    def serialize(self):
-        super().serialize()
-
-    def on_strategy(self, payload):
-        return super().on_strategy(payload)
-
-    def on_quot(self, payload):
-        super().on_quot(payload)

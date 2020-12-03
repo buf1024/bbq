@@ -28,13 +28,10 @@ class Risk(BaseObj):
         opt = await self.db_trade.load_strategy(filter={'account_id': self.account.account_id},
                                                 projection=['risk_opt'], limit=1)
         opt = None if len(opt) == 0 else opt[0]
+        risk_opt = None
         if opt is not None and 'risk_opt' in opt:
-            try:
-                opt['risk_opt'] = json.loads(opt['risk_opt'])
-            except Exception as e:
-                self.log.error('risk from db to json error: {}, str={}'.format(e, opt['risk_opt']))
-                return False
-        return await self.init(opt=opt['risk_opt'])
+            risk_opt = opt['risk_opt']
+        return await self.init(opt=risk_opt)
 
     @BaseObj.discard_saver
     async def sync_to_db(self) -> bool:

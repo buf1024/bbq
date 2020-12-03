@@ -1,0 +1,3 @@
+trade:
+
+--init-cash=100000 --trade-kind=stock --trade-type=simulate --strategy=eyJpZCI6ICJidWlsdGluOkR1bW15IiwgIm9wdGlvbiI6IHt9fQo= --risk=eyJpZCI6ICJidWlsdGluOkR1bW15IiwgIm9wdGlvbiI6IHt9fQo=

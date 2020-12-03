@@ -123,7 +123,8 @@ class Account(BaseObj):
     async def sync_to_db(self) -> bool:
         data = {'account_id': self.account_id, 'status': self.status,
                 'kind': self.kind, 'type': self.typ,
-                'strategy_id': '交易策略id', 'broker_id': '券商id', 'risk_id': '风控id',
+                'strategy_id': self.strategy.strategy_id,
+                'broker_id': self.broker.broker_id, 'risk_id': self.risk.risk_id,
                 'cash_init': self.cash_init, 'cash_available': self.cash_available, 'cost': self.cost,
                 'broker_fee': self.broker_fee, "transfer_fee": self.transfer_fee, "tax_fee": self.tax_fee,
                 'profit': self.profit, 'profit_rate': self.profit_rate,

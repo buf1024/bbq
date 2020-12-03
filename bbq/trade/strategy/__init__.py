@@ -9,17 +9,18 @@ def init_strategy(paths):
     builtin_dict = strategies['builtin']
     if len(builtin_dict) == 0:
         file_path = dirname(__file__)
-        strategy = load_strategy(file_path, 'trader.strategy', ('strategy.py', ))
+        strategy = load_strategy(file_path, 'bbq.trade.strategy', ('strategy.py', ))
         if len(strategy) > 0:
             builtin_dict.update(strategy)
 
     external_dict = strategies['external']
-    for path in paths:
-        if path not in sys.path:
-            sys.path.append(path)
-        strategy = load_strategy(path, '')
-        if len(strategy) > 0:
-            external_dict.update(strategy)
+    if paths is not None:
+        for path in paths:
+            if path not in sys.path:
+                sys.path.append(path)
+            strategy = load_strategy(path, '')
+            if len(strategy) > 0:
+                external_dict.update(strategy)
 
 
 def get_strategy(name):
