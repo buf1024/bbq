@@ -3,6 +3,7 @@ import pandas as pd
 from .my_trade_date import is_trade_date
 from .my_fetch import MyFetch
 from .fund_eastmoney import FundEastmoney
+from .sina import Sina
 from typing import List
 
 __my_fetch = MyFetch()
@@ -19,6 +20,7 @@ fetch_sw_index_info = __my_fetch.fetch_sw_index_info
 fetch_stock_rt_quote = __my_fetch.fetch_stock_rt_quote
 fetch_stock_new = __my_fetch.fetch_stock_new
 fetch_stock_adj_factor = __my_fetch.fetch_stock_adj_factor
+fetch_stock_minute = __my_fetch.fetch_stock_minute
 
 fetch_fund_block_list = __fund_fetch.fetch_fund_block_list
 fetch_fund_list = __fund_fetch.fetch_fund_list

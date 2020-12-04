@@ -21,6 +21,7 @@ setup(
         'aiohttp',
         'motor',
         'pymongo',
+        'xlrd',
         'Click',
         'protobuf',
     ],

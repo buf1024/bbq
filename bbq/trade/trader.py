@@ -102,6 +102,8 @@ class Trader:
         risk_id = trade_dict['risk']['id'] if trade_dict['risk'] is not None else None
         risk_opt = trade_dict['risk']['option'] if trade_dict['risk'] is not None else None
 
+        quot_opt = self.config['quotation'] if self.config['quotation'] is not None else None
+
         if broker_id is None:
             if typ in ['backtest', 'simulate']:
                 broker_id = 'builtin:BrokerSimulate'
@@ -159,6 +161,7 @@ class Trader:
         strategy_info.broker_opt = broker_opt
         strategy_info.risk_id = risk_id
         strategy_info.risk_opt = risk_opt
+        strategy_info.quot_opt = quot_opt
 
         await account.sync_to_db()
         await strategy_info.sync_to_db()
@@ -190,7 +193,6 @@ class Trader:
                 if len(accounts) == 0:
                     self.log.info('数据中没有已运行的real/simulate数据')
                     return False
-                path_dict = self.config['strategy']
                 for account in accounts:
                     self.log.info('开始fork程序运行account_id={}'.format(account['account_id']))
                     p = Process(target=entry,
@@ -205,6 +207,7 @@ class Trader:
                                             init_cash=0, transfer_fee=0, tax_fee=0, broker_fee=0,
                                             account_id=account['account_id'], trade_kind=kind,
                                             trade_type=typ,
+                                            quot_freq=None, quot_date=None, quot_index=None, quot_stock=None,
                                             strategy=None, risk=None, broker=None),
                                 daemon=False)
                     p.start()
@@ -274,6 +277,10 @@ class Trader:
 @click.option('--account-id', type=str, help='trade account_id')
 @click.option('--trade-kind', type=str, default='stock', help='trade catalogue: stock,fund, default stock')
 @click.option('--trade-type', type=str, default='simulate', help='trade type: real,simulate,backtest')
+@click.option('--quot-freq', type=str, default='1min', help='quotation frequency, 1min, 5min, 15min, 30min, 60min')
+@click.option('--quot-date', type=str, help='backtest date, format: yyyymmdd~yyyymmdd')
+@click.option('--quot-index', type=str, help='index list, sep by ","')
+@click.option('--quot-stock', type=str, help='index list, sep by ","')
 @click.option('--strategy', type=str, help='running trade strategy, js or base64 encode js')
 @click.option('--risk', type=str, help='running risk strategy, js or base64 encode js, use default if not provide')
 @click.option('--broker', type=str, help='broker config, js or base64 encode js, should provide if trade-type is real')
@@ -282,6 +289,7 @@ def main(conf: str, log_path: str, log_level: str,
          strategy_path: str, risk_path: str, broker_path: str,
          init_cash: float, transfer_fee: float, tax_fee: float, broker_fee: float,
          account_id: str, trade_kind: str, trade_type: str,
+         quot_freq: str, quot_date: str, quot_index: str, quot_stock: str,
          strategy: str, risk: str, broker: str):
     mp.set_start_method('spawn')
     entry(conf=conf, log_path=log_path, log_level=log_level,
@@ -289,6 +297,7 @@ def main(conf: str, log_path: str, log_level: str,
           strategy_path=strategy_path, risk_path=risk_path, broker_path=broker_path,
           init_cash=init_cash, transfer_fee=transfer_fee, tax_fee=tax_fee, broker_fee=broker_fee,
           account_id=account_id, trade_kind=trade_kind, trade_type=trade_type,
+          quot_freq=quot_freq, quot_date=quot_date, quot_index=quot_index, quot_stock=quot_stock,
           strategy=strategy, risk=risk, broker=broker)
 
 
@@ -299,6 +308,7 @@ def entry(**opts):
     init_cash = opts['init_cash']
     transfer_fee, tax_fee, broker_fee = opts['transfer_fee'], opts['tax_fee'], opts['broker_fee']
     account_id, trade_kind, trade_type = opts['account_id'], opts['trade_kind'], opts['trade_type']
+    quot_freq, quot_date, quot_index, quot_stock = opts['quot_freq'], opts['quot_date'], opts['quot_index'], opts['quot_stock']
     strategy, risk, broker = opts['strategy'], opts['risk'], opts['broker']
 
     if log_path is None:
@@ -317,10 +327,22 @@ def entry(**opts):
             (broker is not None and broker_js is None):
         print('strategy cmd argument error')
         return
+    if quot_freq is not None:
+        if quot_freq not in ['1min', '5min', '15min', '30min', '60min']:
+            print('quotation frequency not right')
+            return
+    q_start, q_end = None, None
+    if quot_date is not None:
+        dates = quot_date.split('~')
+        q_start = datetime.strptime('yyyymmdd', dates[0])
+        q_end = datetime.strptime('yyyymmdd', dates[1])
+    q_index = quot_index.split(',') if quot_index is not None else None
+    q_stock = quot_stock.split(',') if quot_stock is not None else None
 
     conf_cmd = dict(log=dict(path=log_path, level=log_level),
                     mongo=dict(uri=uri, pool=pool),
                     strategy=dict(broker=broker_path, trade=strategy_path, risk=risk_path),
+                    quotation=dict(frequency=quot_freq, start_date=q_start, end_date=q_end, index=q_index, stock=q_stock),
                     trade={'account-id': account_id, 'kind': trade_kind, 'type': trade_type,
                            'init-cash': init_cash,
                            'transfer-fee': transfer_fee, 'tax-fee': tax_fee, 'broker-fee': broker_fee,

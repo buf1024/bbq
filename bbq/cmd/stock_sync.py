@@ -60,7 +60,7 @@ class StockFactorTask(Task):
             data_new = self.gen_incr_data('trade_Date', data_db, data)
             if data_new is not None:
                 self.log.info('删除原有{}复权因子'.format(self.code))
-                self.db.do_delete(self.db.stock_fq_factor, filter={'code': self.code}, just_one=False)
+                await self.db.do_delete(self.db.stock_fq_factor, filter={'code': self.code}, just_one=False)
                 await self.db.save_stock_fq_factor(data)
         self.log.info('获取复权因子数据完成')
 

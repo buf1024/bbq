@@ -59,10 +59,18 @@ class Account(BaseObj):
 
         return account
 
-    async def sync_strategy_from_db(self, account) -> bool:
-        strategy_id = account['strategy_id']
-        broker_id = account['broker_id']
-        risk_id = account['risk_id']
+    async def sync_strategy_from_db(self) -> bool:
+        data = await self.db_trade.load_strategy(filter={'account_id': self.account_id},
+                                                 limit=1)
+        if len(data) == 0:
+            self.log.error('account_id={} not strategy data found'.format(self.account_id))
+            return False
+
+        strategy = data[0]
+
+        strategy_id = strategy['strategy_id']
+        broker_id = strategy['broker_id']
+        risk_id = strategy['risk_id']
 
         cls = get_broker(broker_id)
         if cls is None:
@@ -111,7 +119,7 @@ class Account(BaseObj):
         if account is None:
             return False
 
-        if not await self.sync_strategy_from_db(account=account):
+        if not await self.sync_strategy_from_db():
             return False
 
         if not await self.sync_position_from_db():

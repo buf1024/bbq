@@ -7,7 +7,6 @@ class TradeDB(MongoDB):
         # 账户信息
         'account_info': {'account_id': '账户id', 'status': '账户状态(0正常 其他停止)',
                          'kind': '交易种类: stock, fund', 'type': '账户类型: real, simulate, backtest',
-                         'strategy_id': '交易策略id', 'broker_id': '券商id', 'risk_id': '风控id',
                          'cash_init': '初始资金', 'cash_available': '可用资金', 'cost': '持仓成本',
                          'broker_fee': '手续费', "transfer_fee": '过户费', "tax_fee": '印花税',
                          'profit': '盈利', 'profit_rate': '盈利比例', 'start_time': '开始时间', 'end_time': '结束时间'},
@@ -42,7 +41,8 @@ class TradeDB(MongoDB):
         'strategy_info': {'account_id': '账户id',
                           'strategy_id': '策略名称id', 'strategy_opt': '策略参数',
                           'broker_id': '券商名称id', 'broker_opt': '券商参数',
-                          'risk_id': '风控名称id', 'risk_opt': '风控参数'}
+                          'risk_id': '风控名称id', 'risk_opt': '风控参数',
+                          'quot_opt': '行情配置参数'}
 
     }
 

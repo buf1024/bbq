@@ -13,12 +13,15 @@ class StrategyInfo(BaseObj):
         self.risk_id = ''
         self.risk_opt = ''
 
+        self.quot_opt = ''
+
     @BaseObj.discard_saver
     async def sync_to_db(self) -> bool:
         data = {'account_id': self.account_id, 'strategy_id': self.strategy_id,
                 'strategy_opt': self.strategy_opt,
                 'broker_id': self.broker_id, 'broker_opt': self.broker_opt,
-                'risk_id': self.risk_id, "risk_opt": self.risk_opt}
+                'risk_id': self.risk_id, "risk_opt": self.risk_opt,
+                'quot_opt': self.quot_opt}
         await self.db_trade.save_strategy(data=data)
         return True
 

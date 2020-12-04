@@ -7,6 +7,17 @@ import pandas as pd
 
 from bbq.fetch.base_fetch import BaseFetch
 
+import xlrd
+
+# 参考： https://stackoverflow.com/questions/64264563/attributeerror-elementtree-object-has-no-attribute-getiterator-when-trying
+# python3.9
+# xml.etree.ElementTree.Element.getiterator() has been deprecated since Python 2.7,
+# and has been removed in Python 3.9. Replace all instances of Element.getiterator(tag)
+# with Element.iter(tag)
+# 补丁
+xlrd.xlsx.ensure_elementtree_imported(False, None)
+xlrd.xlsx.Element_has_iter = True
+
 
 class MyFetch(BaseFetch):
     def __init__(self):
@@ -104,7 +115,8 @@ class MyFetch(BaseFetch):
         return None
 
     @BaseFetch.retry_client
-    def fetch_fund_daily_xueqiu(self, code: str, start: datetime = None, end: datetime = None) -> Optional[pd.DataFrame]:
+    def fetch_fund_daily_xueqiu(self, code: str, start: datetime = None, end: datetime = None) -> Optional[
+        pd.DataFrame]:
         if not self.is_trade(start, end):
             self.log.info('code={}, start={}, end{}, 非交易日不同步...'.format(code, start, end))
             return None
@@ -589,11 +601,11 @@ if __name__ == '__main__':
     # df = ak.fund_etf_hist_sina(symbol='sz159949')
     # print(df)
 
-    df = aks.fetch_fund_daily_xueqiu(code='159805',
-                                     start=datetime(year=2020, month=11, day=23),
-                                     end=datetime(year=2020, month=11, day=27))
-
-    print(df)
+    # df = aks.fetch_fund_daily_xueqiu(code='159805',
+    #                                  start=datetime(year=2020, month=11, day=23),
+    #                                  end=datetime(year=2020, month=11, day=27))
+    #
+    # print(df)
 
     # df = aks.fetch_stock_daily_xueqiu(code='sz159949')
     # print(df)

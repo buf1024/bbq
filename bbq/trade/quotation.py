@@ -1,18 +1,13 @@
 import asyncio
-import os
+from abc import ABC
 import traceback
 import uuid
 from collections import OrderedDict
 from datetime import datetime
-from typing import Dict
-
-import click
-
+from typing import Dict, Optional
 import bbq.fetch as fetch
 import bbq.log as log
-from bbq.config import conf_dict
-from bbq.data.stockdb import StockDB
-from bbq.stock_nats import StockNats
+from bbq.data.mongodb import MongoDB
 
 """
 监听topic: topic:bbq.quotation.command
@@ -75,18 +70,54 @@ req:
 """
 
 
-class BacktestQuotation:
-    def __init__(self, loop, subject: str, nats: StockNats, db: StockDB, data: Dict):
+class Quotation(ABC):
+    def __init__(self, db: MongoDB):
         self.log = log.get_logger(self.__class__.__name__)
+        self.db_data = db
+        self.opt = None
 
-        self.subject = subject
-        self.nats = nats
-        self.data = data
+        self.frequency = 0
+        self.index = []
+        self.stock = []
+        self.start_date = None
+        self.end_date = None
 
-        self.running = False
+        self.quot_date = {}
 
-        self.db = db
-        self.loop = loop
+    async def init(self, opt) -> bool:
+        self.opt = opt
+        try:
+            frequency, index, stock = self.opt['frequency'].lower(), self.opt['index'], self.opt['stock']
+            if 'min' not in frequency:
+                self.log.error('frequency 格式不正确')
+                return False
+            # 最低1分钟
+            frequency = int(frequency.split('min')[0])
+            if frequency <= 0:
+                self.log.error('frequency 格式不正确')
+                return False
+
+            self.frequency = frequency * 60
+
+            if 'start_date' in self.opt and self.opt['start_date'] is not None:
+                self.start_date = datetime.strptime(self.opt['start_date'], 'yyyymmdd')
+
+            if 'end_date' in self.opt and self.opt['end_date'] is not None:
+                self.end_date = datetime.strptime(self.opt['end_date'], 'yyyymmdd')
+
+            return True
+
+        except Exception as e:
+            self.log.error('realtime quot 初始化失败, ex={}'.format(e))
+            return False
+
+    async def get_quot(self) -> Optional[Dict]:
+        return None
+
+
+class BacktestQuotation(Quotation):
+    def __init__(self, db: MongoDB):
+        super().__init__(db=db)
 
         self.bar = OrderedDict()
 
@@ -103,23 +134,11 @@ class BacktestQuotation:
                         self.bar[dt] = OrderedDict()
                     self.bar[dt][item['code']] = item
 
-    def stop(self) -> None:
-        self.running = False
-
-    async def init(self):
+    async def init(self, opt):
         try:
-            start, end, frequency = self.data['start'], self.data['end'], self.data['frequency'].lower()
-            index_list, stock_list = self.data['index_list'], self.data['stock_list']
-            if 'min' not in frequency:
-                self.log.error('frequency 格式不正确')
-                return False, 'frequency 格式不正确'
 
-            if frequency not in ['1min', '5min', '15min', '30min', '60min']:
-                self.log.error('frequency 格式不正确')
-                return False, 'frequency 格式不正确'
-
-            start = datetime.strptime(start, '%Y-%m-%d %H:%M:%S').strftime('%Y%m%d %H:%M:%S')
-            end = datetime.strptime(end, '%Y-%m-%d %H:%M:%S').strftime('%Y%m%d %H:%M:%S')
+            if not await super().init(opt=opt):
+                return False
 
             bar_index = OrderedDict()
             if index_list is not None:
@@ -150,7 +169,7 @@ class BacktestQuotation:
             self.log.error('backtest quot 初始化失败, ex={}, callstack={}'.format(e, traceback.format_exc()))
             return False, 'backtest quot 初始化失败'
 
-    async def quot_task(self):
+    async def get_quot(self):
         self.log.info('start backtest quot task: {}'.format(self.subject))
         # backtest等订阅者ready
         await asyncio.sleep(delay=1, loop=self.loop)
@@ -237,58 +256,15 @@ class BacktestQuotation:
 
         self.log.info('end backtest quot task: {}'.format(self.subject))
 
-    async def start(self):
-        self.running = True
-        self.loop.create_task(self.quot_task())
 
-
-class RealtimeQuotation:
-    def __init__(self, loop, subject: str, nats: StockNats, db: StockDB, data: Dict):
-        self.log = log.get_logger(self.__class__.__name__)
-
-        self.subject = subject
-        self.nats = nats
-        self.data = data
-
-        self.running = False
-
-        self.frequency = 0
-        self.codes = None
-
-        self.quot_date = {}
-
-        self.db = db
-        self.loop = loop
+class RealtimeQuotation(Quotation):
+    def __init__(self, db: MongoDB):
+        super().__init__(db=db)
 
         self.bar = None
         self.bar_time = None
 
         self.last_pub = None
-
-    def stop(self) -> None:
-        self.running = False
-
-    async def init(self):
-        try:
-            frequency, index_list, stock_list = self.data['frequency'].lower(), self.data['index_list'], self.data[
-                'stock_list']
-            if 'min' not in frequency:
-                self.log.error('frequency 格式不正确')
-                return False, 'frequency 格式不正确'
-            # 最低1分钟
-            frequency = int(frequency.split('min')[0])
-            if frequency <= 0:
-                self.log.error('frequency 格式不正确')
-                return False, 'frequency 格式不正确'
-
-            self.frequency = frequency * 60
-            self.codes = index_list + stock_list
-
-            return True, ''
-
-        except Exception as e:
-            self.log.error('realtime quot 初始化失败, ex={}, callstack={}'.format(e, traceback.format_exc()))
-            return False, 'realtime quot 初始化失败'
 
     def pub_bar(self, now, quots):
         self.update_bar(now, quots)
@@ -324,10 +300,7 @@ class RealtimeQuotation:
             date_now = datetime(year=now.year, month=now.month, day=now.day)
             if len(self.quot_date) == 0 or date_now not in self.quot_date:
                 self.quot_date.clear()
-                trade_dates = await self.db.load_trade_cal(filter={'cal_date': date_now, 'is_open': 1})
-                is_open = False
-                if trade_dates is not None and not trade_dates.empty:
-                    is_open = True
+                is_open = fetch.is_trade_date(date_now)
 
                 self.quot_date[date_now] = dict(is_open=is_open,
                                                 is_morning_start=False,
@@ -424,137 +397,3 @@ class RealtimeQuotation:
                                                              start=now.strftime('%Y-%m-%d %H:%M:%S'),
                                                              end=now.strftime('%Y-%m-%d %H:%M:%S'))))
 
-    async def start(self):
-        self.running = True
-        self.loop.create_task(self.quot_task())
-
-
-class Quotation(StockNats):
-
-    def __init__(self, options: Dict, db: StockDB):
-        self.loop = asyncio.get_event_loop()
-        super().__init__(loop=self.loop, options=options)
-
-        self.db = db
-
-        self.topic_cmd = 'topic:bbq.quotation.command'
-
-        self.cmd_handlers = {
-            'subscribe': self.on_subscribe,
-            'unsubscribe': self.on_unsubscribe
-        }
-        self.add_handler(self.topic_cmd, self.cmd_handlers)
-
-        self.subject = {}
-
-    def start(self):
-        try:
-            if self.loop.run_until_complete(self.nats_task()):
-                self.loop.create_task(self.heartbeat_task())
-                self.loop.create_task(self.subscribe(self.topic_cmd))
-                self.loop.run_forever()
-        except Exception as e:
-            self.log.error('quotation start 异常, ex={}, callstack={}'.format(e, traceback.format_exc()))
-        finally:
-            self.loop.close()
-
-    async def heartbeat_task(self):
-        # timeout_dict = defaultdict(int)
-        while self.loop.is_running():
-            invalid_list = []
-            for subject, quot in self.subject.items():
-                try:
-                    rsp = await self.request(subject=subject, data=dict({'cmd': 'heartbeat'}), timeout=15)
-                    # self.log.debug('subject: {}, heartbeat: {}'.format(subject, rsp))
-                    # timeout_dict[subject] = 0
-                except Exception as e:
-                    self.log.error('心跳异常: {}'.format(e))
-                    if quot is not None:
-                        quot.stop()
-                    invalid_list.append(subject)
-                    # timeout_dict[subject] += 1
-                    # if subject in timeout_dict:
-                    #     if timeout_dict[subject] >= 3:
-                    #         self.log.error('心跳异常次数{}, 大于3, 停止下发行情')
-                    #         if quot is not None:
-                    #             quot.stop()
-                    #         invalid_list.append(subject)
-            for subject in invalid_list:
-                del self.subject[subject]
-
-            await asyncio.sleep(delay=5, loop=self.loop)
-
-    async def on_unsubscribe(self, data):
-        self.log.info('on_unsubscribe: {}'.format(data))
-        subject = data['subject']
-        if subject in self.subject:
-            quot = self.subject[subject]
-            if quot is not None:
-                quot.stop()
-            del self.subject[subject]
-
-        return 'OK', 'SUCCESS', dict(subject=subject)
-
-    async def on_subscribe(self, data):
-        self.log.info('on_subscribe: {}'.format(data))
-        typ = data['type'].lower()
-
-        if typ == 'realtime' or typ == 'simulate':
-            subject = 'topic:bbq.quotation.realtime.' + str(uuid.uuid4()).replace('-', '')
-            rt = RealtimeQuotation(loop=self.loop, subject=subject, db=self.db, nats=self, data=data)
-            suc, desc = await rt.init()
-            if not suc:
-                return 'FAIL', desc
-            
-            self.loop.create_task(rt.start())
-            self.subject[subject] = rt
-
-            return 'OK', 'SUCCESS', dict(subject=subject)
-
-        if typ == 'backtest':
-            subject = 'topic:bbq.quotation.backtest.' + str(uuid.uuid4()).replace('-', '')
-            bt = BacktestQuotation(loop=self.loop, subject=subject, db=self.db, nats=self, data=data)
-            suc, desc = await bt.init()
-            if not suc:
-                return 'FAIL', desc
-            self.loop.create_task(bt.start())
-            self.subject[subject] = bt
-
-            return 'OK', 'SUCCESS', dict(subject=subject)
-
-        return 'FAIL', '未知类型'
-
-
-@click.command()
-@click.option('--uri', type=str, help='mongodb connection uri')
-@click.option('--pool', default=0, type=int, help='mongodb connection pool size')
-@click.option('--nats', type=str, help='mongodb uri')
-@click.option('--debug/--no-debug', default=True, help='show debug log')
-def main(uri: str, pool: int, nats: str, debug: bool):
-    uri = conf_dict['mongo']['uri'] if uri is None else uri
-    pool = conf_dict['mongo']['pool'] if pool <= 0 else pool
-    nats = conf_dict['nats']['uri'] if nats is None else nats
-
-    file = None
-    level = "critical"
-    if debug:
-        file = conf_dict['log']['path'] + os.sep + 'fund_sync.log'
-        level = conf_dict['log']['level']
-
-    log.setup_logger(file=file, level=level)
-    logger = log.get_logger()
-
-    logger.debug('初始化数据库')
-    db = StockDB(uri=uri, pool=pool)
-    if not db.init():
-        logger.error('初始化数据库失败')
-        return
-
-    fetch.init()
-
-    quot = Quotation(options={'servers': [nats]}, db=db)
-    quot.start()
-
-
-if __name__ == '__main__':
-    main()
