@@ -1,72 +1,17 @@
-import asyncio
 from abc import ABC
 import traceback
-import uuid
 from collections import OrderedDict
-from datetime import datetime
-from typing import Dict, Optional
+from datetime import datetime, timedelta
+from typing import Dict, Optional, Tuple
 import bbq.fetch as fetch
 import bbq.log as log
 from bbq.data.mongodb import MongoDB
+import traceback
 
 """
-监听topic: topic:bbq.quotation.command
-提供功能: 1. 订阅行情 2.取消订阅
+行情下发顺序：
+evt_start(backtest) -> evt_morning_start -> evt_morning_end -> evt_noon_start -> evt_noon_end -> evt_end(backtest)
 
-订阅行情时, 返回 topic:bbq.quotation/backtest.realtime. + str(uuid.uuid4()) 两种topic给订阅者，
-订阅者成功收到topic后，则可订阅该topic下发的行情。行情下发顺序：
-start -> trade_morning_start -> trade_morning_end -> trade_noon_start -> trade_noon_end -> end
-取消订阅行情时，发送对应的topic则可以取消该行情的订阅。
-
-行情程序定时检测订阅者是否有效，如无效则不下发行情，甚至退出该订阅的订阅。
-统一订阅者如没收到下发的程序，可以重复进行订阅。
-
-交互协议:
-
-1.1 订阅行情
-req:
-{
-  "cmd": "subscribe",
-  "data": {
-    "type": "realtime" | "backtest",
-    "frequency": "1min", "5min", '15min', '30min', '60min',
-    "start": yyyy-mm-dd hh:mm:ss, backtest
-    "end": yyyy-mm-dd hh:mm:ss, backtest
-    "index_list": ["000001.SH"],
-    "stock_list": ["000001.SZ"]
-  }
-}
-resp:
-{
-    "status": 'OK',
-    "msg": "SUCCESS",
-    "data": {
-        "subject": "topic:bbq.quotation.xxxxxxxx"
-    }
-}
-
-1.2 订阅行情
-req:
-{
-  "cmd": "unsubscribe",
-  "data": {
-    "subject": "topic:bbq.quotation.xxxxxxxx"
-  }
-}
-
-2.1 行情下发
-{
-    "cmd": "quotation",
-    "data": {
-        "type": "start" "trade_morning_start", "trade_morning_end", "trade_noon_start", "trade_noon_end"| "end" | "quot"
-        "frequency": "1min", "5min", '15min', '30min', '60min',
-        "start": "yyyymmdd hhmmss"
-        "end": "yyyymmdd hhmmss"
-        "list": {
-            "000001.SZ": {}
-        }
-    }
-}
 """
 
 
@@ -82,28 +27,41 @@ class Quotation(ABC):
         self.start_date = None
         self.end_date = None
 
+        self.codes = []
+        self.trade_date = None
         self.quot_date = {}
 
     async def init(self, opt) -> bool:
         self.opt = opt
         try:
             frequency, index, stock = self.opt['frequency'].lower(), self.opt['index'], self.opt['stock']
-            if 'min' not in frequency:
+            if 'min' not in frequency and 'm' not in frequency and \
+                    'sec' not in frequency and 's' not in frequency:
                 self.log.error('frequency 格式不正确')
                 return False
-            # 最低1分钟
-            frequency = int(frequency.split('min')[0])
-            if frequency <= 0:
-                self.log.error('frequency 格式不正确')
-                return False
+            if frequency.endswith('min') or frequency.endswith('m'):
+                value = int(frequency.split('m')[0])
+                if value <= 0:
+                    self.log.error('frequency 格式不正确')
+                    return False
 
-            self.frequency = frequency * 60
+                self.frequency = value * 60
+
+            if frequency.endswith('sec') or frequency.endswith('s'):
+                value = int(frequency.split('s')[0])
+                if value <= 0:
+                    self.log.error('frequency 格式不正确')
+                    return False
+
+                self.frequency = value
 
             if 'start_date' in self.opt and self.opt['start_date'] is not None:
-                self.start_date = datetime.strptime(self.opt['start_date'], 'yyyymmdd')
+                self.start_date = datetime.strptime(self.opt['start_date'], '%Y-%m-%d')
 
             if 'end_date' in self.opt and self.opt['end_date'] is not None:
-                self.end_date = datetime.strptime(self.opt['end_date'], 'yyyymmdd')
+                self.end_date = datetime.strptime(self.opt['end_date'], '%Y-%m-%d')
+
+            self.index, self.stock, self.codes = index, stock, index + stock
 
             return True
 
@@ -111,8 +69,73 @@ class Quotation(ABC):
             self.log.error('realtime quot 初始化失败, ex={}'.format(e))
             return False
 
-    async def get_quot(self) -> Optional[Dict]:
-        return None
+    async def get_quot(self) -> Optional[Tuple[Optional[str], Optional[Dict]]]:
+        return None, None
+
+    def is_trading(self) -> bool:
+        if self.trade_date is None:
+            return False
+
+        status_dict = self.quot_date[self.trade_date]
+
+        if (status_dict['evt_morning_start'] and not status_dict['evt_morning_end']) or \
+                (status_dict['evt_noon_start'] and not status_dict['evt_noon_end']):
+            return True
+
+        return False
+
+    async def get_base_event(self, now) -> Optional[Tuple[Optional[str], Optional[Dict]]]:
+        date_now = datetime(year=now.year, month=now.month, day=now.day)
+        if len(self.quot_date) == 0 or date_now not in self.quot_date:
+            self.trade_date = None
+            self.quot_date.clear()
+            is_open = fetch.is_trade_date(date_now)
+
+            self.quot_date[date_now] = dict(is_open=is_open,
+                                            evt_morning_start=False,
+                                            evt_morning_end=False,
+                                            evt_noon_start=False,
+                                            evt_noon_end=False)
+
+        status_dict = self.quot_date[date_now]
+
+        if not status_dict['is_open']:
+            return None, None
+
+        self.trade_date = date_now
+
+        morning_start_date = datetime(year=now.year, month=now.month, day=now.day, hour=9, minute=30, second=0)
+        morning_end_date = datetime(year=now.year, month=now.month, day=now.day, hour=11, minute=30, second=0)
+
+        noon_start_date = datetime(year=now.year, month=now.month, day=now.day, hour=13, minute=0, second=0)
+        noon_end_date = datetime(year=now.year, month=now.month, day=now.day, hour=15, minute=0, second=0)
+
+        if morning_start_date <= now < morning_end_date:
+            if not status_dict['evt_morning_start']:
+                status_dict['evt_morning_start'] = True
+                return 'evt_morning_start', dict(frequency=self.opt['frequency'],
+                                                 trade_date=date_now,
+                                                 day_time=now)
+        elif morning_end_date <= now < noon_start_date:
+            if not status_dict['evt_morning_end']:
+                status_dict['evt_morning_end'] = True
+                return 'evt_morning_end', dict(frequency=self.opt['frequency'],
+                                               trade_date=date_now,
+                                               day_time=now)
+        elif noon_start_date <= now < noon_end_date:
+            if not status_dict['evt_noon_start']:
+                status_dict['evt_noon_start'] = True
+                return 'evt_noon_start', dict(frequency=self.opt['frequency'],
+                                              trade_date=date_now,
+                                              day_time=now)
+        elif now >= noon_end_date:
+            if not status_dict['evt_noon_end']:
+                status_dict['evt_noon_end'] = True
+                return 'evt_noon_end', dict(frequency=self.opt['frequency'],
+                                            trade_date=date_now,
+                                            day_time=now)
+
+        return None, None
 
 
 class BacktestQuotation(Quotation):
@@ -121,146 +144,110 @@ class BacktestQuotation(Quotation):
 
         self.bar = OrderedDict()
 
-        self.quot_date = {}
+        self.is_start = False
+        self.is_end = False
 
-    def add_bar(self, bars):
-        if len(bars) > 0:
-            for code, bar_df in bars.items():
-                for item in bar_df.to_dict('records'):
-                    dt = item['datetime']
-                    item['datetime'] = item['datetime'].strftime('%Y-%m-%d %H:%M:%S')
-                    item['trade_date'] = item['trade_date'].strftime('%Y-%m-%d')
-                    if dt not in self.bar:
-                        self.bar[dt] = OrderedDict()
-                    self.bar[dt][item['code']] = item
+        self.iter = None
 
-    async def init(self, opt):
+    @staticmethod
+    def pre_trade_date(start):
+        while True:
+            pre_start = start + timedelta(days=-1)
+            if fetch.is_trade_date(start):
+                return pre_start
+
+    async def init(self, opt) -> bool:
         try:
-
             if not await super().init(opt=opt):
                 return False
 
-            bar_index = OrderedDict()
-            if index_list is not None:
-                for index in index_list:
-                    df = fetch.get_index_bar(code=index, frequency=frequency,
-                                             start=start, end=end)
-                    if df is None:
-                        self.log.error('指数{}, {} k线无数据'.format(index, frequency))
-                        return False, '指数{}, {} k线无数据'.format(index, frequency)
-                    bar_index[index] = df
+            bar = OrderedDict()
+            for code in self.codes:
+                df = fetch.fetch_stock_minute(code=code, period=str(int(self.frequency/60)),
+                                              start=self.start_date, end=self.end_date)
+                if df is None:
+                    self.log.error('指数/股票{}, {} k线无数据'.format(code, self.frequency))
+                    return False
+                bar[code] = df
 
-            bar_stock = OrderedDict()
-            if stock_list is not None:
-                for code in stock_list:
-                    df = fetch.get_bar(code=code, frequency=frequency,
-                                       start=start, end=end)
-                    if df is None:
-                        self.log.error('股票{}, {} k线无数据'.format(code, frequency))
-                        return False, '股票{}, {} k线无数据'.format(code, frequency)
-                    bar_stock[code] = df
+            if not await self.add_bar(bars=bar):
+                return False
 
-            self.add_bar(bars=bar_stock)
-            self.add_bar(bars=bar_index)
-
-            return True, ''
+            return True
 
         except Exception as e:
             self.log.error('backtest quot 初始化失败, ex={}, callstack={}'.format(e, traceback.format_exc()))
-            return False, 'backtest quot 初始化失败'
+        return False
 
-    async def get_quot(self):
-        self.log.info('start backtest quot task: {}'.format(self.subject))
-        # backtest等订阅者ready
-        await asyncio.sleep(delay=1, loop=self.loop)
+    async def add_bar(self, bars) -> bool:
+        if len(bars) > 0:
+            for code, bar_df in bars.items():
+                start, end = bar_df.iloc[0]['day_time'], bar_df.iloc[-1]['day_time']
+                pre_start = self.pre_trade_date(start)
+                df_daily = fetch.fetch_stock_daily(code=code, start=pre_start, end=end)
+                if df_daily is None:
+                    self.log.error('fetch fetch_stock_daily failed')
+                    return False
 
+                while start <= end:
+                    next_day = start + timedelta(days=1)
+                    start_str = start.strftime('%Y-%m-%d') + ' 00:00:00'
+                    end_str = next_day.strftime('%Y-%m-%d') + ' 00:00:00'
+                    start = next_day
+                    df_data = bar_df.query("day_time >= '{}' and day_time < '{}'".format(start_str, end_str))
+                    if df_data.empty:
+                        continue
+
+                    df_data['day_high'] = df_data['close'].cummax()
+                    df_data['day_min'] = df_data['close'].cummin()
+                    df_data['day_open'] = df_daily[df_daily['trade_date'] == start_str].iloc[0]['close']
+
+                    for data in df_data.to_dict('records'):
+                        day_time = data['day_time']
+                        if day_time not in self.bar:
+                            self.bar[day_time] = OrderedDict()
+                        self.bar[day_time][code] = data
+        self.iter = iter(self.bar)
+        return True
+
+    async def get_quot(self) -> Optional[Tuple[Optional[str], Optional[Dict]]]:
         now = datetime.now()
-        await self.nats.publish(self.subject, dict(cmd='quotation',
-                                                   data=dict(type='start',
-                                                             frequency=self.data['frequency'],
-                                                             start=now.strftime('%Y-%m-%d %H:%M:%S'),
-                                                             end=now.strftime('%Y-%m-%d %H:%M:%S'))))
-        for now, bars in self.bar.items():
-            if not self.running:
-                break
+        try:
+            if not self.is_start:
+                self.is_start = True
+                return 'evt_start', dict(frequency=self.opt['frequency'],
+                                         start=now,
+                                         end=now)
 
-            date_now = datetime(year=now.year, month=now.month, day=now.day)
-            if date_now not in self.quot_date:
-                self.quot_date.clear()
-                self.quot_date[date_now] = dict(is_open=True,
-                                                is_morning_start=False,
-                                                is_morning_end=False,
-                                                is_noon_start=False,
-                                                is_noon_end=False)
-            status_dict = self.quot_date[date_now]
+            if self.is_start and not self.is_end:
+                day_time = next(self.iter)
+                evt, payload = await self.get_base_event(now=day_time)
+                if evt is not None:
+                    return evt, payload
 
-            morning_start_date = datetime(year=now.year, month=now.month, day=now.day, hour=9, minute=30, second=0)
-            morning_end_date = datetime(year=now.year, month=now.month, day=now.day, hour=11, minute=30, second=0)
+                quot = self.bar[day_time]
+                return 'evt_quotation', dict(frequency=self.opt['frequency'],
+                                             trade_date=self.trade_date,
+                                             day_time=now,
+                                             list=quot)
 
-            noon_start_date = datetime(year=now.year, month=now.month, day=now.day, hour=13, minute=0, second=0)
-            noon_end_date = datetime(year=now.year, month=now.month, day=now.day, hour=15, minute=0, second=0)
+        except StopIteration:
+            if not self.is_end:
+                self.is_end = True
+                return 'evt_end', dict(frequency=self.opt['frequency'],
+                                       start=now,
+                                       end=now)
+        except Exception as e:
+            self.log.error('get_quot 异常, ex={}, call={}'.format(e, traceback.format_exc()))
 
-            if morning_start_date <= now < morning_end_date:
-                if not status_dict['is_morning_start']:
-                    await self.nats.publish(self.subject, dict(cmd='quotation',
-                                                               data=dict(type='trade_morning_start',
-                                                                         frequency=self.data['frequency'],
-                                                                         start=now.strftime(
-                                                                             '%Y-%m-%d %H:%M:%S'),
-                                                                         end=now.strftime(
-                                                                             '%Y-%m-%d %H:%M:%S'))))
-                    status_dict['is_noon_start'] = True
-            elif morning_end_date <= now < noon_start_date:
-                if not status_dict['is_morning_end']:
-                    await self.nats.publish(self.subject, dict(cmd='quotation',
-                                                               data=dict(type='trade_morning_end',
-                                                                         frequency=self.data['frequency'],
-                                                                         start=now.strftime(
-                                                                             '%Y-%m-%d %H:%M:%S'),
-                                                                         end=now.strftime(
-                                                                             '%Y-%m-%d %H:%M:%S'))))
-                    status_dict['is_morning_end'] = True
-            elif noon_start_date <= now < noon_end_date:
-                if not status_dict['is_noon_start']:
-                    await self.nats.publish(self.subject, dict(cmd='quotation',
-                                                               data=dict(type='trade_noon_start',
-                                                                         frequency=self.data['frequency'],
-                                                                         start=now.strftime(
-                                                                             '%Y-%m-%d %H:%M:%S'),
-                                                                         end=now.strftime(
-                                                                             '%Y-%m-%d %H:%M:%S'))))
-                    status_dict['is_noon_start'] = True
-            elif now >= noon_end_date:
-                if not status_dict['is_noon_end']:
-                    await self.nats.publish(self.subject, dict(cmd='quotation',
-                                                               data=dict(type='trade_noon_end',
-                                                                         frequency=self.data['frequency'],
-                                                                         start=now.strftime('%Y-%m-%d %H:%M:%S'),
-                                                                         end=now.strftime('%Y-%m-%d %H:%M:%S'))))
-                    status_dict['is_noon_end'] = True
-
-            await self.nats.publish(self.subject,
-                                    dict(cmd='quotation',
-                                         data=dict(type='quot',
-                                                   frequency=self.data['frequency'],
-                                                   start=now.strftime('%Y-%m-%d %H:%M:%S'),
-                                                   end=now.strftime('%Y-%m-%d %H:%M:%S'),
-                                                   list=bars)))
-
-        now = datetime.now()
-        await self.nats.publish(self.subject, dict(cmd='quotation',
-                                                   data=dict(type='end',
-                                                             frequency=self.data['frequency'],
-                                                             start=now.strftime('%Y-%m-%d %H:%M:%S'),
-                                                             end=now.strftime('%Y-%m-%d %H:%M:%S'))))
-
-        self.log.info('end backtest quot task: {}'.format(self.subject))
+        return None, None
 
 
 class RealtimeQuotation(Quotation):
     def __init__(self, db: MongoDB):
         super().__init__(db=db)
 
+        self.pre_bar = None
         self.bar = None
         self.bar_time = None
 
@@ -275,125 +262,104 @@ class RealtimeQuotation(Quotation):
             return self.bar
         return None
 
+    def reset_bar(self, now):
+        self.pre_bar = self.bar
+        self.bar_time = dict(start=None, end=None)
+        self.bar = None
+        self.last_pub = now
+
     def update_bar(self, now, quots):
         if self.bar is None:
-            self.bar = {}
-            for code, quot in quots.items():
-                self.bar[code] = dict(code=quot['code'], name=quot['name'],
-                                      trade_date=quot['date'].strftime('%Y-%m-%d'),
-                                      open=quot['now'], high=quot['high'], low=quot['low'], close=quot['now'],
-                                      vol=quot['vol'], amount=quot['amount'])
-            self.bar_time = dict(start=now)
+            self.bar = self.pre_bar
+            if self.bar is None:
+                self.bar = OrderedDict()
+            for quot in quots.to_dict('records'):
+                code = quot['code']
+                self.bar[code] = dict(code=code,
+                                      day_time=quot['day_time'],
+                                      day_open=quot['open'], day_high=quot['high'], day_low=quot['low'],
+                                      last_close=quot['last_close'],
+                                      open=quot['close'] if self.pre_bar is None else self.pre_bar[code]['close'],
+                                      high=quot['close'] if self.pre_bar is None else self.pre_bar[code]['close'],
+                                      low=quot['close'] if self.pre_bar is None else self.pre_bar[code]['close'],
+                                      close=quot['close'],
+                                      volume=quot['volume'] if self.pre_bar is None else self.pre_bar[code]['volume'],
+                                      amount=quot['amount'] if self.pre_bar is None else self.pre_bar[code]['amount'],
+                                      turnover=quot['turnover'] if self.pre_bar is None else self.pre_bar[code][
+                                          'turnover'], )
+            self.bar_time = dict(start=now, end=None)
         else:
-            for code, quot in quots.items():
-                bar = self.bar[code]
-                bar['close'] = quot['now']
-                if quot['high'] > bar['high']:
-                    bar['high'] = quot['high']
-                if quot['low'] < bar['low']:
-                    bar['low'] = quot['low']
-                bar['datetime'] = quot['datetime'].strftime('%Y-%m-%d %H:%M:%S')
+            for quot in quots.to_dict('records'):
+                bar = self.bar[quot['code']]
+                now_price = quot['close']
+                bar['close'] = now_price
+                if now_price > bar['high']:
+                    bar['high'] = now_price
+                if now_price < bar['low']:
+                    bar['low'] = now_price
+                bar['day_high'] = quot['high']
+                bar['day_low'] = quot['low']
+                bar['day_time'] = quot['day_time']
 
-    async def get_quot(self):
+    async def get_quot(self) -> Optional[Tuple[Optional[str], Optional[Dict]]]:
         try:
             now = datetime.now()
-            date_now = datetime(year=now.year, month=now.month, day=now.day)
-            if len(self.quot_date) == 0 or date_now not in self.quot_date:
-                self.quot_date.clear()
-                is_open = fetch.is_trade_date(date_now)
 
-                self.quot_date[date_now] = dict(is_open=is_open,
-                                                is_morning_start=False,
-                                                is_morning_end=False,
-                                                is_noon_start=False,
-                                                is_noon_end=False)
-
-            status_dict = self.quot_date[date_now]
-
-            if not status_dict['is_open']:
-                return
+            evt, payload = await self.get_base_event(now=now)
+            if evt is not None:
+                return evt, payload
 
             quot = None
-
-            morning_start_date = datetime(year=now.year, month=now.month, day=now.day, hour=9, minute=30, second=0)
-            morning_end_date = datetime(year=now.year, month=now.month, day=now.day, hour=11, minute=30, second=0)
-
-            noon_start_date = datetime(year=now.year, month=now.month, day=now.day, hour=13, minute=0, second=0)
-            noon_end_date = datetime(year=now.year, month=now.month, day=now.day, hour=15, minute=0, second=0)
-
-            if morning_start_date <= now < morning_end_date:
-                if not status_dict['is_morning_start']:
-                    await self.nats.publish(self.subject, dict(cmd='quotation',
-                                                               data=dict(type='trade_morning_start',
-                                                                         frequency=self.data['frequency'],
-                                                                         start=now.strftime('%Y-%m-%d %H:%M:%S'),
-                                                                         end=now.strftime('%Y-%m-%d %H:%M:%S'))))
-                    status_dict['is_morning_start'] = True
-                quots = await fetch.get_rt_quot(codes=self.codes)
-                quot = self.pub_bar(now, quots)
-            elif morning_end_date <= now < noon_start_date:
-                if not status_dict['is_morning_end']:
-                    await self.nats.publish(self.subject, dict(cmd='quotation',
-                                                               data=dict(type='trade_morning_end',
-                                                                         frequency=self.data['frequency'],
-                                                                         start=now.strftime(
-                                                                             '%Y-%m-%d %H:%M:%S'),
-                                                                         end=now.strftime(
-                                                                             '%Y-%m-%d %H:%M:%S'))))
-                    status_dict['is_morning_end'] = True
-            elif noon_start_date <= now < noon_end_date:
-                if not status_dict['is_noon_start']:
-                    await self.nats.publish(self.subject, dict(cmd='quotation',
-                                                               data=dict(type='trade_noon_start',
-                                                                         frequency=self.data['frequency'],
-                                                                         start=now.strftime(
-                                                                             '%Y-%m-%d %H:%M:%S'),
-                                                                         end=now.strftime(
-                                                                             '%Y-%m-%d %H:%M:%S'))))
-                    status_dict['is_noon_start'] = True
-                quots = await fetch.get_rt_quot(codes=self.codes)
-                quot = self.pub_bar(now, quots)
-            elif now >= noon_end_date:
-                if not status_dict['is_noon_end']:
-                    await self.nats.publish(self.subject, dict(cmd='quotation',
-                                                               data=dict(type='trade_noon_end',
-                                                                         frequency=self.data['frequency'],
-                                                                         start=now.strftime('%Y-%m-%d %H:%M:%S'),
-                                                                         end=now.strftime('%Y-%m-%d %H:%M:%S'))))
-                    status_dict['is_noon_end'] = True
+            if self.is_trading():
+                quots = fetch.fetch_stock_rt_quote(codes=self.codes)
+                if quots is not None:
+                    quot = self.pub_bar(now, quots)
 
             if quot is not None:
-                await self.nats.publish(self.subject,
-                                        dict(cmd='quotation',
-                                             data=dict(type='quot',
-                                                       frequency=self.data['frequency'],
-                                                       start=self.bar_time['start'].strftime('%Y-%m-%d %H:%M:%S'),
-                                                       end=self.bar_time['end'].strftime('%Y-%m-%d %H:%M:%S'),
-                                                       list=quot)))
-                self.bar = None
-                self.bar_time = None
-                self.last_pub = now
+                self.reset_bar(now)
+                return 'evt_quotation', dict(frequency=self.opt['frequency'],
+                                             trade_date=self.trade_date,
+                                             day_time=now,
+                                             list=quot)
         except Exception as e:
-            self.log.error('get_quot 异常, ex={}, callstack={}'.format(e, traceback.format_exc()))
+            self.log.error('get_quot 异常, ex={}, call={}'.format(e, traceback.format_exc()))
 
-    async def quot_task(self):
-        # 等订阅者ready
-        await asyncio.sleep(delay=1, loop=self.loop)
+        return None, None
 
-        now = datetime.now()
-        await self.nats.publish(self.subject, dict(cmd='quotation',
-                                                   data=dict(type='start',
-                                                             frequency=self.data['frequency'],
-                                                             start=now.strftime('%Y-%m-%d %H:%M:%S'),
-                                                             end=now.strftime('%Y-%m-%d %H:%M:%S'))))
-        while self.running:
-            await self.get_quot()
-            await asyncio.sleep(delay=1, loop=self.loop)
 
-        now = datetime.now()
-        await self.nats.publish(self.subject, dict(cmd='quotation',
-                                                   data=dict(type='end',
-                                                             frequency=self.data['frequency'],
-                                                             start=now.strftime('%Y-%m-%d %H:%M:%S'),
-                                                             end=now.strftime('%Y-%m-%d %H:%M:%S'))))
+if __name__ == '__main__':
+    from bbq.common import run_until_complete
+    from bbq.data.stockdb import StockDB
+    import asyncio
 
+    db = StockDB()
+    db.init()
+
+    rt = RealtimeQuotation(db=db)
+    bt = BacktestQuotation(db=db)
+
+    async def test_rt():
+        if not await rt.init(opt=dict(frequency='10s', index=['sh000001'], stock=['sh601099', 'sz000001'])):
+            print('初始化失败')
+            return
+        while True:
+            data = await rt.get_quot()
+            print('data: {}'.format(data))
+            await asyncio.sleep(5)
+
+    async def test_bt():
+        if not await bt.init(opt=dict(frequency='1min', index=[], stock=['sz000001', 'sh601099'],
+                                      start_date='2020-12-01', end_date='2020-12-04')):
+            print('初始化失败')
+            return
+        while True:
+            data = await bt.get_quot()
+            if data[0] is None:
+                break
+            print('data: {}'.format(data))
+            # await asyncio.sleep(5)
+
+    run_until_complete(
+        # test_rt()
+        test_bt()
+    )

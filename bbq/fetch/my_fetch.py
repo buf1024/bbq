@@ -389,8 +389,13 @@ class MyFetch(BaseFetch):
             cond = 'day <= "{}"'.format(date_str)
             df = df.query(cond)
 
+        df['day_time'] = pd.to_datetime(df['day'])
+        df['open'] = df['open'].astype(float)
+        df['close'] = df['close'].astype(float)
+        df['high'] = df['close'].astype(float)
+        df['low'] = df['close'].astype(float)
+        df['volume'] = df['volume'].astype(int)
         df = df.reindex()
-        df.rename(columns={'day': 'day_time'}, inplace=True)
         self.log.debug('获取股票{} {}分钟数据, count={}'.format(code, period, df.shape[0]))
 
         return df
@@ -557,7 +562,15 @@ class MyFetch(BaseFetch):
             self.log.debug('获取股票{}实时行情失败'.format(codes))
             return None
         df['symbol'] = df['symbol'].apply(self.xueqiu2sina)
-        df.rename(columns={'last': 'close', 'symbol': 'code'}, inplace=True)
+        df.rename(columns={'last': 'close', 'symbol': 'code', 'turnover_rate': 'turnover', 'time': 'day_time'}, inplace=True)
+        df.drop(columns=['change', 'percent', 'market_capital', 'float_market_capital', 'is_trading'], inplace=True)
+        df['open'] = df['open'].astype(float)
+        df['close'] = df['close'].astype(float)
+        df['high'] = df['close'].astype(float)
+        df['low'] = df['close'].astype(float)
+        df['last_close'] = df['last_close'].astype(float)
+        df['volume'] = df['volume'].astype(int)
+        df['amount'] = df['amount'].astype(float)
         self.log.debug('获取股票{}实时行情实时行情, count={}'.format(codes, df.shape[0]))
         return df
 
@@ -585,6 +598,16 @@ if __name__ == '__main__':
 
     now = datetime.now()
     now_pre = now - timedelta(days=1)
+
+    # ['day_time', 'code', 'high', 'low', 'close', 'volume', 'amount','turnover']
+    df = aks.fetch_stock_rt_quote(codes=['sh601099', 'sz000001'])
+    print(df)
+    print(df.columns)
+
+    # day_time open high low close volume code
+    # df = aks.fetch_stock_minute(code='sh601099', period='5')
+    # print(df)
+    # print(df.columns)
 
     # df = aks.fetch_stock_info()
     # print(df)
