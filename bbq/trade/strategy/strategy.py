@@ -32,7 +32,7 @@ from typing import Dict, Optional
 
 class Strategy(BaseObj):
     def __init__(self, strategy_id, account: Account):
-        super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade)
+        super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade, trader=account.trader)
         self.account = account
         self.strategy_id = strategy_id
 
@@ -50,8 +50,8 @@ class Strategy(BaseObj):
     async def on_close(self, period):
         pass
 
-    async def on_quot(self, payload):
-        pass
+    async def on_quot(self, evt, payload):
+        self.log.info('strategy on_quot: evt={}, payload={}'.format(evt, payload))
 
     async def on_broker(self, payload):
         pass

@@ -9,8 +9,8 @@ from bbq.trade.position import Position
 
 
 class Account(BaseObj):
-    def __init__(self, account_id: str, typ: str, db_data: MongoDB, db_trade: TradeDB):
-        super().__init__(typ=typ, db_data=db_data, db_trade=db_trade)
+    def __init__(self, account_id: str, typ: str, db_data: MongoDB, db_trade: TradeDB, trader):
+        super().__init__(typ=typ, db_data=db_data, db_trade=db_trade, trader=trader)
 
         self.account_id = account_id
 
@@ -140,17 +140,18 @@ class Account(BaseObj):
         await self.db_trade.save_account(data=data)
         return True
 
-    def _update_position_quot(self, code, quot):
+    def update_position_quot(self, code, quot):
         self.position[code].on_quot(quot)
         self.profit += self.position[code].profit
         self.cost += (self.position[code].cost * self.position[code].volume)
 
-    async def on_quot(self, payload):
-        for code in self.position.keys():
-            if code in payload:
-                self._update_position_quot(code, payload[code])
-        if self.cost > 0:
-            self.profit_rate = self.profit / self.cost
+    async def on_quot(self, evt, payload):
+        self.log.info('account on quot, event={}, payload={}'.format(evt, payload))
+        # for code in self.position.keys():
+        #     if code in payload:
+        #         self.update_position_quot(code, payload[code])
+        # if self.cost > 0:
+        #     self.profit_rate = self.profit / self.cost
 
     async def on_broker(self, broker, payload):
         pass

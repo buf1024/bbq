@@ -6,13 +6,15 @@ from functools import wraps
 
 
 class BaseObj(ABC):
-    def __init__(self, typ: str, db_data: MongoDB, db_trade: TradeDB):
+    def __init__(self, typ: str, db_data: MongoDB, db_trade: TradeDB, trader):
         self.log = log.get_logger(self.__class__.__name__)
 
         self.typ = typ
 
         self.db_data = db_data
         self.db_trade = db_trade
+
+        self.trader = trader
 
     @staticmethod
     def discard_saver(func):
@@ -23,6 +25,9 @@ class BaseObj(ABC):
             return await func(self, *args, **kwargs)
 
         return wrapper
+
+    def emit(self, sig, payload):
+        self.trader.queue['signal'].put_nowait((sig, payload))
 
     async def sync_from_db(self) -> bool:
         return True

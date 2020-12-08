@@ -1,0 +1,48 @@
+{
+  "log": {
+    "level": "debug",
+    "path": "/Users/luoguochun/.config/bbq/logs"
+  },
+  "mongo": {
+    "uri": "mongodb://localhost:27017/",
+    "pool": 5
+  },
+  "strategy": {
+    "broker": ["/Users/luoguochun/.config/bbq/strategy/broker"],
+    "trade": ["/Users/luoguochun/.config/bbq/strategy/trade"],
+    "risk": ["/Users/luoguochun/.config/bbq/strategy/risk"]
+  },
+  "quotation": {
+      "frequency": "1min",
+      "start_date": "",
+      "end_date": "",
+      "code": ["sh000001", "sz000001"]
+  },
+  "trade": {
+    "account-id": "",
+    "init-cash": 0,
+    "broker-fee": 0.00025,
+    "transfer-fee": 0.00002,
+    "tax-fee": 0.001, 
+    "kind": "stock",
+    "type": "simulate",
+    "strategy": {
+      "id": "",
+      "option": {
+
+      }
+    },
+    "risk": {
+      "id": "",
+      "option": {
+
+      }
+    },
+    "broker": {
+      "id": "",
+      "option": {
+
+      }
+    }
+  }
+}

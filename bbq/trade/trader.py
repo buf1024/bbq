@@ -8,18 +8,19 @@ from bbq.data.stockdb import StockDB
 from bbq.data.funddb import FundDB
 from bbq.trade.tradedb import TradeDB
 from bbq.config import init_config
-from multiprocessing import Process
 import multiprocessing as mp
 from typing import Dict, Optional
-import signal
 from bbq.trade.account import Account
 from bbq.trade.broker import init_broker, get_broker
 from bbq.trade.risk import init_risk, get_risk
 from bbq.trade.strategy import init_strategy, get_strategy
 from datetime import datetime
 from bbq.trade.strategy_info import StrategyInfo
+from bbq.trade.quotation import BacktestQuotation, RealtimeQuotation
+from functools import partial
 import os
 import sys
+import signal
 
 
 class Trader:
@@ -33,12 +34,16 @@ class Trader:
         self.account = None
 
         self.queue = dict(
-            quot_subs=asyncio.Queue(),
-            quot_disp=asyncio.Queue(),
-            signal=asyncio.Queue()
+            account=asyncio.Queue(),
+            risk=asyncio.Queue(),
+            signal=asyncio.Queue(),
+            strategy=asyncio.Queue(),
+            broker=asyncio.Queue()
         )
 
         self.task_queue = asyncio.Queue()
+
+        self.quot = None
 
         self.running = False
 
@@ -47,16 +52,23 @@ class Trader:
 
         is_init = await self.init_account()
         if not is_init:
-            self.log.error('初始化异常')
+            self.log.error('初始化账户异常')
             return None
+        self.log.info('account inited')
+
+        is_init = await self.init_quotation()
+        if not is_init:
+            self.log.error('初始化行情异常')
+            return None
+        self.log.info('quotation inited')
 
         self.running = True
 
-        await self.task_queue.put('quot_subs_task')
-        self.loop.create_task(self.quot_subs_task())
+        await self.task_queue.put('quot_task')
+        self.loop.create_task(self.quot_task())
 
-        await self.task_queue.put('quot_disp_task')
-        self.loop.create_task(self.quot_disp_task())
+        await self.task_queue.put('account_task')
+        self.loop.create_task(self.account_task())
 
         await self.task_queue.put('signal_task')
         self.loop.create_task(self.signal_task())
@@ -64,19 +76,33 @@ class Trader:
         await self.task_queue.put('risk_task')
         self.loop.create_task(self.risk_task())
 
+        await self.task_queue.put('strategy_task')
+        self.loop.create_task(self.strategy_task())
+
         await self.task_queue.join()
+
+        self.log.info('trader done, exit!')
 
     def stop(self):
         self.running = False
+        for queue in self.queue.values():
+            queue.put_nowait(('__evt_term', None))
 
     def signal_handler(self, signum, frame):
         print('catch signal: {}, stop trade...'.format(signum))
         self.stop()
 
+    def is_backtest(self) -> bool:
+        typ = self.config['trade']['type']
+        return typ == 'backtest'
+
+    async def backtest_report(self):
+        self.log.info('backtest report')
+
     async def create_new_account(self) -> Optional[Account]:
         typ = self.config['trade']['type']
         account = Account(typ=typ, account_id=str(uuid.uuid4()).replace('-', ''),
-                          db_data=self.db_data, db_trade=self.db_trade)
+                          db_data=self.db_data, db_trade=self.db_trade, trader=self)
 
         trade_dict = self.config['trade']
         account.kind = trade_dict['kind']
@@ -178,7 +204,7 @@ class Trader:
                 self.log.info('数据中没有已运行的real/simulate数据, account_id={}'.format(acct_id))
                 return
 
-            self.account = Account(account_id=acct_id, typ=typ, db_data=self.db_data, db_trade=self.db_trade)
+            self.account = Account(account_id=acct_id, typ=typ, db_data=self.db_data, db_trade=self.db_trade, trader=self)
             if not await self.account.sync_from_db():
                 self.log.info('从数据库中初始或account失败, account_id={}'.format(acct_id))
                 self.account = None
@@ -195,21 +221,21 @@ class Trader:
                     return False
                 for account in accounts:
                     self.log.info('开始fork程序运行account_id={}'.format(account['account_id']))
-                    p = Process(target=entry,
-                                kwargs=dict(conf=None,
-                                            log_path=self.config['log']['path'],
-                                            log_level=self.config['log']['level'],
-                                            uri=self.config['mongo']['uri'],
-                                            pool=self.config['mongo']['pool'],
-                                            strategy_path=self.config['strategy']['trade'],
-                                            broker_path=self.config['strategy']['broker'],
-                                            risk_path=self.config['strategy']['risk'],
-                                            init_cash=0, transfer_fee=0, tax_fee=0, broker_fee=0,
-                                            account_id=account['account_id'], trade_kind=kind,
-                                            trade_type=typ,
-                                            quot_freq=None, quot_date=None, quot_index=None, quot_stock=None,
-                                            strategy=None, risk=None, broker=None),
-                                daemon=False)
+                    p = mp.Process(target=entry,
+                                   kwargs=dict(conf=None,
+                                               log_path=self.config['log']['path'],
+                                               log_level=self.config['log']['level'],
+                                               uri=self.config['mongo']['uri'],
+                                               pool=self.config['mongo']['pool'],
+                                               strategy_path=self.config['strategy']['trade'],
+                                               broker_path=self.config['strategy']['broker'],
+                                               risk_path=self.config['strategy']['risk'],
+                                               init_cash=0, transfer_fee=0, tax_fee=0, broker_fee=0,
+                                               account_id=account['account_id'], trade_kind=kind,
+                                               trade_type=typ,
+                                               quot_freq=None, quot_date=None, quot_code=None,
+                                               strategy=None, risk=None, broker=None),
+                                   daemon=False)
                     p.start()
                     self.log.info('process pid={}, alive={}'.format(p.pid, p.is_alive()))
                 self.log.info('main process exit')
@@ -228,36 +254,88 @@ class Trader:
         init_broker(self.config['strategy']['broker'])
         init_strategy(self.config['strategy']['trade'])
 
-    async def quot_subs_task(self):
-        await self.task_queue.get()
-        while self.running:
-            self.log.info('quot_subs_task...')
-            await asyncio.sleep(1)
+    async def init_quotation(self) -> bool:
+        if self.is_backtest():
+            self.quot = BacktestQuotation(db=self.db_data)
+        else:
+            self.quot = RealtimeQuotation(db=self.db_data)
 
+        return await self.quot.init(opt=self.config['quotation'])
+
+    async def quot_task(self):
+        await self.task_queue.get()
+        is_backtest = self.is_backtest()
+        while self.running:
+            evt, payload = await self.quot.get_quot()
+            if evt is not None:
+                self.queue['account'].put_nowait((evt, payload))
+
+            sleep_sec = 1
+            if is_backtest:
+                if evt is None:
+                    await self.backtest_report()
+                    self.stop()
+                # 让出执行权
+                sleep_sec = 0.01
+            await asyncio.sleep(sleep_sec)
         self.task_queue.task_done()
 
-    async def quot_disp_task(self):
+    async def account_task(self):
         await self.task_queue.get()
+        queue = self.queue['account']
         while self.running:
-            self.log.info('quot_disp_task...')
-            await asyncio.sleep(1)
+            pre_evt, pre_payload = None, None
+            evt, payload = await queue.get()
+            queue.task_done()
+            if evt is not None and evt == '__evt_term':
+                continue
 
+            if not self.is_backtest():
+                while not queue.empty():
+                    self.log.warn('process is too slow...')
+                    if evt != 'evt_quotation':
+                        await self.account.on_quot(evt, payload)
+                    else:
+                        pre_evt, pre_payload = evt, payload
+
+                    evt, payload = queue.get()
+                    queue.task_done()
+
+            if pre_evt is not None:
+                if evt != 'evt_quotation':
+                    await self.account.on_quot(pre_evt, pre_payload)
+            await self.account.on_quot(evt, payload)
+
+            self.queue['risk'].put_nowait((evt, payload))
+            self.queue['strategy'].put_nowait((evt, payload))
         self.task_queue.task_done()
 
     async def signal_task(self):
         await self.task_queue.get()
         while self.running:
-            self.log.info('signal_task...')
-            await asyncio.sleep(1)
+            evt, payload = await self.queue['signal'].get()
+            self.queue['signal'].task_done()
 
         self.task_queue.task_done()
 
     async def risk_task(self):
         await self.task_queue.get()
         while self.running:
-            self.log.info('risk_task...')
-            await asyncio.sleep(1)
+            evt, payload = await self.queue['risk'].get()
+            self.queue['risk'].task_done()
+            if evt is not None and evt == '__evt_term':
+                continue
+            await self.account.risk.on_quot(evt, payload)
+        self.task_queue.task_done()
 
+    async def strategy_task(self):
+        await self.task_queue.get()
+        while self.running:
+            evt, payload = await self.queue['strategy'].get()
+            self.queue['strategy'].task_done()
+            if evt is not None and evt == '__evt_term':
+                continue
+            await self.account.strategy.on_quot(evt, payload)
         self.task_queue.task_done()
 
 
@@ -278,9 +356,8 @@ class Trader:
 @click.option('--trade-kind', type=str, default='stock', help='trade catalogue: stock,fund, default stock')
 @click.option('--trade-type', type=str, default='simulate', help='trade type: real,simulate,backtest')
 @click.option('--quot-freq', type=str, default='1min', help='quotation frequency, 1min, 5min, 15min, 30min, 60min')
-@click.option('--quot-date', type=str, help='backtest date, format: yyyymmdd~yyyymmdd')
-@click.option('--quot-index', type=str, help='index list, sep by ","')
-@click.option('--quot-stock', type=str, help='index list, sep by ","')
+@click.option('--quot-date', type=str, help='backtest date, format: yyyy-mm-dd~yyyy-mm-dd')
+@click.option('--quot-code', type=str, help='code list, sep by ","')
 @click.option('--strategy', type=str, help='running trade strategy, js or base64 encode js')
 @click.option('--risk', type=str, help='running risk strategy, js or base64 encode js, use default if not provide')
 @click.option('--broker', type=str, help='broker config, js or base64 encode js, should provide if trade-type is real')
@@ -289,7 +366,7 @@ def main(conf: str, log_path: str, log_level: str,
          strategy_path: str, risk_path: str, broker_path: str,
          init_cash: float, transfer_fee: float, tax_fee: float, broker_fee: float,
          account_id: str, trade_kind: str, trade_type: str,
-         quot_freq: str, quot_date: str, quot_index: str, quot_stock: str,
+         quot_freq: str, quot_date: str, quot_code: str,
          strategy: str, risk: str, broker: str):
     mp.set_start_method('spawn')
     entry(conf=conf, log_path=log_path, log_level=log_level,
@@ -297,7 +374,7 @@ def main(conf: str, log_path: str, log_level: str,
           strategy_path=strategy_path, risk_path=risk_path, broker_path=broker_path,
           init_cash=init_cash, transfer_fee=transfer_fee, tax_fee=tax_fee, broker_fee=broker_fee,
           account_id=account_id, trade_kind=trade_kind, trade_type=trade_type,
-          quot_freq=quot_freq, quot_date=quot_date, quot_index=quot_index, quot_stock=quot_stock,
+          quot_freq=quot_freq, quot_date=quot_date, quot_code=quot_code,
           strategy=strategy, risk=risk, broker=broker)
 
 
@@ -308,7 +385,7 @@ def entry(**opts):
     init_cash = opts['init_cash']
     transfer_fee, tax_fee, broker_fee = opts['transfer_fee'], opts['tax_fee'], opts['broker_fee']
     account_id, trade_kind, trade_type = opts['account_id'], opts['trade_kind'], opts['trade_type']
-    quot_freq, quot_date, quot_index, quot_stock = opts['quot_freq'], opts['quot_date'], opts['quot_index'], opts['quot_stock']
+    quot_freq, quot_date, quot_code = opts['quot_freq'], opts['quot_date'], opts['quot_code']
     strategy, risk, broker = opts['strategy'], opts['risk'], opts['broker']
 
     if log_path is None:
@@ -334,15 +411,14 @@ def entry(**opts):
     q_start, q_end = None, None
     if quot_date is not None:
         dates = quot_date.split('~')
-        q_start = datetime.strptime('yyyymmdd', dates[0])
-        q_end = datetime.strptime('yyyymmdd', dates[1])
-    q_index = quot_index.split(',') if quot_index is not None else None
-    q_stock = quot_stock.split(',') if quot_stock is not None else None
+        q_start = datetime.strptime(dates[0], '%Y-%m-%d')
+        q_end = datetime.strptime(dates[1], '%Y-%m-%d')
+    q_code = quot_code.split(',') if quot_code is not None else None
 
     conf_cmd = dict(log=dict(path=log_path, level=log_level),
                     mongo=dict(uri=uri, pool=pool),
                     strategy=dict(broker=broker_path, trade=strategy_path, risk=risk_path),
-                    quotation=dict(frequency=quot_freq, start_date=q_start, end_date=q_end, index=q_index, stock=q_stock),
+                    quotation=dict(frequency=quot_freq, start_date=q_start, end_date=q_end, code=q_code),
                     trade={'account-id': account_id, 'kind': trade_kind, 'type': trade_type,
                            'init-cash': init_cash,
                            'transfer-fee': transfer_fee, 'tax-fee': tax_fee, 'broker-fee': broker_fee,
@@ -362,7 +438,10 @@ def entry(**opts):
     db_data = setup_db(conf_dict, StockDB if trade_kind == 'stock' else FundDB)
     db_trade = setup_db(conf_dict, TradeDB) if trade_type != 'backtest' else None
 
-    if db_data is None or db_trade is None:
+    if db_data is None:
+        return
+
+    if db_trade is None and trade_type != 'backtest':
         return
 
     trader = Trader(db_trade=db_trade, db_data=db_data, config=conf_dict)

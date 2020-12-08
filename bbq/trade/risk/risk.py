@@ -6,7 +6,7 @@ from typing import Dict, Optional
 
 class Risk(BaseObj):
     def __init__(self, risk_id, account: Account):
-        super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade)
+        super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade, trader=account.trader)
         self.account = account
         self.risk_id = risk_id
 
@@ -21,7 +21,7 @@ class Risk(BaseObj):
     def on_broker(self, payload):
         raise Exception('{} not implement'.format(self.on_broker.__qualname__))
 
-    def on_quot(self, payload):
+    async def on_quot(self, evt, payload):
         raise Exception('{} not implement'.format(self.on_quot.__qualname__))
 
     async def sync_from_db(self) -> bool:

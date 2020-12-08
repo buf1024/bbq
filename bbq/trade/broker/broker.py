@@ -20,7 +20,7 @@ class Broker(BaseObj):
     """
 
     def __init__(self, broker_id, account: Account):
-        super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade)
+        super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade, trader=account.trader)
         self.account = account
         self.broker_id = broker_id
 
@@ -35,7 +35,7 @@ class Broker(BaseObj):
     def on_strategy(self, payload):
         raise Exception('{} on_strategy payload={}, not implement'.format(self.__class__.__name__, payload))
 
-    def on_quot(self, payload):
+    def on_quot(self, evt, payload):
         # if self.account is not None:
         #     self.account.on_quot(payload=payload)
         pass

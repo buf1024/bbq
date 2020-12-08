@@ -22,19 +22,17 @@ class Quotation(ABC):
         self.opt = None
 
         self.frequency = 0
-        self.index = []
-        self.stock = []
         self.start_date = None
         self.end_date = None
-
         self.codes = []
+
         self.trade_date = None
         self.quot_date = {}
 
     async def init(self, opt) -> bool:
         self.opt = opt
         try:
-            frequency, index, stock = self.opt['frequency'].lower(), self.opt['index'], self.opt['stock']
+            frequency, code = self.opt['frequency'].lower(), self.opt['code']
             if 'min' not in frequency and 'm' not in frequency and \
                     'sec' not in frequency and 's' not in frequency:
                 self.log.error('frequency 格式不正确')
@@ -56,17 +54,17 @@ class Quotation(ABC):
                 self.frequency = value
 
             if 'start_date' in self.opt and self.opt['start_date'] is not None:
-                self.start_date = datetime.strptime(self.opt['start_date'], '%Y-%m-%d')
+                self.start_date = self.opt['start_date']
 
             if 'end_date' in self.opt and self.opt['end_date'] is not None:
-                self.end_date = datetime.strptime(self.opt['end_date'], '%Y-%m-%d')
+                self.end_date = self.opt['end_date']
 
-            self.index, self.stock, self.codes = index, stock, index + stock
+            self.codes = code
 
             return True
 
         except Exception as e:
-            self.log.error('realtime quot 初始化失败, ex={}'.format(e))
+            self.log.error('quot 初始化失败, ex={}'.format(e))
             return False
 
     async def get_quot(self) -> Optional[Tuple[Optional[str], Optional[Dict]]]:
@@ -163,7 +161,7 @@ class BacktestQuotation(Quotation):
 
             bar = OrderedDict()
             for code in self.codes:
-                df = fetch.fetch_stock_minute(code=code, period=str(int(self.frequency/60)),
+                df = fetch.fetch_stock_minute(code=code, period=str(int(self.frequency / 60)),
                                               start=self.start_date, end=self.end_date)
                 if df is None:
                     self.log.error('指数/股票{}, {} k线无数据'.format(code, self.frequency))
@@ -234,9 +232,9 @@ class BacktestQuotation(Quotation):
         except StopIteration:
             if not self.is_end:
                 self.is_end = True
-                return 'evt_end', dict(frequency=self.opt['frequency'],
-                                       start=now,
-                                       end=now)
+            return 'evt_end', dict(frequency=self.opt['frequency'],
+                                   start=now,
+                                   end=now)
         except Exception as e:
             self.log.error('get_quot 异常, ex={}, call={}'.format(e, traceback.format_exc()))
 
@@ -338,6 +336,7 @@ if __name__ == '__main__':
     rt = RealtimeQuotation(db=db)
     bt = BacktestQuotation(db=db)
 
+
     async def test_rt():
         if not await rt.init(opt=dict(frequency='10s', index=['sh000001'], stock=['sh601099', 'sz000001'])):
             print('初始化失败')
@@ -346,6 +345,7 @@ if __name__ == '__main__':
             data = await rt.get_quot()
             print('data: {}'.format(data))
             await asyncio.sleep(5)
+
 
     async def test_bt():
         if not await bt.init(opt=dict(frequency='1min', index=[], stock=['sz000001', 'sh601099'],
@@ -358,6 +358,7 @@ if __name__ == '__main__':
                 break
             print('data: {}'.format(data))
             # await asyncio.sleep(5)
+
 
     run_until_complete(
         # test_rt()

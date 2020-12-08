@@ -4,7 +4,7 @@ from bbq.trade.base_obj import BaseObj
 
 class StrategyInfo(BaseObj):
     def __init__(self, account: Account):
-        super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade)
+        super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade, trader=account.trader)
         self.account_id = account.account_id
         self.strategy_id = ''
         self.strategy_opt = ''

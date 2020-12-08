@@ -9,5 +9,5 @@ class Dummy(Risk):
     def on_broker(self, payload):
         print('risk on_broker: {}'.format(payload))
 
-    def on_quot(self, payload):
-        print('risk on_quot: {}'.format(payload))
+    async def on_quot(self, evt, payload):
+        self.log.info('dummy risk on_quot: evt={}, payload={}'.format(evt, payload))

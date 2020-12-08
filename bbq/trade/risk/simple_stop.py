@@ -32,7 +32,8 @@ class SimpleStop(Risk):
     def on_broker(self, payload):
         print('risk on_broker: {}'.format(payload))
 
-    def on_quot(self, payload):
+    async def on_quot(self, evt, payload):
+        self.log.info('simple stop risk on_quot: evt={}, payload={}'.format(evt, payload))
         for position in self.account.position.values():
             if position.volume_available <= 0:
                 continue

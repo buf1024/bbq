@@ -1,11 +1,10 @@
 from bbq.trade.base_obj import BaseObj
-from datetime import datetime, timedelta
-import uuid
+from datetime import datetime
 
 
 class Position(BaseObj):
     def __init__(self, position_id: str, account):
-        super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade)
+        super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade, trader=account.trader)
         self.account = account
 
         self.position_id = position_id
@@ -54,7 +53,7 @@ class Position(BaseObj):
     #
     #     return self.adj_factor
 
-    def on_quot(self, quot):
+    def on_quot(self, evt, quot):
         # adj_factor = self._get_adj_factor(codes=[self.code], trade_date=quot['trade_date'], pre_close=quot['pre_close'])
 
         adj_factor = 1.0
