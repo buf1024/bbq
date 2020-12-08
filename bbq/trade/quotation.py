@@ -1,5 +1,4 @@
 from abc import ABC
-import traceback
 from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
@@ -10,8 +9,9 @@ import traceback
 
 """
 行情下发顺序：
-evt_start(backtest) -> evt_morning_start -> evt_morning_end -> evt_noon_start -> evt_noon_end -> evt_end(backtest)
-
+-> evt_start(backtest) -> evt_morning_start -> evt_quotation -> evt_morning_end 
+                       -> evt_noon_start -> evt_quotation -> evt_noon_end 
+-> evt_end(backtest)
 """
 
 

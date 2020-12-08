@@ -7,9 +7,10 @@ class TradeDB(MongoDB):
         # 账户信息
         'account_info': {'account_id': '账户id', 'status': '账户状态(0正常 其他停止)',
                          'kind': '交易种类: stock, fund', 'type': '账户类型: real, simulate, backtest',
-                         'cash_init': '初始资金', 'cash_available': '可用资金', 'cost': '持仓成本',
+                         'cash_init': '初始资金', 'cash_available': '可用资金', 'total_value': '持仓市值', 'cost': '持仓成本',
                          'broker_fee': '手续费', "transfer_fee": '过户费', "tax_fee": '印花税',
-                         'profit': '盈利', 'profit_rate': '盈利比例', 'start_time': '开始时间', 'end_time': '结束时间'},
+                         'profit': '盈利', 'profit_rate': '盈利比例',
+                         'start_time': '开始时间', 'end_time': '结束时间', 'update_time': '更新时间'},
         # 策略信号
         'signal_info': {'account_id': '账户id', 'signal_id': '信号id', 'source': '信号源, risk, strategy, broker, manual',
                         'signal': '信号: sell, buy, cancel', 'name': '股票名称', 'code': '股票代码',
@@ -17,7 +18,7 @@ class TradeDB(MongoDB):
 
         # 委托信息
         'entrust_info': {'account_id': '账户id', 'entrust_id': '委托ID', 'name': '股票名称', 'code': '股票代码',
-                         'broker_entrust_id': 'broker对应的委托id', 'broker_id': '对应的broker',
+                         'broker_entrust_id': 'broker对应的委托id',
                          'type': '委托类型: buy, sell, cancel',
                          'status': '委托状态: commit 已提交 deal 已成 part_deal 部成 cancel 已取消',
                          'price': '价', 'volume': '量', 'volume_deal': '已成量', 'volume_cancel': '已取消量',
@@ -25,12 +26,12 @@ class TradeDB(MongoDB):
 
         # 成交历史
         'deal_info': {'account_id': '账户id', 'deal_id': '成交ID', 'entrust_id': '委托ID',
-                      'name': '股票名称', 'code': '股票代码', 'price': '价', 'volume': '量',
+                      'name': '股票名称', 'code': '股票代码', 'price': '价', 'volume': '量', 'fee': '交易费用',
                       'time': '成交时间'},
 
         # 持仓信息
         'position_info': {'account_id': '账户id', 'position_id': '持仓ID',  'name': '股票名称', 'code': '股票代码',
-                          'volume': '持仓量', 'volume_available': '可用持仓量', 'cost': '平均持仓成本', 'price': '平均持仓价',
+                          'volume': '持仓量', 'volume_available': '可用持仓量', 'fee': '持仓费用', 'price': '平均持仓价',
                           'profit_rate': '盈利比例', 'max_profit_rate': '最大盈利比例', 'min_profit_rate': '最小盈利比例',
                           'profit': '盈利比例', 'max_profit': '最大盈利', 'min_profit': '最小盈利',
                           'now_price': '最新价', 'max_price': '最高价', 'min_price': '最低价',

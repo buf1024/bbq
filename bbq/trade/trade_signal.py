@@ -1,19 +1,31 @@
-import uuid
-from datetime import datetime
+from bbq.trade.base_obj import BaseObj
 
 
-class TradeSignal:
-    def __init__(self):
-        self.signal_id = str(uuid.uuid4()).replace('-', '')
+class TradeSignal(BaseObj):
+    def __init__(self, signal_id: str, account):
+        super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade, trader=account.trader)
+        self.account = account
 
+        self.signal_id = signal_id
         self.source = ''  # 信号源, risk, strategy, broker, manual
         self.signal = ''  # sell, buy, cancel
 
         self.name = ''  # 股票名称
         self.code = ''  # 股票代码
-        self.time = datetime.now()  # 时间
+        self.time = None  # 时间
 
         self.price = 0.0
         self.volume = 0
 
-        self.entrust_id = ''  # sell / cancel有效
+        self.entrust_id = ''  # sell / cancel 有效
+
+    @BaseObj.discard_saver
+    async def sync_to_db(self) -> bool:
+        data = {'account_id': self.account.account_id,
+                'signal_id': self.signal_id, 'name': self.name, 'code': self.code,
+                'source': self.source, 'signal': self.signal,
+                'volume': self.volume, 'price': self.price,
+                'time': self.time
+                }
+        await self.db_trade.save_signal(data=data)
+        return True

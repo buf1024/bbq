@@ -6,6 +6,7 @@ from bbq.trade.risk import get_risk
 from bbq.trade.strategy import get_strategy
 from typing import Dict, Optional
 from bbq.trade.position import Position
+from datetime import datetime
 
 
 class Account(BaseObj):
@@ -20,6 +21,7 @@ class Account(BaseObj):
         self.cash_init = 0
         self.cash_available = 0
 
+        self.total_value = 0
         self.cost = 0
         self.profit = 0
         self.profit_rate = 0
@@ -33,6 +35,10 @@ class Account(BaseObj):
 
         self.position = {}
         self.entrust = {}
+
+        # 成交历史 backtest
+        self.deal = {}
+        self.signal = {}
 
         self.broker = None
         self.strategy = None
@@ -50,6 +56,7 @@ class Account(BaseObj):
         self.kind = account['kind']
         self.cash_init = account['cash_init']
         self.cash_available = account['cash_available']
+        self.total_value = account['total_value']
         self.cost = account['cost']
         self.broker_fee = account['broker_fee']
         self.transfer_fee = account['transfer_fee']
@@ -131,27 +138,37 @@ class Account(BaseObj):
     async def sync_to_db(self) -> bool:
         data = {'account_id': self.account_id, 'status': self.status,
                 'kind': self.kind, 'type': self.typ,
-                'strategy_id': self.strategy.strategy_id,
-                'broker_id': self.broker.broker_id, 'risk_id': self.risk.risk_id,
-                'cash_init': self.cash_init, 'cash_available': self.cash_available, 'cost': self.cost,
+                'cash_init': self.cash_init, 'cash_available': self.cash_available,
+                'total_value': self.total_value, 'cost': self.cost,
                 'broker_fee': self.broker_fee, "transfer_fee": self.transfer_fee, "tax_fee": self.tax_fee,
                 'profit': self.profit, 'profit_rate': self.profit_rate,
-                'start_time': self.start_time, 'end_time': self.end_time}
+                'start_time': self.start_time, 'end_time': self.end_time, 'update_time': datetime.now()}
         await self.db_trade.save_account(data=data)
         return True
 
-    def update_position_quot(self, code, quot):
-        self.position[code].on_quot(quot)
-        self.profit += self.position[code].profit
-        self.cost += (self.position[code].cost * self.position[code].volume)
+    async def update_position(self, position, payload):
+        await position.on_quot(payload)
+        self.profit += position.profit
+        self.total_value += (position.now_price * position.volume)
+        self.cost += (position.price * position.volume + position.fee)
+        if self.cost > 0:
+            self.profit_rate = self.profit / self.cost
+
+        await self.sync_to_db()
 
     async def on_quot(self, evt, payload):
+        # evt_start(backtest)
+        # evt_morning_start evt_quotation evt_morning_end
+        # evt_noon_start evt_quotation evt_noon_end
+        # evt_end(backtest)
         self.log.info('account on quot, event={}, payload={}'.format(evt, payload))
-        # for code in self.position.keys():
-        #     if code in payload:
-        #         self.update_position_quot(code, payload[code])
-        # if self.cost > 0:
-        #     self.profit_rate = self.profit / self.cost
+        if evt == 'evt_noon_end':
+            # 日终处理
+            pass
+        if evt == 'evt_quotation':
+            for position in self.position.values():
+                if position.code in payload:
+                    await self.update_position(position, payload[position.code])
 
     async def on_broker(self, broker, payload):
         pass
