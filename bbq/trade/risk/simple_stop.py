@@ -25,12 +25,6 @@ class SimpleStop(Risk):
             self.stop_time = 0 if 'stop_time' not in opt else opt['stop_time']
 
         return True
-        
-    async def destroy(self):
-        pass
-
-    def on_broker(self, payload):
-        print('risk on_broker: {}'.format(payload))
 
     async def on_quot(self, evt, payload):
         self.log.info('simple stop risk on_quot: evt={}, payload={}'.format(evt, payload))

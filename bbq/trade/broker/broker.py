@@ -35,9 +35,7 @@ class Broker(BaseObj):
     def on_strategy(self, payload):
         raise Exception('{} on_strategy payload={}, not implement'.format(self.__class__.__name__, payload))
 
-    def on_quot(self, evt, payload):
-        # if self.account is not None:
-        #     self.account.on_quot(payload=payload)
+    async def on_entrust(self, evt, payload):
         pass
 
     async def sync_from_db(self) -> bool:

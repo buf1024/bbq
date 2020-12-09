@@ -93,3 +93,19 @@ class Position(BaseObj):
                 }
         await self.db_trade.save_position(data=data)
         return True
+
+    def to_dict(self):
+        return {'account_id': self.account.account_id,
+                'position_id': self.position_id, 'name': self.name, 'code': self.code,
+                'volume': self.volume, 'volume_available': self.volume_available,
+                'fee': self.fee, 'price': self.price,
+                'profit_rate': self.profit_rate,
+                'max_profit_rate': self.max_profit_rate, 'min_profit_rate': self.min_profit_rate,
+                'profit': self.profit, 'max_profit': self.max_profit, 'min_profit': self.min_profit,
+                'now_price': self.now_price, 'max_price': self.max_price, 'min_price': self.min_price,
+                'max_profit_time': self.max_profit_time.strftime(
+                    '%Y-%m-%d %H:%M:%S') if self.max_profit_time is not None else None,
+                'min_profit_time': self.min_profit_time.strftime(
+                    '%Y-%m-%d %H:%M:%S') if self.min_profit_time is not None else None,
+                'time': self.time.strftime('%Y-%m-%d %H:%M:%S') if self.time is not None else None
+                }

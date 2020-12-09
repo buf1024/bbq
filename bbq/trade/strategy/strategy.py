@@ -38,23 +38,20 @@ class Strategy(BaseObj):
 
         self.opt = None
 
-    async def init(self, opt: Optional[Dict]):
+    async def init(self, opt: Optional[Dict]) -> bool:
         return True
 
-    async def destroy(self):
-        pass
+    async def destroy(self) -> bool:
+        return True
 
-    async def on_open(self, period):
-        pass
+    async def on_open(self, evt, payload):
+        self.log.info('strategy on open: {}'.format(evt))
 
-    async def on_close(self, period):
-        pass
+    async def on_close(self, evt, payload):
+        self.log.info('strategy on close: {}'.format(evt))
 
     async def on_quot(self, evt, payload):
         self.log.info('strategy on_quot: evt={}, payload={}'.format(evt, payload))
-
-    async def on_broker(self, payload):
-        pass
 
     async def sync_from_db(self) -> bool:
         opt = await self.db_trade.load_strategy(filter={'account_id': self.account.account_id},

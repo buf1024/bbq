@@ -16,10 +16,7 @@ class Risk(BaseObj):
         return True
 
     async def destroy(self):
-        pass
-
-    def on_broker(self, payload):
-        raise Exception('{} not implement'.format(self.on_broker.__qualname__))
+        return True
 
     async def on_quot(self, evt, payload):
         raise Exception('{} not implement'.format(self.on_quot.__qualname__))

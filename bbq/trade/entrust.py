@@ -52,3 +52,14 @@ class Entrust(BaseObj):
                 }
         await self.db_trade.save_entrust(data=data)
         return True
+
+    def to_dict(self):
+        return {'account_id': self.account.account_id,
+                'entrust_id': self.entrust_id, 'name': self.name, 'code': self.code,
+                'volume_deal': self.volume_deal, 'volume_cancel': self.volume_cancel,
+                'volume': self.volume,
+                'price': self.price,
+                'status': self.status,
+                'type': self.type, 'broker_entrust_id': self.broker_entrust_id,
+                'time': self.time.strftime('%Y-%m-%d %H:%M:%S') if self.time is not None else None
+                }

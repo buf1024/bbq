@@ -36,7 +36,7 @@ class TradeDB(MongoDB):
                           'profit': '盈利比例', 'max_profit': '最大盈利', 'min_profit': '最小盈利',
                           'now_price': '最新价', 'max_price': '最高价', 'min_price': '最低价',
                           'max_profit_time': '最大盈利时间', 'min_profit_time': '最小盈利时间',
-                          'time': '首次建仓时间'},
+                          'time': '更新时间'},
 
         # 策略相关信息
         'strategy_info': {'account_id': '账户id',
@@ -109,10 +109,10 @@ class TradeDB(MongoDB):
         return data
 
     async def save_entrust(self, data: Dict):
-        self.log.debug('保存信号信息, data = {}'.format(data))
+        self.log.debug('保存委托信息, data = {}'.format(data))
         inserted_ids = await self.do_update(coll=self.entrust_info,
                                             filter={'entrust_id': data['entrust_id']}, update=data)
-        self.log.debug('保存信号信息成功')
+        self.log.debug('保存委托信息成功')
         return inserted_ids
 
     async def load_deal(self, **kwargs) -> List:
@@ -137,7 +137,7 @@ class TradeDB(MongoDB):
     async def save_position(self, data: Dict):
         self.log.debug('保存持仓信息, data = {}'.format(data))
         inserted_ids = await self.do_update(coll=self.position_info,
-                                            filter={'signal_id': data['signal_id']}, update=data)
+                                            filter={'position_id': data['position_id']}, update=data)
         self.log.debug('保存持仓信息成功')
         return inserted_ids
 

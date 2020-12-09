@@ -3,6 +3,8 @@ from bbq.data.mongodb import MongoDB
 from bbq.trade.tradedb import TradeDB
 from abc import ABC
 from functools import wraps
+import uuid
+from typing import Dict
 
 
 class BaseObj(ABC):
@@ -26,12 +28,19 @@ class BaseObj(ABC):
 
         return wrapper
 
-    def emit(self, sig, payload):
-        self.trader.queue['signal'].put_nowait((sig, payload))
+    @staticmethod
+    def get_uuid():
+        return str(uuid.uuid4()).replace('-', '')
+
+    def emit(self, queue: str, evt: str, payload: object):
+        self.trader.queue[queue].put_nowait((evt, payload))
 
     async def sync_from_db(self) -> bool:
         return True
 
     async def sync_to_db(self) -> bool:
         return True
+
+    def to_dict(self) -> Dict:
+        pass
 

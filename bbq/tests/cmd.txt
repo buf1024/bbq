@@ -1,7 +1,7 @@
 trade:
 
---init-cash=100000 --trade-kind=stock --trade-type=simulate --strategy=eyJpZCI6ICJidWlsdGluOkR1bW15IiwgIm9wdGlvbiI6IHt9fQo= --risk=eyJpZCI6ICJidWlsdGluOkR1bW15IiwgIm9wdGlvbiI6IHt9fQo=
+--init-cash=100000 --trade-kind=stock --trade-type=simulate --strategy=eyJpZCI6ICJidWlsdGluOkR1bW15IiwgIm9wdGlvbiI6IHt9fQo= --risk=eyJpZCI6ICJidWlsdGluOkR1bW15IiwgIm9wdGlvbiI6IHt9fQo= --quot-date=2020-12-01~2020-12-07 --quot-code=sh601099,sz000001
 
---trade-kind=stock --trade-type=simulate --account-id=e45300f0c617471c85432efd3d9b05d5
+--trade-kind=stock --trade-type=simulate --account-id=40d4b264c4cc421bb852c9afa25dcb07
 
---init-cash=100000 --trade-kind=stock --trade-type=backtest --quot-freq=5min --quot-date=2020-12-01~2020-12-07 --quot-code=sh000001,sz000001 --strategy=eyJpZCI6ICJidWlsdGluOkR1bW15IiwgIm9wdGlvbiI6IHt9fQo= --risk=eyJpZCI6ICJidWlsdGluOkR1bW15IiwgIm9wdGlvbiI6IHt9fQo=
+--init-cash=100000 --trade-kind=stock --trade-type=backtest --quot-freq=60min --quot-date=2020-12-01~2020-12-02 --quot-code=sh601099,sz000001 --strategy=eyJpZCI6ICJidWlsdGluOkR1bW15IiwgIm9wdGlvbiI6IHt9fQo= --risk=eyJpZCI6ICJidWlsdGluOkR1bW15IiwgIm9wdGlvbiI6IHt9fQo=

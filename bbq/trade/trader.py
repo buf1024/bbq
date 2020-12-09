@@ -1,6 +1,5 @@
 import bbq.log as log
 import click
-import uuid
 import asyncio
 from bbq.common import setup_log, setup_db, run_until_complete, load_cmd_js
 from bbq.data.mongodb import MongoDB
@@ -11,6 +10,7 @@ from bbq.config import init_config
 import multiprocessing as mp
 from typing import Dict, Optional
 from bbq.trade.account import Account
+from bbq.trade.entrust import Entrust
 from bbq.trade.broker import init_broker, get_broker
 from bbq.trade.risk import init_risk, get_risk
 from bbq.trade.strategy import init_strategy, get_strategy
@@ -38,7 +38,8 @@ class Trader:
             risk=asyncio.Queue(),
             signal=asyncio.Queue(),
             strategy=asyncio.Queue(),
-            broker=asyncio.Queue()
+            broker=asyncio.Queue(),
+            broker_event=asyncio.Queue(),
         )
 
         self.task_queue = asyncio.Queue()
@@ -56,7 +57,7 @@ class Trader:
             return None
         self.log.info('account inited')
 
-        is_init = await self.init_quotation()
+        is_init = await self.init_quotation(opt=self.config['quotation'])
         if not is_init:
             self.log.error('初始化行情异常')
             return None
@@ -71,17 +72,28 @@ class Trader:
         self.loop.create_task(self.account_task())
 
         await self.task_queue.put('signal_task')
-        self.loop.create_task(self.signal_task())
+        self.loop.create_task(self.general_async_task('signal', self.account.on_signal))
 
         await self.task_queue.put('risk_task')
-        self.loop.create_task(self.risk_task())
+        self.loop.create_task(self.general_async_task('risk', self.account.risk.on_quot))
 
         await self.task_queue.put('strategy_task')
         self.loop.create_task(self.strategy_task())
 
+        await self.task_queue.put('broker_task')
+        self.loop.create_task(self.general_async_task('broker', self.account.broker.on_entrust))
+
+        await self.task_queue.put('broker_event_task')
+        self.loop.create_task(self.general_async_task('broker_event', self.account.on_broker))
+
         await self.task_queue.join()
 
         self.log.info('trader done, exit!')
+
+    async def destroy(self):
+        await self.account.broker.destroy()
+        await self.account.risk.destroy()
+        await self.account.strategy.destroy()
 
     def stop(self):
         self.running = False
@@ -98,16 +110,17 @@ class Trader:
 
     async def backtest_report(self):
         self.log.info('backtest report')
+        print(self.account)
 
     async def create_new_account(self) -> Optional[Account]:
         typ = self.config['trade']['type']
-        account = Account(typ=typ, account_id=str(uuid.uuid4()).replace('-', ''),
+        account = Account(typ=typ, account_id=Account.get_uuid(),
                           db_data=self.db_data, db_trade=self.db_trade, trader=self)
 
         trade_dict = self.config['trade']
         account.kind = trade_dict['kind']
 
-        account.cash_init = trade_dict['kind']
+        account.cash_init = trade_dict['init-cash']
         account.cash_available = account.cash_init
 
         account.cost = 0
@@ -204,11 +217,17 @@ class Trader:
                 self.log.info('数据中没有已运行的real/simulate数据, account_id={}'.format(acct_id))
                 return
 
-            self.account = Account(account_id=acct_id, typ=typ, db_data=self.db_data, db_trade=self.db_trade, trader=self)
+            self.account = Account(account_id=acct_id, typ=typ, db_data=self.db_data, db_trade=self.db_trade,
+                                   trader=self)
             if not await self.account.sync_from_db():
                 self.log.info('从数据库中初始或account失败, account_id={}'.format(acct_id))
                 self.account = None
                 return False
+            quot_opt = await self.db_trade.load_strategy(filter={'account_id': self.account.account_id},
+                                                         projection=['quot_opt'], limit=1)
+            quot_opt = None if len(quot_opt) == 0 else quot_opt[0]
+            self.config['quotation'] = quot_opt['quot_opt']
+
             return True
 
         strategy_js, risk_js, broker_js = trade_dict['strategy'], trade_dict['risk'], trade_dict['broker']
@@ -254,13 +273,13 @@ class Trader:
         init_broker(self.config['strategy']['broker'])
         init_strategy(self.config['strategy']['trade'])
 
-    async def init_quotation(self) -> bool:
+    async def init_quotation(self, opt) -> bool:
         if self.is_backtest():
             self.quot = BacktestQuotation(db=self.db_data)
         else:
             self.quot = RealtimeQuotation(db=self.db_data)
 
-        return await self.quot.init(opt=self.config['quotation'])
+        return await self.quot.init(opt=opt)
 
     async def quot_task(self):
         await self.task_queue.get()
@@ -273,6 +292,8 @@ class Trader:
             sleep_sec = 1
             if is_backtest:
                 if evt is None:
+                    for queue in self.queue.values():
+                        await queue.join()
                     await self.backtest_report()
                     self.stop()
                 # 让出执行权
@@ -286,8 +307,9 @@ class Trader:
         while self.running:
             pre_evt, pre_payload = None, None
             evt, payload = await queue.get()
-            queue.task_done()
+
             if evt is not None and evt == '__evt_term':
+                queue.task_done()
                 continue
 
             if not self.is_backtest():
@@ -305,37 +327,42 @@ class Trader:
                 if evt != 'evt_quotation':
                     await self.account.on_quot(pre_evt, pre_payload)
             await self.account.on_quot(evt, payload)
+            queue.task_done()
 
             self.queue['risk'].put_nowait((evt, payload))
             self.queue['strategy'].put_nowait((evt, payload))
         self.task_queue.task_done()
 
-    async def signal_task(self):
+    async def general_async_task(self, queue, func):
         await self.task_queue.get()
+        queue = self.queue[queue]
         while self.running:
-            evt, payload = await self.queue['signal'].get()
-            self.queue['signal'].task_done()
+            evt, sig = await queue.get()
 
-        self.task_queue.task_done()
-
-    async def risk_task(self):
-        await self.task_queue.get()
-        while self.running:
-            evt, payload = await self.queue['risk'].get()
-            self.queue['risk'].task_done()
             if evt is not None and evt == '__evt_term':
+                queue.task_done()
                 continue
-            await self.account.risk.on_quot(evt, payload)
+
+            await func(evt, sig)
+            queue.task_done()
+
         self.task_queue.task_done()
 
     async def strategy_task(self):
         await self.task_queue.get()
+        queue = self.queue['strategy']
         while self.running:
-            evt, payload = await self.queue['strategy'].get()
-            self.queue['strategy'].task_done()
+            evt, payload = await queue.get()
             if evt is not None and evt == '__evt_term':
+                queue.task_done()
                 continue
-            await self.account.strategy.on_quot(evt, payload)
+            if evt == 'evt_morning_start' or evt == 'evt_noon_start':
+                await self.account.strategy.on_open(evt, payload)
+            if evt == 'evt_morning_end' or evt == 'evt_noon_end':
+                await self.account.strategy.on_close(evt, payload)
+            if evt == 'evt_quotation':
+                await self.account.strategy.on_quot(evt, payload)
+            queue.task_done()
         self.task_queue.task_done()
 
 

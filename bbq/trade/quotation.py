@@ -147,6 +147,9 @@ class BacktestQuotation(Quotation):
 
         self.iter = None
 
+        self.iter_tag = True
+        self.day_time = None
+
     @staticmethod
     def pre_trade_date(start):
         while True:
@@ -218,12 +221,15 @@ class BacktestQuotation(Quotation):
                                          end=now)
 
             if self.is_start and not self.is_end:
-                day_time = next(self.iter)
-                evt, payload = await self.get_base_event(now=day_time)
+                if self.iter_tag:
+                    self.day_time = next(self.iter)
+                evt, payload = await self.get_base_event(now=self.day_time)
                 if evt is not None:
+                    self.iter_tag = False
                     return evt, payload
 
-                quot = self.bar[day_time]
+                quot = self.bar[self.day_time]
+                self.iter_tag = True
                 return 'evt_quotation', dict(frequency=self.opt['frequency'],
                                              trade_date=self.trade_date,
                                              day_time=now,
@@ -301,8 +307,8 @@ class RealtimeQuotation(Quotation):
 
     async def get_quot(self) -> Optional[Tuple[Optional[str], Optional[Dict]]]:
         try:
-            now = datetime.now()
-
+            # now = datetime.now()
+            now = datetime(year=2020, month=12, day=9, hour=14, minute=0, second=0)
             evt, payload = await self.get_base_event(now=now)
             if evt is not None:
                 return evt, payload

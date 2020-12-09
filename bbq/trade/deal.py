@@ -1,4 +1,5 @@
 from bbq.trade.base_obj import BaseObj
+import json
 
 
 class Deal(BaseObj):
@@ -29,3 +30,11 @@ class Deal(BaseObj):
         await self.db_trade.save_deal(data=data)
         return True
 
+    def to_dict(self):
+        return {'account_id': self.account.account_id,
+                'deal_id': self.deal_id, 'entrust_id': self.entrust_id,
+                'name': self.name, 'code': self.code,
+                'volume': self.volume, 'price': self.price,
+                'fee': self.fee,
+                'time': self.time.strftime('%Y-%m-%d %H:%M:%S') if self.time is not None else None
+                }

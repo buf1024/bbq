@@ -29,3 +29,11 @@ class TradeSignal(BaseObj):
                 }
         await self.db_trade.save_signal(data=data)
         return True
+
+    def to_dict(self):
+        return {'account_id': self.account.account_id,
+                'signal_id': self.signal_id, 'name': self.name, 'code': self.code,
+                'source': self.source, 'signal': self.signal,
+                'volume': self.volume, 'price': self.price,
+                'time': self.time.strftime('%Y-%m-%d %H:%M:%S') if self.time is not None else None
+                }

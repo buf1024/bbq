@@ -385,8 +385,9 @@ class MyFetch(BaseFetch):
             cond = 'day >= "{}"'.format(date_str)
             df = df.query(cond)
         if end is not None:
+            end = end + timedelta(days=1)
             date_str = end.strftime('%Y-%m-%d %H:%M:%S')
-            cond = 'day <= "{}"'.format(date_str)
+            cond = 'day < "{}"'.format(date_str)
             df = df.query(cond)
 
         df['day_time'] = pd.to_datetime(df['day'])
@@ -552,7 +553,7 @@ class MyFetch(BaseFetch):
         return df
 
     def fetch_stock_rt_quote(self, codes: List[str]) -> Optional[pd.DataFrame]:
-        self.log.debug('获取股票{}实时行情...'.format(codes))
+        # self.log.debug('获取股票{}实时行情...'.format(codes))
         symbols = []
         for code in codes:
             symbols.append(self.sina2xueqiu(code))
@@ -571,7 +572,7 @@ class MyFetch(BaseFetch):
         df['last_close'] = df['last_close'].astype(float)
         df['volume'] = df['volume'].astype(int)
         df['amount'] = df['amount'].astype(float)
-        self.log.debug('获取股票{}实时行情实时行情, count={}'.format(codes, df.shape[0]))
+        # self.log.debug('获取股票{}实时行情实时行情, count={}'.format(codes, df.shape[0]))
         return df
 
     @BaseFetch.retry_client
