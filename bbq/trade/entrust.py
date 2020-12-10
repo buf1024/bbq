@@ -63,3 +63,4 @@ class Entrust(BaseObj):
                 'type': self.type, 'broker_entrust_id': self.broker_entrust_id,
                 'time': self.time.strftime('%Y-%m-%d %H:%M:%S') if self.time is not None else None
                 }
+

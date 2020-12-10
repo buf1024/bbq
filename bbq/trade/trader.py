@@ -395,7 +395,7 @@ class Trader:
 @click.option('--trade-type', type=str, default='simulate', help='trade type: real,simulate,backtest')
 @click.option('--quot-freq', type=str, default='1min', help='quotation frequency, 1min, 5min, 15min, 30min, 60min')
 @click.option('--quot-date', type=str, help='backtest date, format: yyyy-mm-dd~yyyy-mm-dd')
-@click.option('--quot-code', type=str, help='code list, sep by ","')
+@click.option('--quot-codes', type=str, help='codes list, sep by ","')
 @click.option('--strategy', type=str, help='running trade strategy, js or base64 encode js')
 @click.option('--risk', type=str, help='running risk strategy, js or base64 encode js, use default if not provide')
 @click.option('--broker', type=str, help='broker config, js or base64 encode js, should provide if trade-type is real')
@@ -404,7 +404,7 @@ def main(conf: str, log_path: str, log_level: str,
          strategy_path: str, risk_path: str, broker_path: str,
          init_cash: float, transfer_fee: float, tax_fee: float, broker_fee: float,
          account_id: str, trade_kind: str, trade_type: str,
-         quot_freq: str, quot_date: str, quot_code: str,
+         quot_freq: str, quot_date: str, quot_codes: str,
          strategy: str, risk: str, broker: str):
     mp.set_start_method('spawn')
     entry(conf=conf, log_path=log_path, log_level=log_level,
@@ -412,7 +412,7 @@ def main(conf: str, log_path: str, log_level: str,
           strategy_path=strategy_path, risk_path=risk_path, broker_path=broker_path,
           init_cash=init_cash, transfer_fee=transfer_fee, tax_fee=tax_fee, broker_fee=broker_fee,
           account_id=account_id, trade_kind=trade_kind, trade_type=trade_type,
-          quot_freq=quot_freq, quot_date=quot_date, quot_code=quot_code,
+          quot_freq=quot_freq, quot_date=quot_date, quot_codes=quot_codes,
           strategy=strategy, risk=risk, broker=broker)
 
 
@@ -423,7 +423,7 @@ def entry(**opts):
     init_cash = opts['init_cash']
     transfer_fee, tax_fee, broker_fee = opts['transfer_fee'], opts['tax_fee'], opts['broker_fee']
     account_id, trade_kind, trade_type = opts['account_id'], opts['trade_kind'], opts['trade_type']
-    quot_freq, quot_date, quot_code = opts['quot_freq'], opts['quot_date'], opts['quot_code']
+    quot_freq, quot_date, quot_codes = opts['quot_freq'], opts['quot_date'], opts['quot_codes']
     strategy, risk, broker = opts['strategy'], opts['risk'], opts['broker']
 
     if log_path is None:
@@ -451,12 +451,12 @@ def entry(**opts):
         dates = quot_date.split('~')
         q_start = datetime.strptime(dates[0], '%Y-%m-%d')
         q_end = datetime.strptime(dates[1], '%Y-%m-%d')
-    q_code = quot_code.split(',') if quot_code is not None else None
+    q_codes = quot_codes.split(',') if quot_codes is not None else None
 
     conf_cmd = dict(log=dict(path=log_path, level=log_level),
                     mongo=dict(uri=uri, pool=pool),
                     strategy=dict(broker=broker_path, trade=strategy_path, risk=risk_path),
-                    quotation=dict(frequency=quot_freq, start_date=q_start, end_date=q_end, code=q_code),
+                    quotation=dict(frequency=quot_freq, start_date=q_start, end_date=q_end, codes=q_codes),
                     trade={'account-id': account_id, 'kind': trade_kind, 'type': trade_type,
                            'init-cash': init_cash,
                            'transfer-fee': transfer_fee, 'tax-fee': tax_fee, 'broker-fee': broker_fee,

@@ -5,6 +5,7 @@ from abc import ABC
 from functools import wraps
 import uuid
 from typing import Dict
+import json
 
 
 class BaseObj(ABC):
@@ -42,5 +43,7 @@ class BaseObj(ABC):
         return True
 
     def to_dict(self) -> Dict:
-        pass
+        return {}
 
+    def __str__(self):
+        return json.dumps(self.to_dict(), indent=2, ensure_ascii=False)

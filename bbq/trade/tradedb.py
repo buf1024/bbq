@@ -7,7 +7,8 @@ class TradeDB(MongoDB):
         # 账户信息
         'account_info': {'account_id': '账户id', 'status': '账户状态(0正常 其他停止)',
                          'kind': '交易种类: stock, fund', 'type': '账户类型: real, simulate, backtest',
-                         'cash_init': '初始资金', 'cash_available': '可用资金', 'total_value': '持仓市值', 'cost': '持仓成本',
+                         'cash_init': '初始资金', 'cash_available': '可用资金', 'cash_frozen': '冻结资金',
+                         'total_value': '持仓市值', 'cost': '持仓成本',
                          'broker_fee': '手续费', "transfer_fee": '过户费', "tax_fee": '印花税',
                          'profit': '盈利', 'profit_rate': '盈利比例',
                          'start_time': '开始时间', 'end_time': '结束时间', 'update_time': '更新时间'},

@@ -5,12 +5,11 @@ from bbq.trade.broker import get_broker
 from bbq.trade.risk import get_risk
 from bbq.trade.entrust import Entrust
 from bbq.trade.strategy import get_strategy
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 from bbq.trade.position import Position
 from bbq.trade.deal import Deal
 from datetime import datetime
 import copy
-import json
 
 
 class Account(BaseObj):
@@ -22,10 +21,11 @@ class Account(BaseObj):
         self.status = 0
         self.kind = ''
 
-        self.cash_init = 0
-        self.cash_available = 0
+        self.cash_init = 0.0
+        self.cash_available = 0.0
+        self.cash_frozen = 0.0
 
-        self.total_value = 0
+        self.total_value = 0.0
         self.cost = 0
         self.profit = 0
         self.profit_rate = 0
@@ -60,6 +60,7 @@ class Account(BaseObj):
         self.kind = account['kind']
         self.cash_init = account['cash_init']
         self.cash_available = account['cash_available']
+        self.cash_frozen = account['cash_frozen']
         self.total_value = account['total_value']
         self.cost = account['cost']
         self.broker_fee = account['broker_fee']
@@ -159,7 +160,7 @@ class Account(BaseObj):
         if evt == 'evt_noon_end':
             for position in self.position.values():
                 if position.volume != position.volume_available:
-                    position.volume = position.volume_available
+                    position.volume_available = position.volume
                     await position.sync_to_db()
             for entrust in self.entrust.values():
                 if entrust.status == 'commit':
@@ -171,6 +172,31 @@ class Account(BaseObj):
 
         if evt == 'evt_quotation':
             await self.update_account(payload=payload)
+
+    def get_position_volume(self, code) -> Tuple[int, int]:
+        if code not in self.position:
+            return 0, 0
+
+        position = self.position[code]
+        return position.volume, position.volume_available
+
+    def get_fee(self, typ, code, price, volume) -> float:
+        total = price * volume
+        broker_fee = total * self.broker_fee
+        if broker_fee < 5:
+            broker_fee = 5
+        tax_fee = 0
+        if typ == 'buy':
+            if code.startswith('sh6'):
+                tax_fee = total * self.transfer_fee
+        elif typ == 'sell':
+            if code.startswith('sz') or code.startswith('sh'):
+                tax_fee = total * self.tax_fee
+        return round(broker_fee + tax_fee, 2)
+
+    def get_cost(self, typ, code, price, volume) -> float:
+        fee = self.get_fee(typ=typ, code=code, price=price, volume=volume)
+        return round(fee + price*volume, 2)
 
     async def update_account(self, payload):
         self.profit = 0
@@ -198,12 +224,26 @@ class Account(BaseObj):
         :param payload:  TradeSignal / entrust_id
         :return:
         """
+        self.log.info('account on_signal: evt={}, signal={}'.format(evt, payload))
         sig = payload
         await sig.sync_to_db()
         if self.trader.is_backtest():
             self.signal.append(sig)
 
         if evt == 'evt_sig_buy' or evt == 'evt_sig_sell':
+            cost = 0
+            if evt == 'evt_sig_buy':
+                cost = self.get_cost(typ='buy',
+                                     code=sig.code, price=sig.price, volume=sig.volume)
+                if cost > self.cash_available:
+                    self.log.warn('not enough money to buy, cost={}, available={}'.format(cost, self.cash_available))
+                    return
+            if evt == 'evt_sig_sell':
+                volume, volume_available = self.get_position_volume(sig.code)
+                if volume_available < sig.volume:
+                    self.log.warn('not volume to sell, entrust={}, available={}'.format(sig.volume, volume_available))
+                    return
+
             entrust = Entrust(self.get_uuid(), self)
             entrust.name = sig.name
             entrust.code = sig.code
@@ -217,10 +257,24 @@ class Account(BaseObj):
             entrust.volume_cancel = 0
 
             self.entrust[entrust.entrust_id] = entrust
-
             await entrust.sync_to_db()
-            evt_broker = 'evt_broker_buy' if evt == 'evt_sig_buy' else 'evt_broker_sell'
-            self.emit('broker', evt_broker, entrust)
+
+            evt_broker = None
+            if evt == 'evt_sig_buy':
+                evt_broker = 'evt_broker_buy'
+                self.cash_frozen += cost
+                self.cash_available -= cost
+
+                await self.sync_to_db()
+            elif evt == 'evt_sig_sell':
+                evt_broker = 'evt_broker_sell'
+                position = self.position[sig.code]
+                position.volume_available -= sig.volume
+                position.volume_frozen += sig.volume
+
+                await position.sync_to_db()
+            if evt_broker is not None:
+                self.emit('broker', evt_broker, entrust)
 
         if evt == 'evt_cancel':
             entrust = self.entrust[sig]
@@ -233,7 +287,9 @@ class Account(BaseObj):
 
         position.profit = round((position.now_price - position.price) * position.volume - position.fee, 2)
         position.max_profit = position.profit if position.profit > position.max_profit else position.max_profit
+        position.max_profit_time = position.time if position.profit > position.max_profit else position.max_profit_time
         position.min_profit = position.profit if position.profit < position.min_profit else position.min_profit
+        position.min_profit_time = position.time if position.profit < position.min_profit else position.min_profit_time
 
         position.profit_rate = round(position.profit / (position.volume * position.price + position.fee) * 100, 2)
         position.max_profit_rate = position.profit_rate if position.profit_rate > position.max_profit_rate else position.max_profit_rate
@@ -259,6 +315,7 @@ class Account(BaseObj):
 
             await position.sync_to_db()
             self.position[position.code] = position
+
         else:
             position = self.position[deal.code]
             position.time = deal.time
@@ -272,6 +329,7 @@ class Account(BaseObj):
 
             await position.sync_to_db()
 
+        self.cash_frozen -= self.get_cost('buy', position.code, deal.price, deal.volume)
         await self.update_account(None)
 
     async def deduct_position(self, deal):
@@ -287,6 +345,7 @@ class Account(BaseObj):
                     position.volume - deal.volume), 2)
 
             position.now_price = deal.price
+            position.volume_frozen -= deal.volume
             self.update_position(position)
             await position.sync_to_db()
 
@@ -303,6 +362,7 @@ class Account(BaseObj):
         :param payload: Entrust
         :return:
         """
+        self.log.info('account on_broker: evt={}, signal={}'.format(evt, payload))
         if evt == 'evt_broker_buy' or evt == 'evt_broker_sell':
             entrust = copy.copy(payload)
             self.entrust[entrust.entrust_id] = entrust
@@ -319,18 +379,10 @@ class Account(BaseObj):
             deal.price = entrust.price
             deal.volume = entrust.volume_deal
 
-            total = deal.price * deal.volume
-            broker_fee = total * self.broker_fee
-            if broker_fee < 5:
-                broker_fee = 5
-            tax_fee = 0
-            if evt == 'evt_broker_buy':
-                if deal.code.startswith('sh'):
-                    tax_fee = total * self.transfer_fee
-            else:
-                if deal.code.startswith('sz') or deal.code.startswith('sh'):
-                    tax_fee = total * self.tax_fee
-            deal.fee = round(broker_fee + tax_fee, 2)
+            typ = 'buy'
+            if evt == 'evt_broker_sell':
+                typ = 'sell'
+            deal.fee = self.get_fee(typ=typ, code=deal.code, price=deal.price, volume=deal.volume)
             if self.trader.is_backtest():
                 self.deal.append(deal)
 
@@ -376,6 +428,3 @@ class Account(BaseObj):
                 'deal': self.get_obj_list(self.deal),
                 'signal': self.get_obj_list(self.signal)
                 }
-
-    def __str__(self):
-        return json.dumps(self.to_dict(), indent=2)

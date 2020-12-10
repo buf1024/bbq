@@ -90,7 +90,6 @@ class Quotation(ABC):
         self.code_info.clear()
         for data in df.to_dict('records'):
             self.code_info[data['code']] = data['name']
-
         return True
 
     def is_trading(self) -> bool:

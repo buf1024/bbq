@@ -20,27 +20,28 @@ class Dummy(Strategy):
             for quot in payload['list'].values():
                 day_time = quot['day_time']
                 trade_date = datetime(year=day_time.year, month=day_time.month, day=day_time.day)
-                code, price = quot['code'], quot['close']
+                code, name, price = quot['code'], quot['name'], quot['close']
                 is_sig, signal = False, ''
-                if trade_date not in self.trade_date:
-                    if code not in self.test_codes:
-                        self.trade_date[trade_date] = [code]
+
+                if code not in self.test_codes_buy:
                     is_sig = True
-                    signal = ''
-                else:
-                    codes = self.trade_date[trade_date]
-                    if code not in codes:
-                        codes.append(code)
+                    signal = 'buy'
+                    self.test_codes_buy.append(code)
+                    self.trade_date_buy[code] = trade_date
+                if code not in self.test_codes_sell and code in self.test_codes_buy:
+                    if self.trade_date_buy[code] != trade_date:
                         is_sig = True
+                        signal = 'sell'
+                        self.test_codes_sell.append(code)
+                        self.trade_date_sell[code] = trade_date
 
                 if is_sig:
                     sig = TradeSignal(self.get_uuid(), self.account)
                     sig.source = 'strategy'
-                    sig.signal = 'buy'
+                    sig.signal = signal
                     sig.code = code
+                    sig.name = name
                     sig.price = price
                     sig.volume = 100
                     sig.time = day_time
-                    self.emit('signal', 'evt_sig_buy', sig)
-                    if sig.code.startswith('sz'):
-                        self.emit('signal', 'evt_sig_buy', sig)
+                    self.emit('signal', ('evt_sig_buy' if signal == 'buy' else 'evt_sig_sell'), sig)

@@ -23,7 +23,7 @@ def _get_logger(name, level, file):
         ch.setFormatter(formatter)
         log.addHandler(ch)
         if file is not None:
-            ch = TimedRotatingFileHandler(file, 'D', 1)
+            ch = TimedRotatingFileHandler(file, 'D', 1, encoding='utf-8')
             ch.setLevel(level)
             ch.setFormatter(formatter)
             log.addHandler(ch)

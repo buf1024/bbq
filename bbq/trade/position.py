@@ -1,4 +1,5 @@
 from bbq.trade.base_obj import BaseObj
+import sys
 
 
 class Position(BaseObj):
@@ -14,6 +15,7 @@ class Position(BaseObj):
 
         self.volume = 0  # 持仓量
         self.volume_available = 0  # 可用持仓量
+        self.volume_frozen = 0  # 可用持仓量
 
         self.fee = 0.0  # 持仓费用
         self.price = 0.0  # 平均持仓价
@@ -23,12 +25,12 @@ class Position(BaseObj):
         self.min_price = 0.0  # 最低价
 
         self.profit_rate = 0.0  # 盈利比例
-        self.max_profit_rate = 0.0  # 最大盈利比例
-        self.min_profit_rate = 0.0  # 最小盈利比例
+        self.max_profit_rate = -sys.maxsize  # 最大盈利比例
+        self.min_profit_rate = sys.maxsize  # 最小盈利比例
 
         self.profit = 0.0  # 盈利
-        self.max_profit = 0.0  # 最大盈利
-        self.min_profit = 0.0  # 最小盈利
+        self.max_profit = -sys.maxsize  # 最大盈利
+        self.min_profit = sys.maxsize  # 最小盈利
 
         self.max_profit_time = None  # 最大盈利时间
         self.min_profit_time = None  # 最小盈利时间
@@ -109,3 +111,4 @@ class Position(BaseObj):
                     '%Y-%m-%d %H:%M:%S') if self.min_profit_time is not None else None,
                 'time': self.time.strftime('%Y-%m-%d %H:%M:%S') if self.time is not None else None
                 }
+
