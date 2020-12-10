@@ -141,6 +141,13 @@ class TradeDB(MongoDB):
         self.log.debug('保存持仓信息成功')
         return inserted_ids
 
+    async def delete_position(self, data: Dict):
+        self.log.debug('删除持仓信息, data = {}'.format(data))
+        inserted_ids = await self.do_delete(coll=self.position_info,
+                                            filter={'position_id': data['position_id']})
+        self.log.debug('删除持仓信息成功')
+        return inserted_ids
+
     async def load_strategy(self, **kwargs) -> List:
         self.log.debug('查询策略信息, kwargs={} ...'.format(kwargs))
         data = await self.do_load(self.strategy_info, to_frame=False, **kwargs)

@@ -16,7 +16,7 @@
       "frequency": "1min",
       "start_date": "",
       "end_date": "",
-      "code": ["sh000001", "sz000001"]
+      "codes": ["sh000001", "sz000001"]
   },
   "trade": {
     "account-id": "",

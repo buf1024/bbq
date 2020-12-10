@@ -15,8 +15,8 @@ class Broker(BaseObj):
     产生的事件:
     1. 委托(买,卖,撤销)提交事件
     2. 委托(买,卖,撤销)成交事件
-    3. 资金同步事件
-    4. 持仓同步事件
+    3. 资金同步事件*
+    4. 持仓同步事件*
     """
 
     def __init__(self, broker_id, account: Account):

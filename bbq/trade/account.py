@@ -150,18 +150,6 @@ class Account(BaseObj):
         await self.db_trade.save_account(data=data)
         return True
 
-    async def update_account(self, position, payload):
-        if payload is not None:
-            await position.on_quot(payload)
-        self.profit += position.profit
-        self.profit = round(self.profit, 2)
-        self.total_value += (position.now_price * position.volume)
-        self.cost += (position.price * position.volume + position.fee)
-        if self.cost > 0:
-            self.profit_rate = round(self.profit / self.cost * 100, 2)
-        self.cash_available = self.cash_init - self.cost
-        await self.sync_to_db()
-
     async def on_quot(self, evt, payload):
         # evt_start(backtest)
         # evt_morning_start evt_quotation evt_morning_end
@@ -169,19 +157,53 @@ class Account(BaseObj):
         # evt_end(backtest)
         self.log.info('account on quot, event={}, payload={}'.format(evt, payload))
         if evt == 'evt_noon_end':
-            # 日终处理
-            pass
-        if evt == 'evt_quotation':
             for position in self.position.values():
-                if position.code in payload:
-                    await self.update_account(position, payload[position.code])
+                if position.volume != position.volume_available:
+                    position.volume = position.volume_available
+                    await position.sync_to_db()
+            for entrust in self.entrust.values():
+                if entrust.status == 'commit':
+                    entrust.status = 'cancel'
+                    await entrust.sync_to_db()
+            if not self.trader.is_backtest():
+                self.entrust.clear()
+            await self.trader.daily_report()
 
-    async def on_signal(self, evt, sig):
+        if evt == 'evt_quotation':
+            await self.update_account(payload=payload)
+
+    async def update_account(self, payload):
+        self.profit = 0
+        self.cost = 0
+        self.total_value = 0
+        for position in self.position.values():
+            if payload is not None and position.code in payload:
+                await position.on_quot(payload)
+            self.profit += position.profit
+            self.profit = round(self.profit, 2)
+            self.total_value += (position.now_price * position.volume)
+            self.cost += (position.price * position.volume + position.fee)
+
+        if self.cost > 0:
+            self.profit_rate = round(self.profit / self.cost * 100, 2)
+
+        self.cash_available = self.cash_init - self.cost
+        await self.sync_to_db()
+
+    async def on_signal(self, evt, payload):
+        """
+        payload.source  # 信号源: risk, strategy, broker, manual
+        payload.signal  # sell, buy, cancel
+        :param evt:  evt_sig_buy, evt_sig_sell, evt_sig_cancel
+        :param payload:  TradeSignal / entrust_id
+        :return:
+        """
+        sig = payload
         await sig.sync_to_db()
         if self.trader.is_backtest():
             self.signal.append(sig)
 
-        if sig.signal == 'buy':
+        if evt == 'evt_sig_buy' or evt == 'evt_sig_sell':
             entrust = Entrust(self.get_uuid(), self)
             entrust.name = sig.name
             entrust.code = sig.code
@@ -197,7 +219,25 @@ class Account(BaseObj):
             self.entrust[entrust.entrust_id] = entrust
 
             await entrust.sync_to_db()
-            self.emit('broker', 'evt_buy', entrust)
+            evt_broker = 'evt_broker_buy' if evt == 'evt_sig_buy' else 'evt_broker_sell'
+            self.emit('broker', evt_broker, entrust)
+
+        if evt == 'evt_cancel':
+            entrust = self.entrust[sig]
+            self.emit('broker', 'evt_broker_cancel', entrust)
+
+    @staticmethod
+    def update_position(position):
+        position.max_price = position.now_price if position.now_price > position.max_price else position.max_price
+        position.min_price = position.now_price if position.now_price < position.min_price else position.min_price
+
+        position.profit = round((position.now_price - position.price) * position.volume - position.fee, 2)
+        position.max_profit = position.profit if position.profit > position.max_profit else position.max_profit
+        position.min_profit = position.profit if position.profit < position.min_profit else position.min_profit
+
+        position.profit_rate = round(position.profit / (position.volume * position.price + position.fee) * 100, 2)
+        position.max_profit_rate = position.profit_rate if position.profit_rate > position.max_profit_rate else position.max_profit_rate
+        position.min_profit_rate = position.profit_rate if position.profit < position.min_profit_rate else position.min_profit_rate
 
     async def add_position(self, deal):
         position = None
@@ -214,19 +254,8 @@ class Account(BaseObj):
             position.price = deal.price
 
             position.now_price = deal.price
-            position.max_price = deal.price
-            position.min_price = deal.price
 
-            position.profit_rate = round(-deal.fee / (deal.volume * deal.price + deal.fee) * 100, 2)
-            position.max_profit_rate = position.profit_rate
-            position.min_profit_rate = position.profit_rate
-
-            position.profit = round(-deal.fee, 2)
-            position.max_profit = position.profit
-            position.min_profit = position.profit
-
-            position.max_profit_time = deal.time
-            position.min_profit_time = deal.time
+            self.update_position(position)
 
             await position.sync_to_db()
             self.position[position.code] = position
@@ -239,23 +268,42 @@ class Account(BaseObj):
             position.volume += deal.volume
 
             position.now_price = deal.price
-            position.max_price = deal.price if deal.price > position.max_price else position.max_price
-            position.min_price = deal.price if deal.price < position.min_price else position.min_price
-
-            position.profit = round((position.now_price - position.price) * position.volume - position.fee, 2)
-            position.max_profit = position.profit if position.profit > position.max_profit else position.max_profit
-            position.min_profit = position.profit if position.profit < position.min_profit else position.min_profit
-
-            position.profit_rate = round(position.profit / (deal.volume * deal.price + deal.fee) * 100, 2)
-            position.max_profit_rate = position.profit_rate if position.profit_rate > position.max_profit_rate else position.max_profit_rate
-            position.min_profit_rate = position.profit_rate if position.profit < position.min_profit_rate else position.min_profit_rate
+            self.update_position(position)
 
             await position.sync_to_db()
 
-        await self.update_account(position, None)
+        await self.update_account(None)
+
+    async def deduct_position(self, deal):
+        if deal.code not in self.position:
+            self.log.error('deduct_position code not found: {}'.format(deal.code))
+            return
+        position = self.position[deal.code]
+        position.time = deal.time
+        position.fee += deal.fee
+        position.volume -= deal.volume
+        if position.volume > 0:
+            position.price = round((position.price * position.volume - deal.price * deal.volume) / (
+                    position.volume - deal.volume), 2)
+
+            position.now_price = deal.price
+            self.update_position(position)
+            await position.sync_to_db()
+
+        if position.volume == 0:
+            del self.position[position.code]
+            await self.db_data.delete_position(position)
+
+        await self.update_account(None)
 
     async def on_broker(self, evt, payload):
-        if evt == 'evt_buy':
+        """
+
+        :param evt:
+        :param payload: Entrust
+        :return:
+        """
+        if evt == 'evt_broker_buy' or evt == 'evt_broker_sell':
             entrust = copy.copy(payload)
             self.entrust[entrust.entrust_id] = entrust
             await entrust.sync_to_db()
@@ -276,20 +324,36 @@ class Account(BaseObj):
             if broker_fee < 5:
                 broker_fee = 5
             tax_fee = 0
-            if deal.code.startswith('sh6'):
-                tax_fee = total * self.transfer_fee
+            if evt == 'evt_broker_buy':
+                if deal.code.startswith('sh'):
+                    tax_fee = total * self.transfer_fee
+            else:
+                if deal.code.startswith('sz') or deal.code.startswith('sh'):
+                    tax_fee = total * self.tax_fee
             deal.fee = round(broker_fee + tax_fee, 2)
             if self.trader.is_backtest():
                 self.deal.append(deal)
 
             await deal.sync_to_db()
-            await self.add_position(deal)
+            if evt == 'evt_broker_buy':
+                await self.add_position(deal)
+            else:
+                await self.deduct_position(deal)
 
-    async def on_risk(self, evt, payload):
-        pass
+            if entrust.volume == entrust.volume_deal + entrust.volume_cancel:
+                if not self.trader.is_backtest():
+                    del self.entrust[entrust.entrust_id]
 
-    async def on_strategy(self, evt, payload):
-        pass
+        if evt == 'evt_broker_cancel':
+            entrust = self.entrust[payload.entrust_id]
+            entrust.volume_cancel = payload.volume_cancel
+            if entrust.volume_deal != 0:
+                entrust.status = 'part_deal'
+            else:
+                entrust.status = 'cancel'
+            await entrust.sync_to_db()
+            if not self.trader.is_backtest():
+                del self.entrust[entrust.entrust_id]
 
     @staticmethod
     def get_obj_list(lst):
@@ -315,4 +379,3 @@ class Account(BaseObj):
 
     def __str__(self):
         return json.dumps(self.to_dict(), indent=2)
-

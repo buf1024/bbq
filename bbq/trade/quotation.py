@@ -6,6 +6,8 @@ import bbq.fetch as fetch
 import bbq.log as log
 from bbq.data.mongodb import MongoDB
 import traceback
+from bbq.data.stockdb import StockDB
+from bbq.data.funddb import FundDB
 
 """
 行情下发顺序：
@@ -29,10 +31,12 @@ class Quotation(ABC):
         self.trade_date = None
         self.quot_date = {}
 
+        self.code_info = {}
+
     async def init(self, opt) -> bool:
         self.opt = opt
         try:
-            frequency, code = self.opt['frequency'].lower(), self.opt['code']
+            frequency, codes = self.opt['frequency'].lower(), self.opt['codes']
             if 'min' not in frequency and 'm' not in frequency and \
                     'sec' not in frequency and 's' not in frequency:
                 self.log.error('frequency 格式不正确')
@@ -59,16 +63,35 @@ class Quotation(ABC):
             if 'end_date' in self.opt and self.opt['end_date'] is not None:
                 self.end_date = self.opt['end_date']
 
-            self.codes = code
+            if not await self.add_code(codes):
+                self.log.error('obtain code info failed')
+                return False
 
             return True
 
         except Exception as e:
-            self.log.error('quot 初始化失败, ex={}'.format(e))
+            self.log.error('quot 初始化失败, ex={}, callstack={}'.format(e, traceback.format_exc()))
             return False
 
     async def get_quot(self) -> Optional[Tuple[Optional[str], Optional[Dict]]]:
         return None, None
+
+    async def add_code(self, codes) -> bool:
+        self.codes = self.codes + codes
+        df = None
+        if isinstance(self.db_data, StockDB):
+            df = await self.db_data.load_stock_info(filter={'code': {'$in': self.codes}}, projection=['code', 'name'])
+        elif isinstance(self.db_data, FundDB):
+            df = await self.db_data.load_fund_info(filter={'code': {'$in': self.codes}}, projection=['code', 'name'])
+        if df is None:
+            self.log.error('db stock/fund info failed')
+            return False
+
+        self.code_info.clear()
+        for data in df.to_dict('records'):
+            self.code_info[data['code']] = data['name']
+
+        return True
 
     def is_trading(self) -> bool:
         if self.trade_date is None:
@@ -154,38 +177,48 @@ class BacktestQuotation(Quotation):
     def pre_trade_date(start):
         while True:
             pre_start = start + timedelta(days=-1)
-            if fetch.is_trade_date(start):
+            if fetch.is_trade_date(pre_start):
                 return pre_start
 
-    async def init(self, opt) -> bool:
-        try:
-            if not await super().init(opt=opt):
+    @staticmethod
+    def next_trade_date(start):
+        while True:
+            next_start = start + timedelta(days=1)
+            if fetch.is_trade_date(start):
+                return next_start
+
+    async def add_code(self, codes) -> bool:
+        if len(codes) > 0:
+            if not await super().add_code(codes):
                 return False
-
-            bar = OrderedDict()
-            for code in self.codes:
-                df = fetch.fetch_stock_minute(code=code, period=str(int(self.frequency / 60)),
-                                              start=self.start_date, end=self.end_date)
-                if df is None:
-                    self.log.error('指数/股票{}, {} k线无数据'.format(code, self.frequency))
-                    return False
-                bar[code] = df
-
-            if not await self.add_bar(bars=bar):
+            if not await self.init_bar(codes):
                 return False
+        return True
 
-            return True
+    async def init_bar(self, codes) -> bool:
+        bar = OrderedDict()
+        for code in codes:
+            df = fetch.fetch_stock_minute(code=code, period=str(int(self.frequency / 60)),
+                                          start=self.start_date, end=self.end_date)
+            if df is None:
+                self.log.error('指数/股票{}, {} k线无数据'.format(code, self.frequency))
+                return False
+            df['name'] = self.code_info[code]
+            bar[code] = df
 
-        except Exception as e:
-            self.log.error('backtest quot 初始化失败, ex={}, callstack={}'.format(e, traceback.format_exc()))
-        return False
+        if not await self.add_bar(bars=bar):
+            return False
+
+        return True
 
     async def add_bar(self, bars) -> bool:
         if len(bars) > 0:
             for code, bar_df in bars.items():
                 start, end = bar_df.iloc[0]['day_time'], bar_df.iloc[-1]['day_time']
+                if self.day_time is not None:
+                    start = self.next_trade_date(self.day_time)
                 pre_start = self.pre_trade_date(start)
-                df_daily = fetch.fetch_stock_daily(code=code, start=pre_start, end=end)
+                df_daily = fetch.fetch_stock_daily(code=code, start=pre_start, end=end, adjust=False)
                 if df_daily is None:
                     self.log.error('fetch fetch_stock_daily failed')
                     return False
@@ -208,7 +241,9 @@ class BacktestQuotation(Quotation):
                         if day_time not in self.bar:
                             self.bar[day_time] = OrderedDict()
                         self.bar[day_time][code] = data
-        self.iter = iter(self.bar)
+
+        if self.day_time is None:
+            self.iter = iter(self.bar)
         return True
 
     async def get_quot(self) -> Optional[Tuple[Optional[str], Optional[Dict]]]:
@@ -273,24 +308,34 @@ class RealtimeQuotation(Quotation):
         self.last_pub = now
 
     def update_bar(self, now, quots):
+        def _get_quot(pre_bar, q, c, field):
+            if pre_bar is None:
+                return q[field]
+            if c not in pre_bar:
+                return q[field]
+            return pre_bar[c][field]
+
         if self.bar is None:
             self.bar = self.pre_bar
             if self.bar is None:
                 self.bar = OrderedDict()
             for quot in quots.to_dict('records'):
                 code = quot['code']
+                if code not in self.codes:
+                    print('not in')
+                    continue
                 self.bar[code] = dict(code=code,
+                                      name=self.code_info[code],
                                       day_time=quot['day_time'],
                                       day_open=quot['open'], day_high=quot['high'], day_low=quot['low'],
                                       last_close=quot['last_close'],
-                                      open=quot['close'] if self.pre_bar is None else self.pre_bar[code]['close'],
-                                      high=quot['close'] if self.pre_bar is None else self.pre_bar[code]['close'],
-                                      low=quot['close'] if self.pre_bar is None else self.pre_bar[code]['close'],
+                                      open=_get_quot(self.pre_bar, quot, code, 'close'),
+                                      high=_get_quot(self.pre_bar, quot, code, 'close'),
+                                      low=_get_quot(self.pre_bar, quot, code, 'close'),
                                       close=quot['close'],
-                                      volume=quot['volume'] if self.pre_bar is None else self.pre_bar[code]['volume'],
-                                      amount=quot['amount'] if self.pre_bar is None else self.pre_bar[code]['amount'],
-                                      turnover=quot['turnover'] if self.pre_bar is None else self.pre_bar[code][
-                                          'turnover'], )
+                                      volume=_get_quot(self.pre_bar, quot, code, 'volume'),
+                                      amount=_get_quot(self.pre_bar, quot, code, 'amount'),
+                                      turnover=_get_quot(self.pre_bar, quot, code, 'turnover'),)
             self.bar_time = dict(start=now, end=None)
         else:
             for quot in quots.to_dict('records'):
@@ -333,7 +378,6 @@ class RealtimeQuotation(Quotation):
 
 if __name__ == '__main__':
     from bbq.common import run_until_complete
-    from bbq.data.stockdb import StockDB
     import asyncio
 
     db = StockDB()
@@ -344,29 +388,38 @@ if __name__ == '__main__':
 
 
     async def test_rt():
-        if not await rt.init(opt=dict(frequency='10s', index=['sh000001'], stock=['sh601099', 'sz000001'])):
+        if not await rt.init(opt=dict(frequency='10s', codes=['sh601099', 'sz000001'])):
             print('初始化失败')
             return
+        i = 0
         while True:
             data = await rt.get_quot()
             print('data: {}'.format(data))
-            await asyncio.sleep(5)
+            await asyncio.sleep(1)
+            if i == 3:
+                await rt.add_code(['sz300076'])
+            i += 1
 
 
     async def test_bt():
-        if not await bt.init(opt=dict(frequency='1min', index=[], stock=['sz000001', 'sh601099'],
-                                      start_date='2020-12-01', end_date='2020-12-04')):
+        if not await bt.init(opt=dict(frequency='60min', codes=['sz000001', 'sh601099'],
+                                      start_date=datetime.strptime('2020-12-01', '%Y-%m-%d'),
+                                      end_date=datetime.strptime('2020-12-04', '%Y-%m-%d'))):
             print('初始化失败')
             return
+        i = 0
         while True:
             data = await bt.get_quot()
             if data[0] is None:
                 break
+            if i == 7:
+                await bt.add_code(['sz300076'])
             print('data: {}'.format(data))
+            i += 1
             # await asyncio.sleep(5)
 
 
     run_until_complete(
-        # test_rt()
-        test_bt()
+        test_rt()
+        # test_bt()
     )

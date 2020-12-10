@@ -180,9 +180,10 @@ class MyFetch(BaseFetch):
         return df
 
     @BaseFetch.retry_client
-    def fetch_stock_daily(self, code: str, start: datetime = None, end: datetime = None) -> Optional[pd.DataFrame]:
+    def fetch_stock_daily(self, code: str, start: datetime = None, end: datetime = None, adjust: bool = True) -> Optional[pd.DataFrame]:
         """
         股票日线数据,
+        :param adjust:
         :param code:
         :param start:
         :param end:
@@ -193,16 +194,17 @@ class MyFetch(BaseFetch):
             return None
 
         df_hfq_factor = None
-        try:
-            self.log.debug('获取股票{}后复权因子...'.format(code))
-            df_hfq_factor = ak.stock_zh_a_daily(symbol=code, adjust='hfq-factor')
-            if df_hfq_factor is None:
-                self.log.error('获取股票{}后复权因子失败'.format(code))
-                return None
-            df_hfq_factor.dropna(inplace=True)
-        except Exception as e:
-            self.log.info('获取股票{}复权数据失败(可能未曾复权)'.format(code))
-            df_hfq_factor = None
+        if adjust:
+            try:
+                self.log.debug('获取股票{}后复权因子...'.format(code))
+                df_hfq_factor = ak.stock_zh_a_daily(symbol=code, adjust='hfq-factor')
+                if df_hfq_factor is None:
+                    self.log.error('获取股票{}后复权因子失败'.format(code))
+                    return None
+                df_hfq_factor.dropna(inplace=True)
+            except Exception as e:
+                self.log.info('获取股票{}复权数据失败(可能未曾复权)'.format(code))
+                df_hfq_factor = None
 
         self.log.debug('获取股票{}未复权数据...'.format(code))
         df = None
@@ -601,9 +603,9 @@ if __name__ == '__main__':
     now_pre = now - timedelta(days=1)
 
     # ['day_time', 'code', 'high', 'low', 'close', 'volume', 'amount','turnover']
-    df = aks.fetch_stock_rt_quote(codes=['sh601099', 'sz000001'])
-    print(df)
-    print(df.columns)
+    # df = aks.fetch_stock_rt_quote(codes=['sh601099', 'sz000001'])
+    # print(df)
+    # print(df.columns)
 
     # day_time open high low close volume code
     # df = aks.fetch_stock_minute(code='sh601099', period='5')
@@ -613,7 +615,9 @@ if __name__ == '__main__':
     # df = aks.fetch_stock_info()
     # print(df)
 
-    # df = ak.stock_zh_a_daily(symbol='sz000001', adjust='hfq-factor')
+    # df = ak.stock_zh_a_daily(symbol='sz159949', adjust='')
+    # print(df)
+    # df, msg = stock.get_daily('159949.SZ', start_date='2017-06-06', end_date='2018-06-07')
     # print(df)
     #
     # df = ak.stock_zh_a_daily(symbol='sz000001', adjust='qfq-factor')
@@ -625,11 +629,11 @@ if __name__ == '__main__':
     # df = ak.fund_etf_hist_sina(symbol='sz159949')
     # print(df)
 
-    # df = aks.fetch_fund_daily_xueqiu(code='159805',
-    #                                  start=datetime(year=2020, month=11, day=23),
-    #                                  end=datetime(year=2020, month=11, day=27))
-    #
-    # print(df)
+    df = aks.fetch_fund_daily_xueqiu(code='159805',
+                                     start=datetime(year=2020, month=11, day=23),
+                                     end=datetime(year=2020, month=11, day=27))
+
+    print(df)
 
     # df = aks.fetch_stock_daily_xueqiu(code='sz159949')
     # print(df)

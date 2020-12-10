@@ -10,14 +10,12 @@ from bbq.config import init_config
 import multiprocessing as mp
 from typing import Dict, Optional
 from bbq.trade.account import Account
-from bbq.trade.entrust import Entrust
 from bbq.trade.broker import init_broker, get_broker
 from bbq.trade.risk import init_risk, get_risk
 from bbq.trade.strategy import init_strategy, get_strategy
 from datetime import datetime
 from bbq.trade.strategy_info import StrategyInfo
 from bbq.trade.quotation import BacktestQuotation, RealtimeQuotation
-from functools import partial
 import os
 import sys
 import signal
@@ -40,6 +38,7 @@ class Trader:
             strategy=asyncio.Queue(),
             broker=asyncio.Queue(),
             broker_event=asyncio.Queue(),
+            quotation=asyncio.Queue(),
         )
 
         self.task_queue = asyncio.Queue()
@@ -67,6 +66,9 @@ class Trader:
 
         await self.task_queue.put('quot_task')
         self.loop.create_task(self.quot_task())
+
+        await self.task_queue.put('quot_sub_task')
+        self.loop.create_task(self.general_async_task('quotation', self.on_quot_sub))
 
         await self.task_queue.put('account_task')
         self.loop.create_task(self.account_task())
@@ -111,6 +113,15 @@ class Trader:
     async def backtest_report(self):
         self.log.info('backtest report')
         print(self.account)
+
+    async def daily_report(self):
+        print('daily_report')
+
+    async def on_quot_sub(self, evt, payload):
+        if evt == 'evt_quot_codes':
+            codes = payload
+            if len(codes) > 0:
+                await self.quot.add_code(codes=codes)
 
     async def create_new_account(self) -> Optional[Account]:
         typ = self.config['trade']['type']

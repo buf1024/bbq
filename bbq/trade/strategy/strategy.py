@@ -3,32 +3,6 @@ from bbq.trade.base_obj import BaseObj
 from bbq.trade.account import Account
 from typing import Dict, Optional
 
-'''
-{
-    "strategy": {
-        "name": 'test',
-        "risk": {
-            "name": ""
-        },
-        "select": {
-            "name": ""
-        }
-    },
-    "broker": {
-        "name": "ths",
-        "account": {
-        }
-    },
-    "status": "running",
-    "create_time": "",
-    "update_time": ""
-}
-'''
-
-'''
-
-'''
-
 
 class Strategy(BaseObj):
     def __init__(self, strategy_id, account: Account):

@@ -8,7 +8,11 @@ class Dummy(Strategy):
     def __init__(self, strategy_id, account: Account):
         super().__init__(strategy_id=strategy_id, account=account)
 
-        self.trade_date = {}
+        self.test_codes_buy = []
+        self.test_codes_sell = []
+
+        self.trade_date_buy = {}
+        self.trade_date_sell = {}
 
     async def on_quot(self, evt, payload):
         self.log.info('dummy strategy on_quot: evt={}, payload={}'.format(evt, payload))
@@ -17,10 +21,12 @@ class Dummy(Strategy):
                 day_time = quot['day_time']
                 trade_date = datetime(year=day_time.year, month=day_time.month, day=day_time.day)
                 code, price = quot['code'], quot['close']
-                is_sig = False
+                is_sig, signal = False, ''
                 if trade_date not in self.trade_date:
-                    self.trade_date[trade_date] = [code]
+                    if code not in self.test_codes:
+                        self.trade_date[trade_date] = [code]
                     is_sig = True
+                    signal = ''
                 else:
                     codes = self.trade_date[trade_date]
                     if code not in codes:
@@ -35,6 +41,6 @@ class Dummy(Strategy):
                     sig.price = price
                     sig.volume = 100
                     sig.time = day_time
-                    self.emit('signal', 'evt_signal', sig)
+                    self.emit('signal', 'evt_sig_buy', sig)
                     if sig.code.startswith('sz'):
-                        self.emit('signal', 'evt_signal', sig)
+                        self.emit('signal', 'evt_sig_buy', sig)

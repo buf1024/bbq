@@ -112,7 +112,6 @@ class FundDB(MongoDB):
 if __name__ == '__main__':
     from bbq.fetch.fund_eastmoney import FundEastmoney
     from bbq.common import run_until_complete
-    from bbq.config import conf_dict
     import sys
 
 
@@ -153,7 +152,7 @@ if __name__ == '__main__':
         print('done')
 
 
-    mongo = FundDB(uri=conf_dict['mongo']['uri'], pool=conf_dict['mongo']['pool'])
+    mongo = FundDB()
     if not mongo.init():
         print('init fundDB failed.')
         sys.exit(-1)
