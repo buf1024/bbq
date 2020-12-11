@@ -8,7 +8,7 @@ class TradeDB(MongoDB):
         'account_info': {'account_id': '账户id', 'status': '账户状态(0正常 其他停止)',
                          'kind': '交易种类: stock, fund', 'type': '账户类型: real, simulate, backtest',
                          'cash_init': '初始资金', 'cash_available': '可用资金', 'cash_frozen': '冻结资金',
-                         'total_value': '持仓市值', 'cost': '持仓成本',
+                         'total_net_value': '总净值', 'total_hold_value': '持仓市值', 'cost': '持仓成本',
                          'broker_fee': '手续费', "transfer_fee": '过户费', "tax_fee": '印花税',
                          'profit': '盈利', 'profit_rate': '盈利比例',
                          'start_time': '开始时间', 'end_time': '结束时间', 'update_time': '更新时间'},
@@ -32,7 +32,8 @@ class TradeDB(MongoDB):
 
         # 持仓信息
         'position_info': {'account_id': '账户id', 'position_id': '持仓ID',  'name': '股票名称', 'code': '股票代码',
-                          'volume': '持仓量', 'volume_available': '可用持仓量', 'fee': '持仓费用', 'price': '平均持仓价',
+                          'volume': '持仓量', 'volume_available': '可用持仓量', 'volume_frozen': '冻结持仓量',
+                          'fee': '持仓费用', 'price': '平均持仓价',
                           'profit_rate': '盈利比例', 'max_profit_rate': '最大盈利比例', 'min_profit_rate': '最小盈利比例',
                           'profit': '盈利比例', 'max_profit': '最大盈利', 'min_profit': '最小盈利',
                           'now_price': '最新价', 'max_price': '最高价', 'min_price': '最低价',

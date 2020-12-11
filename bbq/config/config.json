@@ -12,6 +12,17 @@
     "trade": ["/Users/luoguochun/.config/bbq/strategy/trade"],
     "risk": ["/Users/luoguochun/.config/bbq/strategy/risk"]
   },
+  "message": {
+    "email": {
+      "host": "smtp.126.com",
+      "port": 465,
+      "email": "barbarianquant@126.com",
+      "secret": "DAZXJPKTVXRVOESQ"
+    },
+    "wechat": {
+      "secret": "SCU65265Tc40310137ed88be0281163cbc854ff925db79a6189f4d"
+    }
+  },
   "quotation": {
       "frequency": "1min",
       "start_date": "",

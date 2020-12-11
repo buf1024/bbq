@@ -36,6 +36,14 @@ class BaseObj(ABC):
     def emit(self, queue: str, evt: str, payload: object):
         self.trader.queue[queue].put_nowait((evt, payload))
 
+    @property
+    def is_trading(self):
+        return self.trader.is_trading
+
+    @is_trading.setter
+    def is_trading(self, value):
+        self.trader.is_trading = value
+
     async def sync_from_db(self) -> bool:
         return True
 

@@ -47,6 +47,8 @@ class Trader:
 
         self.running = False
 
+        self.is_trading = False
+
     async def start(self):
         await self.init_strategy()
 

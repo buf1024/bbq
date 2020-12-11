@@ -22,6 +22,7 @@ setup(
         'motor',
         'pymongo',
         'xlrd',
+        'aiosmtplib',
         'Click',
         'protobuf',
     ],
