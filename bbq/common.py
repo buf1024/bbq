@@ -4,7 +4,7 @@ import importlib
 import asyncio
 import bbq.log as log
 import base64
-import json
+import yaml
 
 
 def singleton(cls):
@@ -93,16 +93,16 @@ def setup_db(conf_dict, cls):
     return db
 
 
-def load_cmd_js(value):
+def load_cmd_yml(value):
     js = None
     for i in range(2):
         try:
             if i != 0:
                 value = base64.b64decode(str.encode(value, encoding='utf-8'))
-            js = json.loads(value)
+            js = yaml.load(value, yaml.FullLoader)
         except Exception as e:
             if i != 0:
-                print('e={}, not legal json string/base64 encode json string, please check'.format(e))
+                print('e={}, not legal yml string/base64 encode yml string, please check'.format(e))
     return js
 
 

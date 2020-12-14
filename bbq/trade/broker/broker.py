@@ -32,9 +32,6 @@ class Broker(BaseObj):
     async def destroy(self):
         pass
 
-    def on_strategy(self, payload):
-        raise Exception('{} on_strategy payload={}, not implement'.format(self.__class__.__name__, payload))
-
     async def on_entrust(self, evt, payload):
         pass
 

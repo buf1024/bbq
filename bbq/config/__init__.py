@@ -1,7 +1,7 @@
 import os
 import os.path
-import json
 from typing import Tuple
+import yaml
 
 
 def init_def_config() -> Tuple:
@@ -9,7 +9,7 @@ def init_def_config() -> Tuple:
 
     bbq_path = home + os.sep + '.config' + os.sep + 'bbq'
     log_path = bbq_path + os.sep + 'logs'
-    conf_file = bbq_path + os.sep + 'config.json'
+    conf_file = bbq_path + os.sep + 'config.yml'
 
     strategy_base_path = bbq_path + os.sep + 'strategy'
     strategy_select_path = strategy_base_path + os.sep + 'strategy' + os.sep + 'select'
@@ -31,12 +31,12 @@ def init_def_config() -> Tuple:
     )
 
     if not os.path.exists(conf_file):
-        conf_str = json.dumps(conf_dict, ensure_ascii=False, indent=2)
+        conf_str = yaml.dump(conf_dict)
         with open(conf_file, 'w') as f:
             f.write(conf_str)
     else:
         with open(conf_file) as f:
-            conf_dict = json.load(f)
+            conf_dict = yaml.load(f.read(), yaml.FullLoader)
 
     log_dict = conf_dict['log']
     log_dict['level'] = os.getenv('LOG_LEVEL', log_dict['level'])
@@ -59,7 +59,6 @@ def init_config(conf_file: str) -> Tuple:
 
     conf_dict = None
     with open(conf_file) as f:
-        conf_dict = json.load(f)
+        conf_dict = yaml.load(f.read(), yaml.FullLoader)
 
     return conf_file, conf_dict
-

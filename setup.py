@@ -24,6 +24,7 @@ setup(
         'xlrd',
         'aiosmtplib',
         'Click',
+        'PyYAML',
         'protobuf',
     ],
     entry_points={

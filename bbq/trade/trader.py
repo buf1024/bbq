@@ -1,7 +1,7 @@
 import bbq.log as log
 import click
 import asyncio
-from bbq.common import setup_log, setup_db, run_until_complete, load_cmd_js
+from bbq.common import setup_log, setup_db, run_until_complete, load_cmd_yml
 from bbq.data.mongodb import MongoDB
 from bbq.data.stockdb import StockDB
 from bbq.data.funddb import FundDB
@@ -436,9 +436,9 @@ def entry(**opts):
     risk_path = risk_path.split(',') if risk_path is not None else None
     broker_path = broker_path.split(',') if broker_path is not None else None
 
-    strategy_js = load_cmd_js(strategy) if strategy is not None else None
-    risk_js = load_cmd_js(risk) if risk is not None else None
-    broker_js = load_cmd_js(broker) if broker is not None else None
+    strategy_js = load_cmd_yml(strategy) if strategy is not None else None
+    risk_js = load_cmd_yml(risk) if risk is not None else None
+    broker_js = load_cmd_yml(broker) if broker is not None else None
     if (strategy is not None and strategy_js is None) or \
             (risk is not None and risk_js is None) or \
             (broker is not None and broker_js is None):

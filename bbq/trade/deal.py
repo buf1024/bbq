@@ -1,5 +1,4 @@
 from bbq.trade.base_obj import BaseObj
-import json
 
 
 class Deal(BaseObj):

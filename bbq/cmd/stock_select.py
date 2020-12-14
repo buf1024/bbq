@@ -1,4 +1,4 @@
-import json
+import yaml
 import click
 from bbq.common import run_until_complete
 from bbq.common import setup_db, setup_log
@@ -85,7 +85,7 @@ def list(ctx):
 @main.command()
 @click.pass_context
 @click.option('--strategy', type=str, help='strategy name')
-@click.option('--argument', type=str, help='strategy argument, json string/base64 json string')
+@click.option('--argument', type=str, help='strategy argument, yml string/base64 yml string')
 @click.option('--count', type=int, help='select count, default 10')
 @click.option('--regression/--no-regression', type=bool, help='auto regression, default False')
 def select(ctx, strategy: str, argument: str, count: int, regression: bool):
@@ -102,10 +102,11 @@ def select(ctx, strategy: str, argument: str, count: int, regression: bool):
             try:
                 if i != 0:
                     argument = base64.b64decode(str.encode(argument, encoding='utf-8'))
-                js = json.loads(argument)
+
+                js = yaml.load(argument, yaml.FullLoader)
             except Exception as e:
                 if i != 0:
-                    print('argument is not legal json string/base64 encode json string, please check --argument')
+                    print('argument is not legal yml string/base64 encode yml string, please check --argument')
                     return
     config = dict(ctx=ctx, strategy=strategy, count=count, regression=regression)
     run_until_complete(select_async(js=js, config=config))

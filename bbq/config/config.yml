@@ -1,0 +1,52 @@
+log:
+  level: debug
+  path: /Users/luoguochun/.config/bbq/logs
+mongo:
+  uri: mongodb://localhost:27017/
+  pool: 5
+strategy:
+  broker:
+    - /Users/luoguochun/.config/bbq/strategy/broker
+  trade:
+    - /Users/luoguochun/.config/bbq/strategy/trade
+  risk:
+    - /Users/luoguochun/.config/bbq/strategy/risk
+message:
+  email:
+    host: smtp.126.com
+    port: 465
+    email: barbarianquant@126.com
+    secret: DAZXJPKTVXRVOESQ
+  wechat:
+    secret: SCU65265Tc40310137ed88be0281163cbc854ff925db79a6189f4d
+quotation:
+  frequency": 1min
+  codes:
+    - sh000001
+    - sz000001
+  # 回测时用
+  #start_date:
+  #end_date":
+  },
+trade:
+  # 账户id
+  # account-id:
+  # 初始资金
+  #init-cash": 0
+  broker-fee: 0.00025,
+  transfer-fee: 0.00002,
+  tax-fee: 0.001,
+  # 交易品类, stock / fund
+  kind: stock,
+  # 交易类型, real / simulate / backtest
+  type: "simulate",
+  strategy:
+    # 策略名称
+    id:
+    option:
+  risk:
+    id:
+    option:
+  broker:
+    id:
+    option:

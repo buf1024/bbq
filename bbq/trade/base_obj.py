@@ -5,7 +5,7 @@ from abc import ABC
 from functools import wraps
 import uuid
 from typing import Dict
-import json
+import yaml
 
 
 class BaseObj(ABC):
@@ -54,4 +54,4 @@ class BaseObj(ABC):
         return {}
 
     def __str__(self):
-        return json.dumps(self.to_dict(), indent=2, ensure_ascii=False)
+        return yaml.dump(self.to_dict())
