@@ -105,7 +105,8 @@ if __name__ == '__main__':
 
 
     async def test_msg():
-        gitee = MsgGitee(token='a61f482097e041c30e05327fb8b0a2ae')
+        gitee = MsgGitee()
+        gitee.init_gitee(token='a61f482097e041c30e05327fb8b0a2ae')
 
         # issue = await gitee.list_issues('heidonglgc', 'bbq-broker')
         # print(issue)

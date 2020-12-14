@@ -25,12 +25,12 @@ class MsgPush:
         wechat = self.msg_conf['wechat']
         if 'wechat' in opt:
             wechat_opt = opt['wechat']
-            secret = wechat_opt['secret'] if 'secret' in wechat_opt else ''
-            if len(secret) == 0:
-                self.log.error('wechat secret is null')
+            token = wechat_opt['token'] if 'token' in wechat_opt else ''
+            if len(token) == 0:
+                self.log.error('wechat token is null')
                 return False
 
-            wechat['url'] = 'https://sc.ftqq.com/{}.send'.format(secret)
+            wechat['url'] = 'https://sc.ftqq.com/{}.send'.format(token)
 
         for k, v in email.items():
             if len(str(v)) == 0:
@@ -74,8 +74,8 @@ if __name__ == '__main__':
     from datetime import datetime
 
     msg_push = MsgPush()
-    msg_push.init(opt=dict(email=dict(email='barbarianquant@126.com', secret='DAZXJPKTVXRVOESQ'),
-                           wechat=dict(secret='SCU65265Tc40310137ed88be0281163cbc854ff925db79a6189f4d')))
+    msg_push.init_push(opt=dict(email=dict(email='barbarianquant@126.com', secret='DAZXJPKTVXRVOESQ'),
+                                wechat=dict(token='SCU65265Tc40310137ed88be0281163cbc854ff925db79a6189f4d')))
 
 
     async def test_wechat():
