@@ -19,6 +19,7 @@ from bbq.trade.quotation import BacktestQuotation, RealtimeQuotation
 import os
 import sys
 import signal
+from bbq.trade.msg.msg_push import MsgPush
 
 
 class Trader:
@@ -39,6 +40,7 @@ class Trader:
             broker=asyncio.Queue(),
             broker_event=asyncio.Queue(),
             quotation=asyncio.Queue(),
+            robot=asyncio.Queue(),
         )
 
         self.task_queue = asyncio.Queue()
@@ -48,6 +50,10 @@ class Trader:
         self.running = False
 
         self.is_trading = False
+
+        self.robot = None
+
+        self.msg_push = MsgPush()
 
     async def start(self):
         await self.init_strategy()
@@ -64,31 +70,55 @@ class Trader:
             return None
         self.log.info('quotation inited')
 
+        if 'message' in self.config:
+            is_init = self.msg_push.init_push(trader=self, opt=self.config['message'])
+            if not is_init:
+                self.log.error('初始化推送信息异常')
+                return None
+            self.log.info('push message inited')
+
         self.running = True
 
         await self.task_queue.put('quot_task')
         self.loop.create_task(self.quot_task())
 
         await self.task_queue.put('quot_sub_task')
-        self.loop.create_task(self.general_async_task('quotation', self.on_quot_sub))
+        self.loop.create_task(self.general_async_task('quotation', func=self.on_quot_sub))
 
         await self.task_queue.put('account_task')
         self.loop.create_task(self.account_task())
 
         await self.task_queue.put('signal_task')
-        self.loop.create_task(self.general_async_task('signal', self.account.on_signal))
+        self.loop.create_task(self.general_async_task('signal', func=self.account.on_signal))
 
         await self.task_queue.put('risk_task')
-        self.loop.create_task(self.general_async_task('risk', self.account.risk.on_quot))
+        self.loop.create_task(self.general_async_task('risk',
+                                                      func=self.account.risk.on_quot,
+                                                      open_func=self.account.risk.on_open,
+                                                      close_func=self.account.risk.on_close))
 
         await self.task_queue.put('strategy_task')
-        self.loop.create_task(self.strategy_task())
+        self.loop.create_task(self.general_async_task('strategy',
+                                                      func=self.account.strategy.on_quot,
+                                                      open_func=self.account.strategy.on_open,
+                                                      close_func=self.account.strategy.on_close))
 
         await self.task_queue.put('broker_task')
-        self.loop.create_task(self.general_async_task('broker', self.account.broker.on_entrust))
+        self.loop.create_task(self.general_async_task('broker',
+                                                      func=self.account.broker.on_entrust,
+                                                      open_func=self.account.broker.on_open,
+                                                      close_func=self.account.broker.on_close))
 
         await self.task_queue.put('broker_event_task')
-        self.loop.create_task(self.general_async_task('broker_event', self.account.on_broker))
+        self.loop.create_task(self.general_async_task('broker_event',
+                                                      func=self.account.on_broker))
+
+        if self.robot is not None:
+            await self.task_queue.put('robot_task')
+            self.loop.create_task(self.general_async_task('robot',
+                                                          func=self.robot.on_robot,
+                                                          open_func=self.robot.on_open,
+                                                          close_func=self.robot.on_close))
 
         await self.task_queue.join()
 
@@ -223,6 +253,9 @@ class Trader:
     async def init_account(self):
         trade_dict = self.config['trade']
         acct_id, kind, typ = trade_dict['account-id'], trade_dict['kind'], trade_dict['type']
+        if kind not in ['fund', 'stock'] and typ not in ['backtest', 'realtime', 'simulate']:
+            self.log.error('kind/type not correct, kind={}, type={}'.format(kind, typ))
+            return False
         if acct_id is not None and len(acct_id) > 0:
             # 直接load数据库
             accounts = await self.db_trade.load_account(filter=dict(status=0, kind=kind, type=typ, account_id=acct_id))
@@ -305,8 +338,10 @@ class Trader:
             sleep_sec = 1
             if is_backtest:
                 if evt is None:
-                    for queue in self.queue.values():
+                    for key, queue in self.queue.items():
+                        print('queue={}, qsize={}'.format(key, queue.qsize()))
                         await queue.join()
+                        print('queue={}, qsize={}'.format(key, queue.qsize()))
                     await self.backtest_report()
                     self.stop()
                 # 让出执行权
@@ -342,40 +377,36 @@ class Trader:
             await self.account.on_quot(evt, payload)
             queue.task_done()
 
+            if evt != 'evt_quotation':
+                self.queue['broker'].put_nowait((evt, payload))
+                if self.robot is not None:
+                    self.queue['robot'].put_nowait((evt, payload))
             self.queue['risk'].put_nowait((evt, payload))
             self.queue['strategy'].put_nowait((evt, payload))
         self.task_queue.task_done()
 
-    async def general_async_task(self, queue, func):
+    async def general_async_task(self, queue, func, open_func=None, close_func=None):
         await self.task_queue.get()
         queue = self.queue[queue]
         while self.running:
-            evt, sig = await queue.get()
-
-            if evt is not None and evt == '__evt_term':
-                queue.task_done()
-                continue
-
-            await func(evt, sig)
-            queue.task_done()
-
-        self.task_queue.task_done()
-
-    async def strategy_task(self):
-        await self.task_queue.get()
-        queue = self.queue['strategy']
-        while self.running:
             evt, payload = await queue.get()
+
             if evt is not None and evt == '__evt_term':
                 queue.task_done()
                 continue
-            if evt == 'evt_morning_start' or evt == 'evt_noon_start':
-                await self.account.strategy.on_open(evt, payload)
-            if evt == 'evt_morning_end' or evt == 'evt_noon_end':
-                await self.account.strategy.on_close(evt, payload)
-            if evt == 'evt_quotation':
-                await self.account.strategy.on_quot(evt, payload)
+            evt_handled = False
+            if open_func is not None:
+                if evt == 'evt_morning_start' or evt == 'evt_noon_start' or evt == 'evt_start':
+                    await open_func(evt, payload)
+                    evt_handled = True
+            if close_func is not None:
+                if evt == 'evt_morning_end' or evt == 'evt_noon_end' or evt == 'evt_end':
+                    await self.account.strategy.on_close(evt, payload)
+                    evt_handled = True
+            if not evt_handled and func is not None:
+                await func(evt, payload)
             queue.task_done()
+
         self.task_queue.task_done()
 
 
@@ -492,3 +523,4 @@ def entry(**opts):
 
 if __name__ == '__main__':
     main()
+    print('done')

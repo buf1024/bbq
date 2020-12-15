@@ -23,7 +23,7 @@ class BaseObj(ABC):
     def discard_saver(func):
         @wraps(func)
         async def wrapper(self, *args, **kwargs):
-            if self.typ == 'backtest':
+            if self.trader.is_backtest():
                 return True
             return await func(self, *args, **kwargs)
 
@@ -50,8 +50,11 @@ class BaseObj(ABC):
     async def sync_to_db(self) -> bool:
         return True
 
+    def from_dict(self, data: Dict):
+        pass
+
     def to_dict(self) -> Dict:
         return {}
 
     def __str__(self):
-        return yaml.dump(self.to_dict())
+        return yaml.dump(self.to_dict(), allow_unicode=True)

@@ -290,13 +290,14 @@ class Account(BaseObj):
             entrust.name = sig.name
             entrust.code = sig.code
             entrust.time = sig.time
-            entrust.broker_entrust_id = ''  # broker对应的委托id
+            entrust.broker_entrust_id = ''
             entrust.type = sig.signal
-            entrust.status = 'commit'
+            entrust.status = 'init'
             entrust.price = sig.price
             entrust.volume = sig.volume
             entrust.volume_deal = 0
             entrust.volume_cancel = 0
+            entrust.signal = sig
 
             self.entrust[entrust.entrust_id] = entrust
             await entrust.sync_to_db()
@@ -318,7 +319,7 @@ class Account(BaseObj):
             if evt_broker is not None:
                 self.emit('broker', evt_broker, entrust)
 
-        if evt == 'evt_cancel':
+        if evt == 'evt_sig_cancel':
             entrust = self.entrust[sig]
             self.emit('broker', 'evt_broker_cancel', entrust)
 
@@ -407,7 +408,7 @@ class Account(BaseObj):
         :return:
         """
         self.log.info('account on_broker: evt={}, signal={}'.format(evt, payload))
-        if evt == 'evt_broker_buy' or evt == 'evt_broker_sell':
+        if evt == 'evt_broker_deal' or evt == 'evt_broker_deal':
             entrust = copy.copy(payload)
             self.entrust[entrust.entrust_id] = entrust
             await entrust.sync_to_db()
@@ -455,6 +456,12 @@ class Account(BaseObj):
             if not self.trader.is_backtest():
                 del self.entrust[entrust.entrust_id]
 
+        if evt == 'evt_broker_commit':
+            entrust = self.entrust[payload.entrust_id]
+            entrust.status = payload.status
+            entrust.broker_entrust_id = payload.broker_entrust_id
+            await entrust.sync_to_db()
+
     @staticmethod
     def get_obj_list(lst):
         data = []
@@ -471,7 +478,7 @@ class Account(BaseObj):
                 'profit': self.profit, 'profit_rate': self.profit_rate,
                 'start_time': self.start_time.strftime('%Y-%m-%d %H:%M:%S') if self.start_time is not None else None,
                 'end_time': self.start_time.strftime('%Y-%m-%d %H:%M:%S') if self.start_time is not None else None,
-                'position:': self.get_obj_list(self.position.values()),
+                'position': self.get_obj_list(self.position.values()),
                 'entrust': self.get_obj_list(self.entrust.values()),
                 'deal': self.get_obj_list(self.deal),
                 'signal': self.get_obj_list(self.signal)

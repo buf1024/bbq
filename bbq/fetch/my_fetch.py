@@ -118,7 +118,7 @@ class MyFetch(BaseFetch):
     def fetch_fund_daily_xueqiu(self, code: str, start: datetime = None, end: datetime = None) -> Optional[
         pd.DataFrame]:
         if not self.is_trade(start, end):
-            self.log.info('code={}, start={}, end{}, 非交易日不同步...'.format(code, start, end))
+            self.log.info('code={}, start={}, end={}, 非交易日不同步...'.format(code, start, end))
             return None
         self.log.debug('获取雪球场内基金{}日线数据, start={}, end={}...'.format(code, start, end))
         if start is None:
@@ -150,7 +150,7 @@ class MyFetch(BaseFetch):
     def fetch_stock_daily_xueqiu(self, code: str, start: datetime = None, end: datetime = None) -> Optional[
         pd.DataFrame]:
         if not self.is_trade(start, end):
-            self.log.info('code={}, start={}, end{}, 非交易日不同步...'.format(code, start, end))
+            self.log.info('code={}, start={}, end={}, 非交易日不同步...'.format(code, start, end))
             return None
         self.log.debug('获取雪球股票{}日线数据, start={}, end={}...'.format(code, start, end))
         if start is None:
@@ -190,7 +190,7 @@ class MyFetch(BaseFetch):
         :return:
         """
         if not self.is_trade(start, end):
-            self.log.debug('code={}, start={}, end{}, 非交易日不同步...'.format(code, start, end))
+            self.log.debug('code={}, start={}, end={}, 非交易日不同步...'.format(code, start, end))
             return None
 
         df_hfq_factor = None
@@ -282,7 +282,7 @@ class MyFetch(BaseFetch):
         :return:
         """
         if not self.is_trade(start, end):
-            self.log.info('code={}, start={}, end{}, 非交易日不同步...'.format(code, start, end))
+            self.log.info('code={}, start={}, end={}, 非交易日不同步...'.format(code, start, end))
             return None
 
         self.log.debug('获取股票{}指标数据...'.format(code))
@@ -319,7 +319,7 @@ class MyFetch(BaseFetch):
         :return:
         """
         if not self.is_trade(start, end):
-            self.log.info('code={}, start={}, end{}, 非交易日不同步...'.format(code, start, end))
+            self.log.info('code={}, start={}, end={}, 非交易日不同步...'.format(code, start, end))
             return None
         self.log.debug('获取指数{}日线数据...'.format(code))
         df = None
@@ -372,7 +372,7 @@ class MyFetch(BaseFetch):
         :return:
         """
         if not self.is_trade(start, end):
-            self.log.info('code={}, start={}, end{}, 非交易日不同步...'.format(code, start, end))
+            self.log.info('code={}, start={}, end={}, 非交易日不同步...'.format(code, start, end))
             return None
         self.log.debug('获取股票{} {}分钟数据...'.format(code, period))
         df = ak.stock_zh_a_minute(symbol=code, period=period, adjust=adjust)
@@ -414,7 +414,7 @@ class MyFetch(BaseFetch):
         :return:
         """
         if not self.is_trade(start, end):
-            self.log.info('start={}, end{}, 非交易日不同步...'.format(start, end))
+            self.log.info('start={}, end={}, 非交易日不同步...'.format(start, end))
             return None
 
         self.log.debug('获取股票北向资金 沪股通...')

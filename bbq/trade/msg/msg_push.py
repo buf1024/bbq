@@ -5,6 +5,17 @@ from email.mime.text import MIMEText
 import json
 from urllib.parse import quote
 import bbq.log as log
+from functools import wraps
+
+
+def discard_push(func):
+    @wraps(func)
+    async def wrapper(self, *args, **kwargs):
+        if self.trader.is_backtest() or not self.is_inited:
+            return
+        return await func(self, *args, **kwargs)
+
+    return wrapper
 
 
 class MsgPush:
@@ -13,7 +24,10 @@ class MsgPush:
         self.msg_conf = dict(email=dict(host='smtp.126.com', port=465, email='', secret=''),
                              wechat=dict(url=''))
 
-    def init_push(self, opt) -> bool:
+        self.is_inited = False
+        self.trader = None
+
+    def init_push(self, trader, opt) -> bool:
         email = self.msg_conf['email']
         if 'email' in opt:
             email_opt = opt['email']
@@ -37,8 +51,11 @@ class MsgPush:
                 self.log.error('email config key={} is null'.format(k))
                 return False
 
+        self.trader = trader
+        self.is_inited = True
         return True
 
+    @discard_push
     async def send_email(self, email, subject, content):
         email_conf = self.msg_conf['email']
         message = MIMEMultipart('alternative')
@@ -51,7 +68,12 @@ class MsgPush:
         return await aiosmtplib.send(message, hostname=email_conf['host'], port=email_conf['port'],
                                      username=email_conf['email'], password=email_conf['secret'], use_tls=True)
 
+    @discard_push
     async def wechat_push(self, title, text) -> bool:
+        if not self.is_inited:
+            self.log.warn('wechat_push not inited')
+            return False
+
         data = 'text={}&desp={}'.format(quote(title), quote(text))
         url = '{}?{}'.format(self.msg_conf['wechat']['url'], data)
         async with aiohttp.ClientSession() as session:

@@ -21,10 +21,12 @@ class MsgGitee:
             'update_issue': 'https://gitee.com/api/v5/repos/{owner}/issues/{number}',
             'list_issue_comment': 'https://gitee.com/api/v5/repos/{owner}/{repo}/issues/{number}/comments',
             'create_comment': 'https://gitee.com/api/v5/repos/{owner}/{repo}/issues/{number}/comments',
+            'update_comment': 'https://gitee.com/api/v5/repos/{owner}/{repo}/issues/comments/{id}',
         }
 
     def init_gitee(self, token):
         self.token = token
+        return True
 
     async def retry_http_do(self, method, url, data=None):
         for i in range(3):
@@ -82,10 +84,24 @@ class MsgGitee:
                                labels=','.join(labels) if labels is not None else ''))
         return await self.retry_http_do(method='POST', url=base_url, data=data)
 
-    async def update_issue(self, owner, repo, number, state='closed'):
+    async def update_issue(self, owner, repo, number, title=None, body=None, labels=None, state='closed'):
         base_url = self.api['update_issue'].format(owner=owner, number=number)
+        base_dict = dict(access_token=self.token, owner=owner, repo=repo, number=number)
+        if title is not None:
+            base_dict.update(dict(title=title))
+        if body is not None:
+            base_dict.update(dict(body=body))
+        if state is not None:
+            base_dict.update(dict(state=state))
+        if labels is not None:
+            base_dict.update(dict(labels=','.join(labels) if labels is not None else ''))
+        data = json.dumps(base_dict)
+        return await self.retry_http_do(method='PATCH', url=base_url, data=data)
+
+    async def update_comment(self, owner, repo, comment_id, body):
+        base_url = self.api['update_comment'].format(owner=owner, repo=repo, id=comment_id)
         data = json.dumps(dict(access_token=self.token, owner=owner, repo=repo,
-                               number=number, state=state))
+                               id=comment_id, body=body))
         return await self.retry_http_do(method='PATCH', url=base_url, data=data)
 
     async def list_issue_comment(self, owner, repo, number):

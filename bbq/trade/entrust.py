@@ -14,7 +14,7 @@ class Entrust(BaseObj):
 
         self.broker_entrust_id = ''  # broker对应的委托id
         self.type = None  # buy, sell, cancel
-        self.status = 'commit'  # commit 已提交 deal 已成 part_deal 部成 cancel 已经取消
+        self.status = 'init'  # init, 初始化 commit 已提交 deal 已成 part_deal 部成 cancel 已经取消
 
         self.price = 0.0  # 价格
         self.volume = 0  # 量
@@ -22,22 +22,15 @@ class Entrust(BaseObj):
         self.volume_deal = 0  # 已成量
         self.volume_cancel = 0  # 已取消量
 
+        self.signal = None
+
     async def sync_from_db(self) -> bool:
         entrust = await self.db_trade.load_entrust(filter={'entrust_id': self.entrust_id}, limit=1)
         entrust = None if len(entrust) == 0 else entrust[0]
         if entrust is None:
             self.log.error('entrust from db not found: {}'.format(self.entrust_id))
             return False
-        self.name = entrust['name']
-        self.code = entrust['code']
-        self.volume_deal = entrust['volume_deal']
-        self.volume_cancel = entrust['volume_cancel']
-        self.volume = entrust['volume']
-        self.price = entrust['price']
-        self.status = entrust['status']
-        self.type = entrust['type']
-        self.broker_entrust_id = entrust['broker_entrust_id']
-        self.time = entrust['time']
+        self.from_dict(entrust)
         return True
 
     @BaseObj.discard_saver
@@ -52,6 +45,18 @@ class Entrust(BaseObj):
                 }
         await self.db_trade.save_entrust(data=data)
         return True
+
+    def from_dict(self, data):
+        self.name = data['name']
+        self.code = data['code']
+        self.volume_deal = data['volume_deal']
+        self.volume_cancel = data['volume_cancel']
+        self.volume = data['volume']
+        self.price = data['price']
+        self.status = data['status']
+        self.type = data['type']
+        self.broker_entrust_id = data['broker_entrust_id']
+        self.time = data['time']
 
     def to_dict(self):
         return {'account_id': self.account.account_id,

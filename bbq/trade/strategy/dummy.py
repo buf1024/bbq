@@ -37,7 +37,7 @@ class Dummy(Strategy):
 
                 if is_sig:
                     sig = TradeSignal(self.get_uuid(), self.account)
-                    sig.source = 'strategy'
+                    sig.source = 'strategy:builtin:Dummy'
                     sig.signal = signal
                     sig.code = code
                     sig.name = name

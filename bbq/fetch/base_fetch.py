@@ -52,7 +52,7 @@ class BaseFetch(ABC):
         if end < start:
             return False
         tmp = start
-        while tmp < end:
+        while tmp <= end:
             if is_trade_date(tmp):
                 return True
             tmp = tmp + timedelta(days=1)

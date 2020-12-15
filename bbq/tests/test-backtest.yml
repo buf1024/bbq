@@ -20,32 +20,32 @@ message:
   wechat:
     token: SCU65265Tc40310137ed88be0281163cbc854ff925db79a6189f4d
 quotation:
-  frequency: 1min
+  frequency: 60min
   codes:
-    - sh000001
+    - sh601099
     - sz000001
-  # 回测时用 yyyy-mm-dd HH:MM:SS
-  start_date: null
-  end_date: null
+  # 回测时用
+  start_date: 2020-12-01 00:00:00
+  end_date: 2020-12-01 00:00:00
 trade:
   # 账户id
   account-id: null
   # 初始资金
-  init-cash: 0
+  init-cash: 100000
   broker-fee: 0.00025
   transfer-fee: 0.00002
   tax-fee: 0.001
   # 交易品类 stock / fund
   kind: stock
   # 交易类型 real / simulate / backtest
-  type: simulate
+  type: backtest
   strategy:
     # 策略名称
-    id:
-    option:
+    id: builtin:Dummy
+    option: null
   risk:
-    id:
-    option:
+    id: builtin:SimpleStop
+    option: null
   broker:
     id: builtin:BrokerGitee
     option:

@@ -6,17 +6,21 @@ from typing import Optional, Dict
 
 class Broker(BaseObj):
     """
-    券商交易接口
+    券商类接口
+    接收事件
+    1. evt_broker_buy 买委托事件
+    2. evt_broker_sell 卖委托事件
+    3. evt_broker_cancel 撤销委托事件
 
-    提供 buy(买), sell(卖), cancel(撤销) 委托接口
     buy(买), sell(卖), cancel(撤销)委托成功或失败均产生委托结果事件
     buy(买), sell(卖), cancel(撤销)成交或撤销均产生事件
 
-    产生的事件:
-    1. 委托(买,卖,撤销)提交事件
-    2. 委托(买,卖,撤销)成交事件
-    3. 资金同步事件*
-    4. 持仓同步事件*
+    券商产生的事件:
+    1. evt_broker_commit 委托提交事件
+    2. evt_broker_deal 委托(买,卖)成交事件
+    3. evt_broker_cancel 撤销事件
+    4. evt_broker_fund_sync 资金同步事件
+    5. evt_broker_pos_sync 持仓同步事件
     """
 
     def __init__(self, broker_id, account: Account):
@@ -32,7 +36,33 @@ class Broker(BaseObj):
     async def destroy(self):
         pass
 
+    async def on_open(self, evt, payload):
+        """
+        开始事件回调
+        :param evt: evt_start/evt_morning_start/evt_noon_start
+                    程序开始/交易日早市开始/交易日午市开始
+        :param payload:
+        :return:
+        """
+        pass
+
+    async def on_close(self, evt, payload):
+        """
+        结束事件回调
+        :param evt: evt_end/evt_morning_end/evt_noon_end
+                    程序结束/交易日早市结束/交易日午市结束
+        :param payload:
+        :return:
+        """
+        pass
+
     async def on_entrust(self, evt, payload):
+        """
+
+        :param evt: evt_broker_buy/evt_broker_sell/evt_broker_cancel
+        :param payload: Entrust
+        :return:
+        """
         pass
 
     async def sync_from_db(self) -> bool:
