@@ -7,8 +7,6 @@ class BrokerSimulate(Broker):
     def __init__(self, broker_id, account: Account):
         super().__init__(broker_id=broker_id, account=account)
 
-        self.event = []
-
     async def on_entrust(self, evt, payload):
         entrust = copy.copy(payload)
         if evt == 'evt_broker_buy':
@@ -22,3 +20,9 @@ class BrokerSimulate(Broker):
             entrust.status = 'deal'
             entrust.volume_deal = entrust.volume
             await self.emit('broker_event', 'evt_broker_deal', entrust)
+
+        if evt == 'evt_broker_cancel':
+            entrust.broker_entrust_id = self.get_uuid()
+            entrust.status = 'cancel'
+            entrust.volume_cancel = entrust.volume_cancel
+            await self.emit('broker_event', 'evt_broker_cancel', entrust)
