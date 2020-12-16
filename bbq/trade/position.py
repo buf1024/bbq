@@ -1,4 +1,5 @@
 from bbq.trade.base_obj import BaseObj
+from datetime import datetime
 import sys
 
 
@@ -60,24 +61,7 @@ class Position(BaseObj):
         if position is None:
             self.log.error('position from db not found: {}'.format(self.position_id))
             return False
-        self.name = position['name']
-        self.code = position['code']
-        self.volume = position['volume']
-        self.volume_available = position['volume_available']
-        self.fee = position['fee']
-        self.price = position['price']
-        self.profit_rate = position['profit_rate']
-        self.max_profit_rate = position['max_profit_rate']
-        self.min_profit_rate = position['min_profit_rate']
-        self.profit = position['profit']
-        self.max_profit = position['max_profit']
-        self.min_profit = position['min_profit']
-        self.now_price = position['now_price']
-        self.max_price = position['max_price']
-        self.min_price = position['min_price']
-        self.max_profit_time = position['max_profit_time']
-        self.min_profit_time = position['min_profit_time']
-        self.time = position['time']
+        self.from_dict(position)
         return True
 
     @BaseObj.discard_saver
@@ -95,6 +79,27 @@ class Position(BaseObj):
                 }
         await self.db_trade.save_position(data=data)
         return True
+
+    def from_dict(self, data):
+        self.name = data['name']
+        self.code = data['code']
+        self.volume = data['volume']
+        self.volume_available = data['volume_available']
+        self.fee = data['fee']
+        self.price = data['price']
+        self.profit_rate = data['profit_rate']
+        self.max_profit_rate = data['max_profit_rate']
+        self.min_profit_rate = data['min_profit_rate']
+        self.profit = data['profit']
+        self.max_profit = data['max_profit']
+        self.min_profit = data['min_profit']
+        self.now_price = data['now_price']
+        self.max_price = data['max_price']
+        self.min_price = data['min_price']
+        self.max_profit_time = data['max_profit_time']
+        self.min_profit_time = data['min_profit_time']
+        self.time = data['time'] if isinstance(data['time'], datetime) else datetime.strptime(data['time'],
+                                                                                              '%Y-%m-%d %H:%M:%S')
 
     def to_dict(self):
         return {'account_id': self.account.account_id,

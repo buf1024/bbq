@@ -130,19 +130,19 @@ class Quotation(ABC):
         noon_start_date = datetime(year=now.year, month=now.month, day=now.day, hour=13, minute=0, second=0)
         noon_end_date = datetime(year=now.year, month=now.month, day=now.day, hour=15, minute=0, second=0)
 
-        if morning_start_date <= now < morning_end_date:
+        if morning_start_date <= now <= morning_end_date:
             if not status_dict['evt_morning_start']:
                 status_dict['evt_morning_start'] = True
                 return 'evt_morning_start', dict(frequency=self.opt['frequency'],
                                                  trade_date=date_now,
                                                  day_time=now)
-        elif morning_end_date <= now < noon_start_date:
+        elif morning_end_date <= now <= noon_start_date:
             if not status_dict['evt_morning_end']:
                 status_dict['evt_morning_end'] = True
                 return 'evt_morning_end', dict(frequency=self.opt['frequency'],
                                                trade_date=date_now,
                                                day_time=now)
-        elif noon_start_date <= now < noon_end_date:
+        elif noon_start_date <= now <= noon_end_date:
             if not status_dict['evt_noon_start']:
                 status_dict['evt_noon_start'] = True
                 return 'evt_noon_start', dict(frequency=self.opt['frequency'],

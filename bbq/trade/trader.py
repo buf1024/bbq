@@ -20,7 +20,7 @@ import os
 import sys
 import signal
 from bbq.trade.msg.msg_push import MsgPush
-
+from collections import defaultdict
 
 class Trader:
     def __init__(self, db_trade: TradeDB, db_data: MongoDB, config: Dict):
@@ -54,6 +54,20 @@ class Trader:
         self.robot = None
 
         self.msg_push = MsgPush()
+
+        self.depend_task = defaultdict(int)
+
+    def is_running(self, queue):
+        if not self.running:
+            return self.depend_task[queue] > 0
+
+        return self.running
+
+    def incr_depend_task(self, queue):
+        self.depend_task[queue] += 1
+
+    def decr_depend_task(self, queue):
+        self.depend_task[queue] -= 1
 
     async def start(self):
         await self.init_strategy()
@@ -122,6 +136,9 @@ class Trader:
 
         await self.task_queue.join()
 
+        if self.is_backtest():
+            await self.backtest_report()
+
         self.log.info('trader done, exit!')
 
     async def destroy(self):
@@ -150,7 +167,7 @@ class Trader:
         print('daily_report')
 
     async def on_quot_sub(self, evt, payload):
-        if evt == 'evt_quot_codes':
+        if evt == 'evt_quot_codes' and self.running:
             codes = payload
             if len(codes) > 0:
                 await self.quot.add_code(codes=codes)
@@ -333,16 +350,13 @@ class Trader:
         while self.running:
             evt, payload = await self.quot.get_quot()
             if evt is not None:
-                self.queue['account'].put_nowait((evt, payload))
+                await self.queue['account'].put((evt, payload))
 
             sleep_sec = 1
             if is_backtest:
                 if evt is None:
                     for key, queue in self.queue.items():
-                        print('queue={}, qsize={}'.format(key, queue.qsize()))
                         await queue.join()
-                        print('queue={}, qsize={}'.format(key, queue.qsize()))
-                    await self.backtest_report()
                     self.stop()
                 # 让出执行权
                 sleep_sec = 0.01
@@ -350,11 +364,21 @@ class Trader:
         self.task_queue.task_done()
 
     async def account_task(self):
+        self.incr_depend_task('broker_event')
+        self.incr_depend_task('broker')
+
         await self.task_queue.get()
         queue = self.queue['account']
-        while self.running:
+        while self.is_running('account'):
             pre_evt, pre_payload = None, None
-            evt, payload = await queue.get()
+            if self.running:
+                evt, payload = await queue.get()
+            else:
+                try:
+                    evt, payload = queue.get_nowait()
+                except Exception:
+                    await asyncio.sleep(1)
+                    continue
 
             if evt is not None and evt == '__evt_term':
                 queue.task_done()
@@ -378,19 +402,33 @@ class Trader:
             queue.task_done()
 
             if evt != 'evt_quotation':
-                self.queue['broker'].put_nowait((evt, payload))
+                await self.queue['broker'].put((evt, payload))
                 if self.robot is not None:
-                    self.queue['robot'].put_nowait((evt, payload))
-            self.queue['risk'].put_nowait((evt, payload))
-            self.queue['strategy'].put_nowait((evt, payload))
+                    await self.queue['robot'].put((evt, payload))
+            await self.queue['risk'].put((evt, payload))
+            await self.queue['strategy'].put((evt, payload))
+
+        self.decr_depend_task('broker_event')
+        self.decr_depend_task('broker')
+
         self.task_queue.task_done()
 
     async def general_async_task(self, queue, func, open_func=None, close_func=None):
+        queue_name = queue
+        if queue_name in ['signal', 'risk', 'strategy', 'robot']:
+            self.incr_depend_task('account')
+
         await self.task_queue.get()
         queue = self.queue[queue]
-        while self.running:
-            evt, payload = await queue.get()
-
+        while self.is_running(queue_name):
+            if self.running:
+                evt, payload = await queue.get()
+            else:
+                try:
+                    evt, payload = queue.get_nowait()
+                except Exception:
+                    await asyncio.sleep(1)
+                    continue
             if evt is not None and evt == '__evt_term':
                 queue.task_done()
                 continue
@@ -406,6 +444,9 @@ class Trader:
             if not evt_handled and func is not None:
                 await func(evt, payload)
             queue.task_done()
+
+        if queue_name in ['signal', 'risk', 'strategy', 'robot']:
+            self.decr_depend_task('account')
 
         self.task_queue.task_done()
 
@@ -523,4 +564,3 @@ def entry(**opts):
 
 if __name__ == '__main__':
     main()
-    print('done')

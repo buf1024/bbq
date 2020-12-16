@@ -44,4 +44,4 @@ class Dummy(Strategy):
                     sig.price = price
                     sig.volume = 100
                     sig.time = day_time
-                    self.emit('signal', ('evt_sig_buy' if signal == 'buy' else 'evt_sig_sell'), sig)
+                    await self.emit('signal', ('evt_sig_buy' if signal == 'buy' else 'evt_sig_sell'), sig)

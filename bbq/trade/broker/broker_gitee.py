@@ -41,6 +41,14 @@ class BrokerGitee(Broker):
 
         return True
 
+    @staticmethod
+    def get_labels(issue):
+        labels = []
+        if 'labels' in issue:
+            for label in issue['labels']:
+                labels.append(label['name'])
+        return labels
+
     async def on_open(self, evt, payload):
         if not self.task_running:
             await self.trader.task_queue.put('gitee_poll_task')
@@ -65,17 +73,23 @@ class BrokerGitee(Broker):
                     if entrust_trade_date == trade_date:
                         entrust = Entrust(js['entrust_id'], self.account)
                         entrust.from_dict(data=js)
-                        self.entrust[entrust.entrust_id] = entrust
+                        self.entrust[entrust.entrust_id] = dict(entrust=entrust, issue=issue)
                     else:
                         self.log.debug('close invalid issue')
-                        await self.msg_gitee.update_issue(self.owner, self.repo, issue['number'], state='closed')
+                        labels = self.get_labels(issue)
+                        labels.append('委托关闭')
+                        await self.msg_gitee.update_issue(self.owner, self.repo, issue['number'],
+                                                          labels=labels, state='closed')
             except Exception as e:
                 self.log.error('on_open {}/{} yml={}格式错误, ex={}'.format(self.owner, self.repo, body, e))
 
     async def on_close(self, evt, payload):
         self.log.debug('gitee broker on_close, evt={}'.format(evt))
         if evt == 'evt_noon_end':
-            for entrust in self.entrust.values():
+            for entrust_dict in self.entrust.values():
+                entrust = entrust_dict['entrust']
+                labels = self.get_labels(entrust_dict['issue'])
+                labels.append('委托关闭')
                 await self.msg_gitee.update_issue(owner=self.owner, repo=self.repo,
                                                   number=entrust.broker_entrust_id, state='closed')
 
@@ -106,19 +120,33 @@ class BrokerGitee(Broker):
             body = '```yaml\n{}\n```\n\n'.format(entrust)
             await self.msg_gitee.update_issue(owner=self.owner, repo=self.repo, number=issue['number'],
                                               body=body, labels=labels, state='open')
-            self.entrust[entrust.entrust_id] = entrust
+            self.entrust[entrust.entrust_id] = dict(entrust=entrust, issue=issue)
 
-            self.emit('broker_event', 'evt_broker_commit', copy.copy(entrust))
+            await self.emit('broker_event', 'evt_broker_commit', copy.copy(entrust))
             await self.trader.msg_push.wechat_push(title=title, text=body)
 
         if evt == 'evt_broker_cancel':
+            labels = []
             if entrust.entrust_id in self.entrust:
-                del self.entrust[entrust.entrust_id]
+                issue = self.entrust[entrust.entrust_id]['entrust']
+                labels = self.get_labels(issue)
+            labels.append('取消委托')
+            await self.msg_gitee.update_issue(owner=self.owner, repo=self.repo,
+                                              number=entrust.broker_entrust_id,
+                                              labels=labels)
+            await self.emit('broker_event', 'evt_broker_cancel', copy.copy(entrust))
 
-            await self.msg_gitee.update_issue(owner=self.owner, repo=self.repo, number=entrust.broker_entrust_id)
-            self.emit('broker_event', 'evt_broker_cancel', copy.copy(entrust))
+    async def notify_error_comment(self, comment, text):
+        body = '{}\n\n@{} {} 处理失败: {}'.format(comment['body'], self.owner,
+                                              datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                              text)
+        await self.msg_gitee.update_comment(owner=self.owner, repo=self.repo,
+                                            comment_id=comment['id'], body=body)
 
-    async def handle_comment(self, entrust, number, comment) -> bool:
+        title = 'Comment 处理失败'
+        await self.trader.msg_push.wechat_push(title=title, text=body)
+
+    async def handle_comment(self, entrust, issue, number, comment) -> bool:
         body = comment['body']
         tag = '@{}'.format(self.owner)
         if body.find(tag) != -1:
@@ -129,88 +157,94 @@ class BrokerGitee(Broker):
             body = body.replace('```', '')
             js = yaml.load(body, yaml.FullLoader)
 
-            labels = ['买入委托']
-            if js['type'] == 'sell':
-                labels = ['卖出委托']
+            status = js['status']
+            if status not in ['part_deal', 'deal', 'cancel']:
+                await self.notify_error_comment(comment, 'status={} 有误，检查之(非part_deal/deal/cancel)'.format(status))
+                return False
+            labels = self.get_labels(issue)
+            if status == 'cancel':
+                entrust.status = status
+                volume = js['volume_cancel']
+                entrust.volume_cancel += volume
+                if entrust.volume_cancel + entrust.volume_deal > entrust.volume:
+                    await self.notify_error_comment(comment, 'volume_cancel={} 有误，检查之(大于委托总量)'.format(volume))
+                    return False
 
-            if js['status'] == 'cancel':
-                entrust.status = js['status']
-                entrust.volume_cancel += js['cancel']
-
-                body = comment['body'] + '\n\n@{} {}已处理成功'.format(self.owner,
-                                                                  datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+                body = comment['body'] + '\n\n@{} {} 已处理成功'.format(self.owner,
+                                                                   datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                 await self.msg_gitee.update_comment(owner=self.owner, repo=self.repo,
                                                     comment_id=comment['id'], body=body)
 
                 body = '```yaml\n{}\n```\n\n'.format(entrust)
-                await self.msg_gitee.update_issue(owner=self.owner, repo=self.repo, number=number,
-                                                  body=body, labels=labels, state='open')
+                labels.append('委托取消')
+                issue = await self.msg_gitee.update_issue(owner=self.owner, repo=self.repo, number=number,
+                                                          body=body, labels=labels, state='open')
+                self.entrust[entrust.entrust_id]['entrust'] = entrust
+                self.entrust[entrust.entrust_id]['issue'] = issue
 
-                self.emit('broker_event', 'evt_broker_cancel', copy.copy(entrust))
+                await self.emit('broker_event', 'evt_broker_cancel', copy.copy(entrust))
                 if entrust.volume_cancel + entrust.volume_deal == entrust.volume:
+                    labels.append('委托完成')
+                    await self.msg_gitee.update_issue(self.owner, self.repo, number=number, labels=labels,
+                                                      state='closed')
+                    del self.entrust[entrust.entrust_id]
                     return True
                 return False
-            if js['status'] == 'part_deal' or js['status'] == 'deal':
+            if status == 'part_deal' or status == 'deal':
                 entrust.status = js['status']
-                entrust.volume_deal += js['volume_deal']
+                volume = js['volume_deal']
+                entrust.volume_deal += volume
+                if entrust.volume_cancel + entrust.volume_deal > entrust.volume:
+                    await self.notify_error_comment(comment, 'volume_deal={} 有误，检查之(大于委托总量)'.format(volume))
+                    return False
 
-                body = comment['body'] + '\n\n@{} {}已处理成功'.format(self.owner,
-                                                                  datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+                body = comment['body'] + '\n\n@{} {} 已处理成功'.format(self.owner,
+                                                                   datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
                 await self.msg_gitee.update_comment(owner=self.owner, repo=self.repo,
                                                     comment_id=comment['id'], body=body)
 
                 body = '```yaml\n{}\n```\n\n'.format(entrust)
-                await self.msg_gitee.update_issue(owner=self.owner, repo=self.repo,
-                                                  number=number, body=body, state='open')
-                self.emit('broker_event', 'evt_broker_deal', copy.copy(entrust))
+                if js['status'] == 'part_deal':
+                    labels.append('部分成交')
+                else:
+                    labels.append('全部成交')
+                issue = await self.msg_gitee.update_issue(owner=self.owner, repo=self.repo,
+                                                          number=number, body=body,
+                                                          labels=labels, state='open')
+                self.entrust[entrust.entrust_id]['entrust'] = entrust
+                self.entrust[entrust.entrust_id]['issue'] = issue
+                await self.emit('broker_event', 'evt_broker_deal', copy.copy(entrust))
                 if entrust.volume_cancel + entrust.volume_deal == entrust.volume:
+                    labels.append('委托完成')
+                    await self.msg_gitee.update_issue(self.owner, self.repo, number=number,
+                                                      labels=labels,
+                                                      state='closed')
+                    del self.entrust[entrust.entrust_id]
                     return True
                 return False
 
         except Exception as e:
             self.log.error('{}/{} yml={}格式错误, ex={}'.format(self.owner, self.repo, body, e))
-            body = comment['body'] + '\n\n@{} {}已处理失败: {}'.format(self.owner,
-                                                                  datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                                                  e)
-            await self.msg_gitee.update_comment(owner=self.owner, repo=self.repo,
-                                                comment_id=comment['id'], body=body)
+            await self.notify_error_comment(comment, 'yaml格式异常: {}'.format(e))
 
-            title = 'yaml格式解析错误'
-            await self.trader.msg_push.wechat_push(title=title, text=body)
-
-            return False
-
-        self.log.error('{}/{} yml={}格式status={} not right'.format(self.owner, self.repo, js['status'], body))
-
-        title = 'yaml内容解析错误'
-        body = comment['body'] + '\n\n@{} {}已处理失败: yaml内容解析错误'.format(self.owner,
-                                                                      datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-        await self.msg_gitee.update_comment(owner=self.owner, repo=self.repo,
-                                            comment_id=comment['id'], body=body)
-
-        await self.trader.msg_push.wechat_push(title=title, text=body)
         return False
 
     async def gitee_poll_task(self):
+        self.trader.incr_depend_task('broker_event')
         await self.trader.task_queue.get()
-        while self.trader.running:
-            del_entrust = []
+        while self.trader.is_running('gitee_poll'):
             entrusts = copy.copy(list(self.entrust.values()))
-            for entrust in entrusts:
+            for entrust_dict in entrusts:
+                entrust, issue = entrust_dict['entrust'], entrust_dict['issue']
                 comments = await self.msg_gitee.list_issue_comment(owner=self.owner, repo=self.repo,
                                                                    number=entrust.broker_entrust_id)
                 for comment in comments:
                     self.log.debug('handle comment: {}'.format(comment))
-                    is_del = await self.handle_comment(entrust=entrust,
-                                                       number=entrust.broker_entrust_id,
-                                                       comment=comment)
+                    await self.handle_comment(entrust=entrust, issue=issue,
+                                              number=entrust.broker_entrust_id,
+                                              comment=comment)
 
-                    if is_del:
-                        del_entrust.append(entrust.entrust_id)
-            for entrust_id in del_entrust:
-                number = self.entrust[entrust_id].broker_entrust_id
-                await self.msg_gitee.update_issue(self.owner, self.repo, number=number, state='closed')
-                del self.entrust[entrust_id]
             await asyncio.sleep(self.timeout)
 
+        self.trader.decr_depend_task('broker_event')
         self.trader.task_queue.task_done()

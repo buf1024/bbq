@@ -15,10 +15,10 @@ class BrokerSimulate(Broker):
             entrust.broker_entrust_id = self.get_uuid()
             entrust.status = 'deal'
             entrust.volume_deal = entrust.volume
-            self.emit('broker_event', 'evt_broker_deal', entrust)
+            await self.emit('broker_event', 'evt_broker_deal', entrust)
 
         if evt == 'evt_broker_sell':
             entrust.broker_entrust_id = self.get_uuid()
             entrust.status = 'deal'
             entrust.volume_deal = entrust.volume
-            self.emit('broker_event', 'evt_broker_deal', entrust)
+            await self.emit('broker_event', 'evt_broker_deal', entrust)

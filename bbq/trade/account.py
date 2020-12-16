@@ -123,15 +123,22 @@ class Account(BaseObj):
         trade_date = datetime(year=now.year, month=now.month, day=now.day)
         entrusts = await self.db_trade.load_entrust(
             filter={'account_id': self.account_id,
-                    '$or': [{'status': 'commit'}, {'status': 'part_deal'}],
-                    'time': {'$gt': trade_date}},
-            projection=['entrust_id']
-        )
+                    '$or': [{'status': 'init'}, {'status': 'commit'}, {'status': 'part_deal'}],
+                    'time': {'$gte': trade_date}})
         for entrust_dict in entrusts:
             entrust = Entrust(entrust_id=entrust_dict['entrust_id'], account=self)
-            if not entrust.sync_from_db():
-                return False
-            self.position[entrust.entrust_id] = entrust
+            entrust.from_dict(entrust_dict)
+            self.entrust[entrust.entrust_id] = entrust
+
+        entrusts = await self.db_trade.load_entrust(
+            filter={'account_id': self.account_id,
+                    '$or': [{'status': 'init'}, {'status': 'commit'}, {'status': 'part_deal'}],
+                    'time': {'$lt': trade_date}})
+        for entrust_dict in entrusts:
+            entrust = Entrust(entrust_id=entrust_dict['entrust_id'], account=self)
+            entrust.from_dict(entrust_dict)
+            entrust.status = 'cancel'
+            await entrust.sync_to_db()
 
         return True
 
@@ -139,8 +146,7 @@ class Account(BaseObj):
         positions = await self.db_trade.load_position(filter={'account_id': self.account_id})
         for position in positions:
             pos = Position(position_id=position['position_id'], account=self)
-            if not pos.sync_from_db():
-                return False
+            pos.from_dict(position)
             self.position[pos.code] = pos
 
         return True
@@ -317,11 +323,11 @@ class Account(BaseObj):
 
                 await position.sync_to_db()
             if evt_broker is not None:
-                self.emit('broker', evt_broker, entrust)
+                await self.emit('broker', evt_broker, entrust)
 
         if evt == 'evt_sig_cancel':
             entrust = self.entrust[sig]
-            self.emit('broker', 'evt_broker_cancel', entrust)
+            await self.emit('broker', 'evt_broker_cancel', entrust)
 
     @staticmethod
     def update_position(position):
@@ -408,7 +414,7 @@ class Account(BaseObj):
         :return:
         """
         self.log.info('account on_broker: evt={}, signal={}'.format(evt, payload))
-        if evt == 'evt_broker_deal' or evt == 'evt_broker_deal':
+        if evt == 'evt_broker_deal':
             entrust = copy.copy(payload)
             self.entrust[entrust.entrust_id] = entrust
             await entrust.sync_to_db()
@@ -424,21 +430,14 @@ class Account(BaseObj):
             deal.price = entrust.price
             deal.volume = entrust.volume_deal
 
-            typ = 'buy'
-            if evt == 'evt_broker_sell':
-                typ = 'sell'
-
-            elif evt == 'evt_broker_buy':
-                typ = 'buy'
-
-            deal.fee = self.get_fee(typ=typ, code=deal.code, price=deal.price, volume=deal.volume)
+            deal.fee = self.get_fee(typ=entrust.type, code=deal.code, price=deal.price, volume=deal.volume)
             if self.trader.is_backtest():
                 self.deal.append(deal)
 
             await deal.sync_to_db()
-            if evt == 'evt_broker_buy':
+            if entrust.type == 'buy':
                 await self.add_position(deal)
-            else:
+            elif entrust.type == 'sell':
                 await self.deduct_position(deal)
 
             if entrust.volume == entrust.volume_deal + entrust.volume_cancel:

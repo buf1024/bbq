@@ -60,4 +60,4 @@ class SimpleStop(Risk):
                 sig.price = sell_price
                 sig.volume = position.volume
                 sig.time = position.time
-                self.emit('signal', 'evt_sig_sell', sig)
+                await self.emit('signal', 'evt_sig_sell', sig)

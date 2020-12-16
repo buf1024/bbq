@@ -1,4 +1,5 @@
 from bbq.trade.base_obj import BaseObj
+from datetime import datetime
 
 
 class Entrust(BaseObj):
@@ -36,13 +37,17 @@ class Entrust(BaseObj):
     @BaseObj.discard_saver
     async def sync_to_db(self) -> bool:
         data = {'account_id': self.account.account_id,
-                'entrust_id': self.entrust_id, 'name': self.name, 'code': self.code,
-                'volume_deal': self.volume_deal, 'volume_cancel': self.volume_cancel,
-                'volume': self.volume, 'price': self.price,
+                'entrust_id': self.entrust_id,
+                'broker_entrust_id': self.broker_entrust_id,
+                'name': self.name,
+                'code': self.code,
+                'type': self.type,
+                'price': self.price,
+                'volume': self.volume,
+                'volume_deal': self.volume_deal,
+                'volume_cancel': self.volume_cancel,
                 'status': self.status,
-                'type': self.type, 'broker_entrust_id': self.broker_entrust_id,
-                'time': self.time
-                }
+                'time': self.time}
         await self.db_trade.save_entrust(data=data)
         return True
 
@@ -56,16 +61,20 @@ class Entrust(BaseObj):
         self.status = data['status']
         self.type = data['type']
         self.broker_entrust_id = data['broker_entrust_id']
-        self.time = data['time']
+        self.time = data['time'] if isinstance(data['time'], datetime) else datetime.strptime(data['time'],
+                                                                                              '%Y-%m-%d %H:%M:%S')
 
     def to_dict(self):
         return {'account_id': self.account.account_id,
-                'entrust_id': self.entrust_id, 'name': self.name, 'code': self.code,
-                'volume_deal': self.volume_deal, 'volume_cancel': self.volume_cancel,
-                'volume': self.volume,
+                'entrust_id': self.entrust_id,
+                'broker_entrust_id': self.broker_entrust_id,
+                'name': self.name,
+                'code': self.code,
+                'type': self.type,
+                'time': self.time.strftime('%Y-%m-%d %H:%M:%S') if self.time is not None else None,
                 'price': self.price,
-                'status': self.status,
-                'type': self.type, 'broker_entrust_id': self.broker_entrust_id,
-                'time': self.time.strftime('%Y-%m-%d %H:%M:%S') if self.time is not None else None
+                'volume': self.volume,
+                'volume_deal': self.volume_deal,
+                'volume_cancel': self.volume_cancel,
+                'status': self.status
                 }
-

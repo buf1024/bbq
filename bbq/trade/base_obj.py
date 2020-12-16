@@ -33,8 +33,13 @@ class BaseObj(ABC):
     def get_uuid():
         return str(uuid.uuid4()).replace('-', '')
 
-    def emit(self, queue: str, evt: str, payload: object):
-        self.trader.queue[queue].put_nowait((evt, payload))
+    async def emit(self, queue: str, evt: str, payload: object):
+        if not self.trader.is_running(queue):
+            self.log.error(
+                'trade is stop running, still emit signal, omit: queue={}, evt={}, payload={}'.format(queue, evt,
+                                                                                                      payload))
+            return
+        await self.trader.queue[queue].put((evt, payload))
 
     @property
     def is_trading(self):
@@ -57,4 +62,4 @@ class BaseObj(ABC):
         return {}
 
     def __str__(self):
-        return yaml.dump(self.to_dict(), allow_unicode=True)
+        return yaml.dump(self.to_dict(), allow_unicode=True, sort_keys=False)
