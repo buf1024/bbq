@@ -12,7 +12,7 @@ class Deal(BaseObj):
         self.name = ''  # 股票名称
         self.code = ''  # 股票代码
         self.time = None  # 时间
-
+        self.type = ''  # 成交类型
         self.price = 0.0  # 价格
         self.volume = 0  # 量
 
@@ -24,7 +24,8 @@ class Deal(BaseObj):
                 'deal_id': self.deal_id, 'entrust_id': self.entrust_id,
                 'name': self.name, 'code': self.code,
                 'volume': self.volume, 'price': self.price,
-                'fee': self.fee, 'time': self.time
+                'fee': self.fee, 'time': self.time,
+                'type': self.type
                 }
         await self.db_trade.save_deal(data=data)
         return True
@@ -32,7 +33,7 @@ class Deal(BaseObj):
     def to_dict(self):
         return {'account_id': self.account.account_id,
                 'deal_id': self.deal_id, 'entrust_id': self.entrust_id,
-                'name': self.name, 'code': self.code,
+                'name': self.name, 'code': self.code, 'type': self.type,
                 'volume': self.volume, 'price': self.price,
                 'fee': self.fee,
                 'time': self.time.strftime('%Y-%m-%d %H:%M:%S') if self.time is not None else None

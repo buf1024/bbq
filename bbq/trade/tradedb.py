@@ -26,7 +26,7 @@ class TradeDB(MongoDB):
                          'time': '委托时间'},
 
         # 成交历史
-        'deal_info': {'account_id': '账户id', 'deal_id': '成交ID', 'entrust_id': '委托ID',
+        'deal_info': {'account_id': '账户id', 'deal_id': '成交ID', 'entrust_id': '委托ID', 'type': '成交类型',
                       'name': '股票名称', 'code': '股票代码', 'price': '价', 'volume': '量', 'fee': '交易费用',
                       'time': '成交时间'},
 

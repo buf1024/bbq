@@ -426,6 +426,7 @@ class Account(BaseObj):
             deal.name = entrust.name
             deal.code = entrust.code
             deal.time = entrust.time
+            deal.type = entrust.type
 
             deal.price = entrust.price
             deal.volume = entrust.volume_deal

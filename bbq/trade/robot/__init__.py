@@ -1,6 +1,5 @@
-# from common import load_strategy
-# from os.path import sep, dirname
-#
-# __file_path = dirname(__file__)
-#
-# robots = load_strategy(__file_path, 'trader.risk', ('risk.py', ))
+from os.path import dirname
+
+robots = dict(builtin=dict(), external=dict())
+context = dirname(__file__), 'bbq.trade.risk', ('risk.py', )
+

@@ -10,6 +10,25 @@ from datetime import datetime
 
 
 class BrokerGitee(Broker):
+    """
+    委托应答Comment:
+    status: cancel, deal, part_deal
+    volume_cancel: cancel是必选
+    volume_deal: deal/part_deal是必选
+
+    事件Issue:
+    事件pos_sync:
+    name: ''  # 股票名称
+    code: ''  # 股票代码
+    time: 'yyyy-mm-dd HH:MM:SS'  # 首次建仓时间
+    volume: 0  # 持仓量
+    fee: 0.0  # 持仓费用
+    price: 0.0  # 平均持仓价
+    事件fund_sync:
+    cash_init:
+    cash_available:
+    """
+
     def __init__(self, broker_id, account: Account):
         super().__init__(broker_id=broker_id, account=account)
         self.owner = ''
@@ -20,7 +39,7 @@ class BrokerGitee(Broker):
 
         self.issue_url = 'https://gitee.com/{owner}/{repo}/issues/{number}'
 
-        self.msg_gitee = None
+        self.msg_gitee: MsgGitee = None
 
         self.task_running = False
 
@@ -41,17 +60,9 @@ class BrokerGitee(Broker):
 
         return True
 
-    @staticmethod
-    def get_labels(issue):
-        labels = []
-        if 'labels' in issue:
-            for label in issue['labels']:
-                labels.append(label['name'])
-        return labels
-
     async def on_open(self, evt, payload):
         if not self.task_running:
-            await self.trader.task_queue.put('gitee_poll_task')
+            await self.trader.task_queue.put('gitee_broker_task')
             self.trader.loop.create_task(self.gitee_poll_task())
             self.task_running = True
 
@@ -66,9 +77,7 @@ class BrokerGitee(Broker):
             entrust_trade_date = title.split('@')[1]
             entrust_trade_date = datetime.strptime(entrust_trade_date, '%Y-%m-%d')
             try:
-                body = body.replace('```yaml', '')
-                body = body.replace('```', '')
-                js = yaml.load(body, yaml.FullLoader)
+                js = self.msg_gitee.parse_content(body)
                 if js['entrust_id'] not in self.entrust:
                     if entrust_trade_date == trade_date:
                         entrust = Entrust(js['entrust_id'], self.account)
@@ -76,7 +85,7 @@ class BrokerGitee(Broker):
                         self.entrust[entrust.entrust_id] = dict(entrust=entrust, issue=issue)
                     else:
                         self.log.debug('close invalid issue')
-                        labels = self.get_labels(issue)
+                        labels = self.msg_gitee.get_labels(issue)
                         labels.append('委托关闭')
                         await self.msg_gitee.update_issue(self.owner, self.repo, issue['number'],
                                                           labels=labels, state='closed')
@@ -88,7 +97,7 @@ class BrokerGitee(Broker):
         if evt == 'evt_noon_end':
             for entrust_dict in self.entrust.values():
                 entrust = entrust_dict['entrust']
-                labels = self.get_labels(entrust_dict['issue'])
+                labels = self.msg_gitee.get_labels(entrust_dict['issue'])
                 labels.append('委托关闭')
                 await self.msg_gitee.update_issue(owner=self.owner, repo=self.repo,
                                                   number=entrust.broker_entrust_id, state='closed')
@@ -129,7 +138,7 @@ class BrokerGitee(Broker):
             labels = []
             if entrust.entrust_id in self.entrust:
                 issue = self.entrust[entrust.entrust_id]['entrust']
-                labels = self.get_labels(issue)
+                labels = self.msg_gitee.get_labels(issue)
             labels.append('取消委托')
             await self.msg_gitee.update_issue(owner=self.owner, repo=self.repo,
                                               number=entrust.broker_entrust_id,
@@ -152,16 +161,13 @@ class BrokerGitee(Broker):
         if body.find(tag) != -1:
             return False
         try:
-            body = body.replace('```yaml', '')
-            body = body.replace('```', '')
-            body = body.replace('```', '')
-            js = yaml.load(body, yaml.FullLoader)
+            js = self.msg_gitee.parse_content(body)
 
             status = js['status']
             if status not in ['part_deal', 'deal', 'cancel']:
                 await self.notify_error_comment(comment, 'status={} 有误，检查之(非part_deal/deal/cancel)'.format(status))
                 return False
-            labels = self.get_labels(issue)
+            labels = self.msg_gitee.get_labels(issue)
             if status == 'cancel':
                 entrust.status = status
                 volume = js['volume_cancel']
@@ -229,20 +235,31 @@ class BrokerGitee(Broker):
 
         return False
 
+    async def poll_entrust(self):
+        entrusts = copy.copy(list(self.entrust.values()))
+        for entrust_dict in entrusts:
+            entrust, issue = entrust_dict['entrust'], entrust_dict['issue']
+            comments = await self.msg_gitee.list_issue_comment(owner=self.owner, repo=self.repo,
+                                                               number=entrust.broker_entrust_id)
+            for comment in comments:
+                self.log.debug('handle comment: {}'.format(comment))
+                await self.handle_comment(entrust=entrust, issue=issue,
+                                          number=entrust.broker_entrust_id,
+                                          comment=comment)
+
+    async def poll_event(self):
+        issues = await self.msg_gitee.list_issues(owner=self.owner, repo=self.repo)
+        for issue in issues:
+            title = issue['title']
+            if '事件' in title:
+                pass
+
     async def gitee_poll_task(self):
         self.trader.incr_depend_task('broker_event')
         await self.trader.task_queue.get()
         while self.trader.is_running('gitee_poll'):
-            entrusts = copy.copy(list(self.entrust.values()))
-            for entrust_dict in entrusts:
-                entrust, issue = entrust_dict['entrust'], entrust_dict['issue']
-                comments = await self.msg_gitee.list_issue_comment(owner=self.owner, repo=self.repo,
-                                                                   number=entrust.broker_entrust_id)
-                for comment in comments:
-                    self.log.debug('handle comment: {}'.format(comment))
-                    await self.handle_comment(entrust=entrust, issue=issue,
-                                              number=entrust.broker_entrust_id,
-                                              comment=comment)
+            await self.poll_entrust()
+            # await self.poll_event()
 
             await asyncio.sleep(self.timeout)
 

@@ -1,37 +1,4 @@
-from bbq.common import load_strategy
 from os.path import dirname
-import sys
 
 risks = dict(builtin=dict(), external=dict())
-
-
-def init_risk(paths):
-    builtin_dict = risks['builtin']
-    if len(builtin_dict) == 0:
-        file_path = dirname(__file__)
-        strategy = load_strategy(file_path, 'bbq.trade.risk', ('risk.py', ))
-        if len(strategy) > 0:
-            builtin_dict.update(strategy)
-
-    external_dict = risks['external']
-    if paths is not None:
-        for path in paths:
-            if path not in sys.path:
-                sys.path.append(path)
-            strategy = load_strategy(path, '')
-            if len(strategy) > 0:
-                external_dict.update(strategy)
-
-
-def get_risk(name):
-    name_pair = name.split(':')
-    if len(name_pair) != 2:
-        return None
-
-    d = risks['builtin'] if name_pair[0] == 'builtin' else risks['external']
-
-    if name_pair[1] not in d:
-        return None
-
-    return d[name_pair[1]]
-
+context = dirname(__file__), 'bbq.trade.risk', ('risk.py', )

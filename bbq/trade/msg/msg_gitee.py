@@ -3,6 +3,7 @@ from typing import Optional, List, Dict
 import asyncio
 import json
 import bbq.log as log
+import yaml
 
 
 class MsgGitee:
@@ -70,6 +71,20 @@ class MsgGitee:
                 break
 
         return ret_data
+
+    @staticmethod
+    def get_labels(issue):
+        labels = []
+        if 'labels' in issue:
+            for label in issue['labels']:
+                labels.append(label['name'])
+        return labels
+
+    @staticmethod
+    def parse_content(body):
+        body = body.replace('```yaml', '')
+        body = body.replace('```', '')
+        return yaml.load(body, yaml.FullLoader)
 
     async def list_issues(self, owner, repo, status='open') -> Optional[List[Dict]]:
         base_url = self.api['list_issues'].format(owner=owner, repo=repo)

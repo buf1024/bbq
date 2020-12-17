@@ -6,9 +6,13 @@ from typing import Optional, Dict
 class Robot(BaseObj):
     """
     运维类接口，可产生运维事件和交易信号:
-    1. evt_sig_cancel 取消委托
-    2. evt_sig_buy 委托买
-    3. evt_sig_sell 委托卖
+    1. evt_status_report 状态报告
+    2. evt_trade_report 状态报告
+    3. 待定
+
+    event: xx
+    data:
+        xxx
     """
     def __init__(self, robot_id, account: Account):
         super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade, trader=account.trader)

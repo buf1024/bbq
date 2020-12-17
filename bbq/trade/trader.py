@@ -10,9 +10,7 @@ from bbq.config import init_config
 import multiprocessing as mp
 from typing import Dict, Optional
 from bbq.trade.account import Account
-from bbq.trade.broker import init_broker, get_broker
-from bbq.trade.risk import init_risk, get_risk
-from bbq.trade.strategy import init_strategy, get_strategy
+from bbq.trade.util_fac import *
 from datetime import datetime
 from bbq.trade.strategy_info import StrategyInfo
 from bbq.trade.quotation import BacktestQuotation, RealtimeQuotation
@@ -70,7 +68,7 @@ class Trader:
         self.depend_task[queue] -= 1
 
     async def start(self):
-        await self.init_strategy()
+        await self.init_facility()
 
         is_init = await self.init_account()
         if not is_init:
@@ -331,7 +329,7 @@ class Trader:
 
         return True
 
-    async def init_strategy(self):
+    async def init_facility(self):
         init_risk(self.config['strategy']['risk'])
         init_broker(self.config['strategy']['broker'])
         init_strategy(self.config['strategy']['trade'])
