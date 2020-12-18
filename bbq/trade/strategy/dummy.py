@@ -14,6 +14,9 @@ class Dummy(Strategy):
         self.trade_date_buy = {}
         self.trade_date_sell = {}
 
+    def name(self):
+        return '神算子Dummy策略'
+
     async def on_quot(self, evt, payload):
         self.log.info('dummy strategy on_quot: evt={}, payload={}'.format(evt, payload))
         if evt == 'evt_quotation':
@@ -38,6 +41,7 @@ class Dummy(Strategy):
                 if is_sig:
                     sig = TradeSignal(self.get_uuid(), self.account)
                     sig.source = 'strategy:builtin:Dummy'
+                    sig.source_desc = self.name()
                     sig.signal = signal
                     sig.code = code
                     sig.name = name

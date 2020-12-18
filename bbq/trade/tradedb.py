@@ -13,7 +13,8 @@ class TradeDB(MongoDB):
                          'profit': '盈利', 'profit_rate': '盈利比例',
                          'start_time': '开始时间', 'end_time': '结束时间', 'update_time': '更新时间'},
         # 策略信号
-        'signal_info': {'account_id': '账户id', 'signal_id': '信号id', 'source': '信号源, risk, strategy, broker, manual',
+        'signal_info': {'account_id': '账户id', 'signal_id': '信号id',
+                        'source': '信号源, risk, strategy, broker, manual', 'source_name': '友好显示名称',
                         'signal': '信号: sell, buy, cancel', 'name': '股票名称', 'code': '股票代码',
                         'price': '价', 'volume': '量', 'entrust_id': '委托ID', 'time': '信号时间'},
 

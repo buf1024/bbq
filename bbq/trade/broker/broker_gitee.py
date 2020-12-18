@@ -43,6 +43,9 @@ class BrokerGitee(Broker):
 
         self.task_running = False
 
+    def name(self):
+        return '神算子Gitee手工券商'
+
     async def init(self, opt: Dict) -> bool:
         if 'token' not in opt:
             self.log.error('miss gitee token')
@@ -109,11 +112,11 @@ class BrokerGitee(Broker):
         if evt == 'evt_broker_buy' or evt == 'evt_broker_sell':
             body = '```yaml\n{}\n```\n\n'.format(entrust)
             trade_date = entrust.time.strftime('%Y-%m-%d')
-            title = '买入委托({})@{}'.format(entrust.signal.source,
+            title = '买入委托({})@{}'.format(entrust.signal.source_name,
                                          trade_date)
             labels = ['买入委托']
             if evt == 'evt_broker_sell':
-                title = '卖出委托({})@{}'.format(entrust.signal.source,
+                title = '卖出委托({})@{}'.format(entrust.signal.source_name,
                                              trade_date)
                 labels = ['卖出委托']
 
@@ -257,7 +260,7 @@ class BrokerGitee(Broker):
     async def gitee_poll_task(self):
         self.trader.incr_depend_task('broker_event')
         await self.trader.task_queue.get()
-        while self.trader.is_running('gitee_poll'):
+        while self.trader.is_running('broker_gitee_poll'):
             await self.poll_entrust()
             # await self.poll_event()
 

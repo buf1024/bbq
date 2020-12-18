@@ -8,6 +8,7 @@ class TradeSignal(BaseObj):
 
         self.signal_id = signal_id
         self.source = ''  # 信号源, risk:xxx, strategy:xx, broker:xx, robot:
+        self.source_name = ''
         self.signal = ''  # sell, buy, cancel
 
         self.name = ''  # 股票名称

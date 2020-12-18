@@ -19,6 +19,9 @@ class RobotGitee(Robot):
 
         self.task_running = False
 
+    def name(self):
+        return 'Gitee运维机器人'
+
     async def init(self, opt: Dict) -> bool:
         if 'token' not in opt:
             self.log.error('miss gitee token')
@@ -84,7 +87,7 @@ class RobotGitee(Robot):
     async def gitee_poll_task(self):
         self.trader.incr_depend_task('account')
         await self.trader.task_queue.get()
-        while self.trader.is_running('gitee_poll'):
+        while self.trader.is_running('robot_gitee_poll'):
             await self.poll_event()
             await asyncio.sleep(self.timeout)
 

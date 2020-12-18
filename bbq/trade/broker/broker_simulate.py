@@ -7,6 +7,9 @@ class BrokerSimulate(Broker):
     def __init__(self, broker_id, account: Account):
         super().__init__(broker_id=broker_id, account=account)
 
+    def name(self):
+        return '神算子模拟券商'
+
     async def on_entrust(self, evt, payload):
         entrust = copy.copy(payload)
         if evt == 'evt_broker_buy':

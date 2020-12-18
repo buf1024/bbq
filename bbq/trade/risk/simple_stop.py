@@ -13,6 +13,9 @@ class SimpleStop(Risk):
         self.stop_lost = 0
         self.stop_lost_rate = 0.065
 
+    def name(self):
+        return '神算子止损止盈风控'
+
     async def init(self, opt):
         if opt is not None:
             self.stop_profit = 0 if 'stop_profit' not in opt else opt['stop_profit']

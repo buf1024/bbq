@@ -21,6 +21,9 @@ class Robot(BaseObj):
 
         self.opt = None
 
+    def name(self):
+        return self.__class__.__name__
+
     async def init(self, opt: Optional[Dict]) -> bool:
         return True
 

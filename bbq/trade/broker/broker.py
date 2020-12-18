@@ -36,6 +36,9 @@ class Broker(BaseObj):
     async def destroy(self):
         pass
 
+    def name(self):
+        return self.__class__.__name__
+
     async def on_open(self, evt, payload):
         """
         开始事件回调
