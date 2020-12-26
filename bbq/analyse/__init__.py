@@ -9,6 +9,7 @@ import talib
 __all__ = ['to_trade_date', 'plot']
 
 # talib.MA()
+opts.TooltipOpts
 
 def to_trade_date(trade_date: datetime) -> datetime:
     return datetime(year=trade_date.year, month=trade_date.month, day=trade_date.day)
