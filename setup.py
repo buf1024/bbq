@@ -13,7 +13,7 @@ setup(
     #     'package3': 'package1',
     # },
     install_requires=[
-        'numpy',
+        'numpy==1.19.4',
         'pandas',
         'akshare',
         'opendatatools',
@@ -25,6 +25,9 @@ setup(
         'aiosmtplib',
         'Click',
         'PyYAML',
+        'mplfinance',
+        'pyecharts',
+        'TA-Lib',
         'protobuf',
     ],
     entry_points={
