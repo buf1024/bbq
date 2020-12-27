@@ -13,7 +13,7 @@ setup(
     #     'package3': 'package1',
     # },
     install_requires=[
-        'numpy==1.19.4',
+        'numpy==1.19.3',
         'pandas',
         'akshare',
         'opendatatools',
@@ -21,7 +21,7 @@ setup(
         'aiohttp',
         'motor',
         'pymongo',
-        'xlrd',
+        'xlrd==1.2.0',
         'aiosmtplib',
         'Click',
         'PyYAML',
