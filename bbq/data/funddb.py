@@ -28,7 +28,7 @@ class FundDB(MongoDB):
         },
         # 场内基金日线数据
         'fund_daily': {'code': '代码', 'trade_date': '交易日', 'close': '收盘价', 'open': '开盘价', 'high': '最高价', 'low': '最低价',
-                       'volume': '成交量(股)', 'turn_over': '换手率'},
+                       'volume': '成交量(股)', 'turnover': '换手率'},
     }
     _db = 'bbq_fund_db'  # 基金数据库
 

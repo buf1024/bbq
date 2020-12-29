@@ -9,7 +9,7 @@ class StockDB(MongoDB):
         'stock_info': {'code': '代码', 'name': '名称', 'block': '板块'},
         # 股票日线数据
         'stock_daily': {'code': '代码', 'trade_date': '交易日', 'close': '收盘价', 'open': '开盘价', 'high': '最高价', 'low': '最低价',
-                        'volume': '成交量(股)', 'turn_over': '换手率', 'hfq_factor': '后复权因子'},
+                        'volume': '成交量(股)', 'turnover': '换手率', 'hfq_factor': '后复权因子'},
         # 股票指标
         'stock_index': {'code': '代码', 'trade_date': '交易日', 'pe': '市盈率', 'pe_ttm': '市盈率TTM',
                         'pb': '市净率', 'ps': '市销率', 'ps_ttm': '市销率TTM', 'dv_ratio': '股息率', 'dv_ttm': '股息率TTM',
