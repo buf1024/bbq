@@ -13,8 +13,8 @@ setup(
     #     'package3': 'package1',
     # },
     install_requires=[
-        'numpy==1.19.4',
-        'pandas==1.1.4',
+        'numpy',
+        'pandas',
         'akshare==0.7.6',
         'opendatatools==1.0.0',
         'aiohttp==3.7.2',
@@ -26,8 +26,9 @@ setup(
         'PyYAML==5.3.1',
         'pyecharts==1.9.0',
         'scipy==1.5.4',
-        'sklearn==0.24.0',
+        'sklearn',
         'TA-Lib==0.4.19',
+        'tqdm',
         'protobuf',
     ],
     entry_points={

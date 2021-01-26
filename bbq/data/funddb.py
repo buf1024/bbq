@@ -6,7 +6,7 @@ class FundDB(MongoDB):
     _meta = {
         # 基金信息
         'fund_info': {
-            'code': '基金代码', 'full_name': '基金全称', 'short_name': '基金简称', 'type': '基金类型',
+            'code': '基金代码', 'full_name': '基金全称', 'name': '基金简称', 'type': '基金类型',
             'issue_date': '发行日期', 'found_date': '成立日期', 'found_scale': '规模', 'scale': '资产规模',
             'scale_date': '资产规模时间', 'share': '份额规模', 'share_date': '份额规模时间', 'company': '基金管理人',
             'bank': '基金托管人', 'manager': '基金经理人', 'dividend': '成立来分红', 'dividend_count': '成立来分红次数',
@@ -23,7 +23,7 @@ class FundDB(MongoDB):
         },
         # 基金净值信息
         'fund_net': {
-            'code': '基金代码', 'short_name': '基金简称', 'net': '净值', 'net_accumulate': '累计净值',
+            'code': '基金代码', 'name': '基金简称', 'net': '净值', 'net_accumulate': '累计净值',
             'day_grow_rate': '日增长率', 'apply_status': '申购状态', 'redeem_status': '赎回状态', 'dividend': '分红送配'
         },
         # 场内基金日线数据

@@ -186,15 +186,36 @@ class FundEastmoney:
                 if len(details) != 7:
                     break
 
-                net_list.append(dict(code=code,
-                                     trade_date=datetime.strptime(details[0], '%Y-%m-%d'),
-                                     net=0.0 if len(details[1].strip()) == 0 else float(details[1]),
-                                     net_accumulate=0.0 if len(details[2].strip()) == 0 else float(details[2]),
-                                     day_grow_rate=float(details[3][:-1]) if details[3].find('%') > 0 else 0.0,
-                                     apply_status=details[4],
-                                     redeem_status=details[5],
-                                     dividend=details[6]
-                                     ))
+                # net_list.append(dict(code=code,
+                #                      trade_date=datetime.strptime(details[0], '%Y-%m-%d'),
+                #                      net=0.0 if len(details[1].strip()) == 0 else float(details[1]),
+                #                      net_accumulate=0.0 if len(details[2].strip()) == 0 else float(details[2]),
+                #                      day_grow_rate=float(details[3][:-1]) if details[3].find('%') > 0 else 0.0,
+                #                      apply_status=details[4],
+                #                      redeem_status=details[5],
+                #                      dividend=details[6]
+                #                      ))
+                net_val = dict(code=code,
+                               trade_date=datetime.strptime(details[0], '%Y-%m-%d'),
+                               net=None if len(details[1].strip()) == 0 else float(details[1]),
+                               net_accumulate=None if len(details[2].strip()) == 0 else float(details[2]),
+                               day_grow_rate=float(details[3][:-1]) if details[3].find('%') > 0 else 0.0,
+                               apply_status=details[4],
+                               redeem_status=details[5],
+                               dividend=details[6],
+                               dividend_rate=0)
+                if net_val['dividend'] is not None and len(net_val['dividend']) > 0:
+                    v = net_val['dividend']
+                    m = 0
+                    if '每份派现金' in v:
+                        s = v.replace('每份派现金', '')
+                        s = s.replace('元', '')
+                        m = float(s)
+
+                    if net_val['net'] > 0:
+                        net_val['dividend_rate'] = round(m / net_val['net'] * 100, 2)
+
+                net_list.append(net_val)
 
             page_details = self.fund_net_page_re.findall(resp)
             if len(page_details) != 1:
@@ -209,6 +230,7 @@ class FundEastmoney:
             return None
 
         frame = pd.DataFrame(net_list)
+        frame.fillna(method='bfill', inplace=True)
         if fields is not None:
             frame = frame[[x.strip() for x in fields.split(',')]]
         return frame
@@ -217,7 +239,7 @@ class FundEastmoney:
         """
         基金基本信息
         :param code: 基金代码
-        :param fields: 过滤字段: 基金全称(full_name) 基金简称(short_name) 基金代码(code) 基金类型(type)
+        :param fields: 过滤字段: 基金全称(full_name) 基金简称(name) 基金代码(code) 基金类型(type)
                                发行日期(issue_date) 成立日期(found_date) 规模(found_scale) 资产规模(scale)
                                资产规模时间(scale_date) 份额规模(share) 份额规模时间(share_date) 基金管理人(company)
                                基金托管人(bank) 基金经理人(manager) 成立来分红(dividend) 成立来分红次数(dividend_count)
@@ -227,7 +249,7 @@ class FundEastmoney:
         def transform(d, k, v):
             func_dict = {
                 '基金全称': lambda x, y: ('full_name', y.strip()),
-                '基金简称': lambda x, y: ('short_name', y.strip()),
+                '基金简称': lambda x, y: ('name', y.strip()),
                 '基金代码': lambda x, y: ('code', y.replace('（主代码）', '').replace('（前端）', '').strip()),
                 '基金类型': lambda x, y: ('type', y.strip()),
                 '发行日期': lambda x, y: ('issue_date',
