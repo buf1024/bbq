@@ -8,6 +8,7 @@ from bbq.data.mongodb import MongoDB
 import traceback
 from bbq.data.stockdb import StockDB
 from bbq.data.funddb import FundDB
+from bbq.trade import event
 
 """
 行情下发顺序：
@@ -98,8 +99,8 @@ class Quotation(ABC):
 
         status_dict = self.quot_date[self.trade_date]
 
-        if (status_dict['evt_morning_start'] and not status_dict['evt_morning_end']) or \
-                (status_dict['evt_noon_start'] and not status_dict['evt_noon_end']):
+        if (status_dict[event.evt_morning_start] and not status_dict[event.evt_morning_end]) or \
+                (status_dict[event.evt_noon_start] and not status_dict[event.evt_noon_end]):
             return True
 
         return False
@@ -131,29 +132,29 @@ class Quotation(ABC):
         noon_end_date = datetime(year=now.year, month=now.month, day=now.day, hour=15, minute=0, second=0)
 
         if morning_start_date <= now <= morning_end_date:
-            if not status_dict['evt_morning_start']:
-                status_dict['evt_morning_start'] = True
-                return 'evt_morning_start', dict(frequency=self.opt['frequency'],
-                                                 trade_date=date_now,
-                                                 day_time=now)
+            if not status_dict[event.evt_morning_start]:
+                status_dict[event.evt_morning_start] = True
+                return event.evt_morning_start, dict(frequency=self.opt['frequency'],
+                                                     trade_date=date_now,
+                                                     day_time=now)
         elif morning_end_date <= now <= noon_start_date:
-            if not status_dict['evt_morning_end']:
-                status_dict['evt_morning_end'] = True
-                return 'evt_morning_end', dict(frequency=self.opt['frequency'],
-                                               trade_date=date_now,
-                                               day_time=now)
+            if not status_dict[event.evt_morning_end]:
+                status_dict[event.evt_morning_end] = True
+                return event.evt_morning_end, dict(frequency=self.opt['frequency'],
+                                                   trade_date=date_now,
+                                                   day_time=now)
         elif noon_start_date <= now <= noon_end_date:
-            if not status_dict['evt_noon_start']:
-                status_dict['evt_noon_start'] = True
-                return 'evt_noon_start', dict(frequency=self.opt['frequency'],
-                                              trade_date=date_now,
-                                              day_time=now)
+            if not status_dict[event.evt_noon_start]:
+                status_dict[event.evt_noon_start] = True
+                return event.evt_noon_start, dict(frequency=self.opt['frequency'],
+                                                  trade_date=date_now,
+                                                  day_time=now)
         elif now >= noon_end_date:
-            if not status_dict['evt_noon_end']:
-                status_dict['evt_noon_end'] = True
-                return 'evt_noon_end', dict(frequency=self.opt['frequency'],
-                                            trade_date=date_now,
-                                            day_time=now)
+            if not status_dict[event.evt_noon_end]:
+                status_dict[event.evt_noon_end] = True
+                return event.evt_noon_end, dict(frequency=self.opt['frequency'],
+                                                trade_date=date_now,
+                                                day_time=now)
 
         return None, None
 
@@ -250,9 +251,9 @@ class BacktestQuotation(Quotation):
         try:
             if not self.is_start:
                 self.is_start = True
-                return 'evt_start', dict(frequency=self.opt['frequency'],
-                                         start=now,
-                                         end=now)
+                return event.evt_start, dict(frequency=self.opt['frequency'],
+                                             start=now,
+                                             end=now)
 
             if self.is_start and not self.is_end:
                 if self.iter_tag:
@@ -264,17 +265,17 @@ class BacktestQuotation(Quotation):
 
                 quot = self.bar[self.day_time]
                 self.iter_tag = True
-                return 'evt_quotation', dict(frequency=self.opt['frequency'],
-                                             trade_date=self.trade_date,
-                                             day_time=now,
-                                             list=quot)
+                return event.evt_quotation, dict(frequency=self.opt['frequency'],
+                                                 trade_date=self.trade_date,
+                                                 day_time=now,
+                                                 list=quot)
 
         except StopIteration:
             if not self.is_end:
                 self.is_end = True
-            return 'evt_end', dict(frequency=self.opt['frequency'],
-                                   start=now,
-                                   end=now)
+            return event.evt_end, dict(frequency=self.opt['frequency'],
+                                       start=now,
+                                       end=now)
         except Exception as e:
             self.log.error('get_quot 异常, ex={}, call={}'.format(e, traceback.format_exc()))
 
@@ -334,7 +335,7 @@ class RealtimeQuotation(Quotation):
                                       close=quot['close'],
                                       volume=_get_quot(self.pre_bar, quot, code, 'volume'),
                                       amount=_get_quot(self.pre_bar, quot, code, 'amount'),
-                                      turnover=_get_quot(self.pre_bar, quot, code, 'turnover'),)
+                                      turnover=_get_quot(self.pre_bar, quot, code, 'turnover'), )
             self.bar_time = dict(start=now, end=None)
         else:
             for quot in quots.to_dict('records'):
@@ -365,10 +366,10 @@ class RealtimeQuotation(Quotation):
 
             if quot is not None:
                 self.reset_bar(now)
-                return 'evt_quotation', dict(frequency=self.opt['frequency'],
-                                             trade_date=self.trade_date,
-                                             day_time=now,
-                                             list=quot)
+                return event.evt_quotation, dict(frequency=self.opt['frequency'],
+                                                 trade_date=self.trade_date,
+                                                 day_time=now,
+                                                 list=quot)
         except Exception as e:
             self.log.error('get_quot 异常, ex={}, call={}'.format(e, traceback.format_exc()))
 

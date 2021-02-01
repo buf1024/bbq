@@ -16,9 +16,9 @@ class Broker(BaseObj):
     buy(买), sell(卖), cancel(撤销)成交或撤销均产生事件
 
     券商产生的事件:
-    1. evt_broker_commit 委托提交事件
+    1. evt_broker_committed 委托提交事件
     2. evt_broker_deal 委托(买,卖)成交事件
-    3. evt_broker_cancel 撤销事件
+    3. evt_broker_cancelled 撤销事件
     4. evt_broker_fund_sync 资金同步事件
     5. evt_broker_pos_sync 持仓同步事件
     """

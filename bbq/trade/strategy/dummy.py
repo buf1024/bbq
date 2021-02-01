@@ -2,6 +2,7 @@ from .strategy import Strategy
 from ..account import Account
 from ..trade_signal import TradeSignal
 from datetime import datetime
+from bbq.trade import event
 
 
 class Dummy(Strategy):
@@ -19,7 +20,7 @@ class Dummy(Strategy):
 
     async def on_quot(self, evt, payload):
         self.log.info('dummy strategy on_quot: evt={}, payload={}'.format(evt, payload))
-        if evt == 'evt_quotation':
+        if evt == event.evt_quotation:
             for quot in payload['list'].values():
                 day_time = quot['day_time']
                 trade_date = datetime(year=day_time.year, month=day_time.month, day=day_time.day)
@@ -48,4 +49,4 @@ class Dummy(Strategy):
                     sig.price = price
                     sig.volume = 100
                     sig.time = day_time
-                    await self.emit('signal', ('evt_sig_buy' if signal == 'buy' else 'evt_sig_sell'), sig)
+                    await self.emit('signal', (event.evt_sig_buy if signal == 'buy' else event.evt_sig_sell), sig)

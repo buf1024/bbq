@@ -19,6 +19,7 @@ import sys
 import signal
 from bbq.trade.msg.msg_push import MsgPush
 from collections import defaultdict
+from bbq.trade import event
 
 
 class Trader:
@@ -386,7 +387,7 @@ class Trader:
             if not self.is_backtest():
                 while not queue.empty():
                     self.log.warn('process is too slow...')
-                    if evt != 'evt_quotation':
+                    if evt != event.evt_quotation:
                         await self.account.on_quot(evt, payload)
                     else:
                         pre_evt, pre_payload = evt, payload
@@ -395,12 +396,12 @@ class Trader:
                     queue.task_done()
 
             if pre_evt is not None:
-                if evt != 'evt_quotation':
+                if evt != event.evt_quotation:
                     await self.account.on_quot(pre_evt, pre_payload)
             await self.account.on_quot(evt, payload)
             queue.task_done()
 
-            if evt != 'evt_quotation':
+            if evt != event.evt_quotation:
                 await self.queue['broker'].put((evt, payload))
                 if self.robot is not None:
                     await self.queue['robot'].put((evt, payload))
@@ -433,11 +434,11 @@ class Trader:
                 continue
             evt_handled = False
             if open_func is not None:
-                if evt == 'evt_morning_start' or evt == 'evt_noon_start' or evt == 'evt_start':
+                if evt == event.evt_morning_start or evt == event.evt_noon_start or evt == event.evt_start:
                     await open_func(evt, payload)
                     evt_handled = True
             if close_func is not None:
-                if evt == 'evt_morning_end' or evt == 'evt_noon_end' or evt == 'evt_end':
+                if evt == event.evt_morning_end or evt == event.evt_noon_end or evt == event.evt_end:
                     await self.account.strategy.on_close(evt, payload)
                     evt_handled = True
             if not evt_handled and func is not None:
