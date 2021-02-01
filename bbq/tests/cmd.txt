@@ -4,4 +4,4 @@ trade:
 
 --trade-kind=stock --trade-type=simulate --account-id=42b0bb95852e4489a977df5a5efe724e
 
---init-cash=100000 --trade-kind=stock --trade-type=backtest --quot-freq=60min --quot-date=2020-12-01~2020-12-02 --quot-codes=sh601099,sz000001 --strategy=aWQ6IGJ1aWx0aW46RHVtbXkKb3B0OiAK --risk=eyJpZCI6ICJidWlsdGluOkR1bW15IiwgIm9wdGlvbiI6IHt9fQo=
+--init-cash=100000 --trade-kind=stock --trade-type=backtest --quot-freq=60min --quot-date=2020-12-01~2020-12-02 --quot-codes=sh601099,sz000001 --strategy=eyJpZCI6ICJidWlsdGluOkR1bW15IiwgIm9wdGlvbiI6IHt9fQo --risk=eyJpZCI6ICJidWlsdGluOkR1bW15IiwgIm9wdGlvbiI6IHt9fQo=
