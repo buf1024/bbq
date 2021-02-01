@@ -20,6 +20,7 @@ import signal
 from bbq.trade.msg.msg_push import MsgPush
 from collections import defaultdict
 
+
 class Trader:
     def __init__(self, db_trade: TradeDB, db_data: MongoDB, config: Dict):
         self.log = log.get_logger(self.__class__.__name__)
