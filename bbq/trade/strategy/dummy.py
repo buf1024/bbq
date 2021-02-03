@@ -22,9 +22,12 @@ class Dummy(Strategy):
         self.log.info('dummy strategy on_quot: evt={}, payload={}'.format(evt, payload))
         if evt == event.evt_quotation:
             for quot in payload['list'].values():
+                code, name, price = quot['code'], quot['name'], quot['close']
+                if self.is_index(code):
+                    continue
+
                 day_time = quot['day_time']
                 trade_date = datetime(year=day_time.year, month=day_time.month, day=day_time.day)
-                code, name, price = quot['code'], quot['name'], quot['close']
                 is_sig, signal = False, ''
 
                 if code not in self.test_codes_buy:

@@ -6,7 +6,7 @@ from bbq.data.mongodb import MongoDB
 from bbq.data.stockdb import StockDB
 from bbq.data.funddb import FundDB
 from bbq.trade.tradedb import TradeDB
-from bbq.config import init_config
+from bbq.config import *
 import multiprocessing as mp
 from typing import Dict, Optional
 from bbq.trade.account import Account
@@ -149,7 +149,7 @@ class Trader:
     def stop(self):
         self.running = False
         for queue in self.queue.values():
-            queue.put_nowait(('__evt_term', None))
+            queue.put_nowait((event.evt_term, None))
 
     def signal_handler(self, signum, frame):
         print('catch signal: {}, stop trade...'.format(signum))
@@ -178,7 +178,7 @@ class Trader:
                           db_data=self.db_data, db_trade=self.db_trade, trader=self)
 
         trade_dict = self.config['trade']
-        account.kind = trade_dict['kind']
+        account.category = trade_dict['category']
 
         account.cash_init = trade_dict['init-cash']
         account.cash_available = account.cash_init
@@ -213,7 +213,7 @@ class Trader:
 
         cls = get_broker(broker_id)
         if cls is None:
-            self.log.error('broker_id={} not data found'.format(broker_id))
+            self.log.error('broker_id={} not broker found'.format(broker_id))
             return None
 
         broker = cls(broker_id=broker_id, account=account)
@@ -269,16 +269,17 @@ class Trader:
 
     async def init_account(self):
         trade_dict = self.config['trade']
-        acct_id, kind, typ = trade_dict['account-id'], trade_dict['kind'], trade_dict['type']
-        if kind not in ['fund', 'stock'] and typ not in ['backtest', 'realtime', 'simulate']:
-            self.log.error('kind/type not correct, kind={}, type={}'.format(kind, typ))
+        acct_id, cat, typ = trade_dict['account-id'], trade_dict['category'], trade_dict['type']
+        if cat not in ['fund', 'stock'] and typ not in ['backtest', 'realtime', 'simulate']:
+            self.log.error('category/type not correct, category={}, type={}'.format(cat, typ))
             return False
         if acct_id is not None and len(acct_id) > 0:
             # 直接load数据库
-            accounts = await self.db_trade.load_account(filter=dict(status=0, kind=kind, type=typ, account_id=acct_id))
+            accounts = await self.db_trade.load_account(
+                filter=dict(status=0, category=cat, type=typ, account_id=acct_id))
             if len(accounts) == 0:
                 self.log.info('数据中没有已运行的real/simulate数据, account_id={}'.format(acct_id))
-                return
+                return False
 
             self.account = Account(account_id=acct_id, typ=typ, db_data=self.db_data, db_trade=self.db_trade,
                                    trader=self)
@@ -297,7 +298,7 @@ class Trader:
         if typ == 'real' or typ == 'simulate':
             if strategy_js is None and risk_js is None and broker_js is None:
                 # fork 多个进程数据库存在的
-                accounts = await self.db_trade.load_account(filter=dict(status=0, kind=kind, type=typ))
+                accounts = await self.db_trade.load_account(filter=dict(status=0, category=cat, type=typ))
                 if len(accounts) == 0:
                     self.log.info('数据中没有已运行的real/simulate数据')
                     return False
@@ -313,7 +314,7 @@ class Trader:
                                                broker_path=self.config['strategy']['broker'],
                                                risk_path=self.config['strategy']['risk'],
                                                init_cash=0, transfer_fee=0, tax_fee=0, broker_fee=0,
-                                               account_id=account['account_id'], trade_kind=kind,
+                                               account_id=account['account_id'], trade_category=cat,
                                                trade_type=typ,
                                                quot_freq=None, quot_date=None, quot_code=None,
                                                strategy=None, risk=None, broker=None),
@@ -380,7 +381,7 @@ class Trader:
                     await asyncio.sleep(1)
                     continue
 
-            if evt is not None and evt == '__evt_term':
+            if evt is not None and evt == event.evt_term:
                 queue.task_done()
                 continue
 
@@ -429,7 +430,7 @@ class Trader:
                 except Exception:
                     await asyncio.sleep(1)
                     continue
-            if evt is not None and evt == '__evt_term':
+            if evt is not None and evt == event.evt_term:
                 queue.task_done()
                 continue
             evt_handled = False
@@ -465,7 +466,7 @@ class Trader:
 @click.option('--tax-fee', type=float, default=0.001, help='tax fee')
 @click.option('--broker-fee', type=float, default=0.00025, help='broker fee')
 @click.option('--account-id', type=str, help='trade account_id')
-@click.option('--trade-kind', type=str, default='stock', help='trade catalogue: stock,fund, default stock')
+@click.option('--trade-category', type=str, default='stock', help='trade catalogue: stock,fund, default stock')
 @click.option('--trade-type', type=str, default='simulate', help='trade type: real,simulate,backtest')
 @click.option('--quot-freq', type=str, default='1min', help='quotation frequency, 1min, 5min, 15min, 30min, 60min')
 @click.option('--quot-date', type=str, help='backtest date, format: yyyy-mm-dd~yyyy-mm-dd')
@@ -477,7 +478,7 @@ def main(conf: str, log_path: str, log_level: str,
          uri: str, pool: int,
          strategy_path: str, risk_path: str, broker_path: str,
          init_cash: float, transfer_fee: float, tax_fee: float, broker_fee: float,
-         account_id: str, trade_kind: str, trade_type: str,
+         account_id: str, trade_category: str, trade_type: str,
          quot_freq: str, quot_date: str, quot_codes: str,
          strategy: str, risk: str, broker: str):
     mp.set_start_method('spawn')
@@ -485,7 +486,7 @@ def main(conf: str, log_path: str, log_level: str,
           uri=uri, pool=pool,
           strategy_path=strategy_path, risk_path=risk_path, broker_path=broker_path,
           init_cash=init_cash, transfer_fee=transfer_fee, tax_fee=tax_fee, broker_fee=broker_fee,
-          account_id=account_id, trade_kind=trade_kind, trade_type=trade_type,
+          account_id=account_id, trade_category=trade_category, trade_type=trade_type,
           quot_freq=quot_freq, quot_date=quot_date, quot_codes=quot_codes,
           strategy=strategy, risk=risk, broker=broker)
 
@@ -496,7 +497,7 @@ def entry(**opts):
     strategy_path, risk_path, broker_path = opts['strategy_path'], opts['risk_path'], opts['broker_path']
     init_cash = opts['init_cash']
     transfer_fee, tax_fee, broker_fee = opts['transfer_fee'], opts['tax_fee'], opts['broker_fee']
-    account_id, trade_kind, trade_type = opts['account_id'], opts['trade_kind'], opts['trade_type']
+    account_id, trade_category, trade_type = opts['account_id'], opts['trade_category'], opts['trade_type']
     quot_freq, quot_date, quot_codes = opts['quot_freq'], opts['quot_date'], opts['quot_codes']
     strategy, risk, broker = opts['strategy'], opts['risk'], opts['broker']
 
@@ -531,7 +532,7 @@ def entry(**opts):
                     mongo=dict(uri=uri, pool=pool),
                     strategy=dict(broker=broker_path, trade=strategy_path, risk=risk_path),
                     quotation=dict(frequency=quot_freq, start_date=q_start, end_date=q_end, codes=q_codes),
-                    trade={'account-id': account_id, 'kind': trade_kind, 'type': trade_type,
+                    trade={'account-id': account_id, 'category': trade_category, 'type': trade_type,
                            'init-cash': init_cash,
                            'transfer-fee': transfer_fee, 'tax-fee': tax_fee, 'broker-fee': broker_fee,
                            'strategy': strategy_js, 'risk': risk_js, 'broker': broker_js})
@@ -547,7 +548,7 @@ def entry(**opts):
         conf_dict = conf_file
 
     setup_log(conf_dict, 'trade.log')
-    db_data = setup_db(conf_dict, StockDB if trade_kind == 'stock' else FundDB)
+    db_data = setup_db(conf_dict, StockDB if trade_category == 'stock' else FundDB)
     db_trade = setup_db(conf_dict, TradeDB) if trade_type != 'backtest' else None
 
     if db_data is None:

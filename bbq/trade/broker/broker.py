@@ -8,9 +8,9 @@ class Broker(BaseObj):
     """
     券商类接口
     接收事件
-    1. evt_broker_buy 买委托事件
-    2. evt_broker_sell 卖委托事件
-    3. evt_broker_cancel 撤销委托事件
+    1. evt_entrust_buy 买委托事件
+    2. evt_entrust_sell 卖委托事件
+    3. evt_entrust_cancel 撤销委托事件
 
     buy(买), sell(卖), cancel(撤销)委托成功或失败均产生委托结果事件
     buy(买), sell(卖), cancel(撤销)成交或撤销均产生事件
@@ -62,7 +62,7 @@ class Broker(BaseObj):
     async def on_entrust(self, evt, payload):
         """
 
-        :param evt: evt_broker_buy/evt_broker_sell/evt_broker_cancel
+        :param evt: evt_entrust_buy/evt_entrust_sell/evt_entrust_cancel
         :param payload: Entrust
         :return:
         """

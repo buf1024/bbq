@@ -20,7 +20,7 @@ class Account(BaseObj):
         self.account_id = account_id
 
         self.status = 0
-        self.kind = ''
+        self.category = ''
 
         self.cash_init = 0.0
         self.cash_available = 0.0
@@ -59,7 +59,7 @@ class Account(BaseObj):
 
         account = data[0]
         self.account_id = account['account_id']
-        self.kind = account['kind']
+        self.category = account['category']
         self.cash_init = account['cash_init']
         self.cash_available = account['cash_available']
         self.cash_frozen = account['cash_frozen']
@@ -171,7 +171,7 @@ class Account(BaseObj):
     @BaseObj.discard_saver
     async def sync_to_db(self) -> bool:
         data = {'account_id': self.account_id, 'status': self.status,
-                'kind': self.kind, 'type': self.typ,
+                'category': self.category, 'type': self.typ,
                 'cash_init': self.cash_init, 'cash_available': self.cash_available,
                 'total_net_value': self.total_net_value, 'total_hold_value': self.total_hold_value, 'cost': self.cost,
                 'broker_fee': self.broker_fee, "transfer_fee": self.transfer_fee, "tax_fee": self.tax_fee,
@@ -311,13 +311,13 @@ class Account(BaseObj):
 
             evt_broker = None
             if evt == event.evt_sig_buy:
-                evt_broker = event.evt_broker_buy
+                evt_broker = event.evt_entrust_buy
                 self.cash_frozen += cost
                 self.cash_available -= cost
 
                 await self.sync_to_db()
             elif evt == event.evt_sig_sell:
-                evt_broker = event.evt_broker_sell
+                evt_broker = event.evt_entrust_sell
                 position = self.position[sig.code]
                 position.volume_available -= sig.volume
                 position.volume_frozen += sig.volume
@@ -326,9 +326,9 @@ class Account(BaseObj):
             if evt_broker is not None:
                 await self.emit('broker', evt_broker, entrust)
 
-        if evt == event.evt_broker_cancel:
+        if evt == event.evt_entrust_cancel:
             entrust = self.entrust[sig]
-            await self.emit('broker', event.evt_broker_cancel, entrust)
+            await self.emit('broker', event.evt_entrust_cancel, entrust)
 
     @staticmethod
     def update_position(position):
@@ -446,7 +446,7 @@ class Account(BaseObj):
                 if not self.trader.is_backtest():
                     del self.entrust[entrust.entrust_id]
 
-        if evt == event.evt_broker_cancel:
+        if evt == event.evt_entrust_canceled:
             entrust = self.entrust[payload.entrust_id]
             entrust.volume_cancel = payload.volume_cancel
             if entrust.volume_deal != 0:
@@ -472,7 +472,7 @@ class Account(BaseObj):
 
     def to_dict(self):
         return {'account_id': self.account_id, 'status': self.status,
-                'kind': self.kind, 'type': self.typ,
+                'category': self.category, 'type': self.typ,
                 'cash_init': self.cash_init, 'cash_available': self.cash_available,
                 'total_net_value': self.total_net_value, 'total_hold_value': self.total_hold_value, 'cost': self.cost,
                 'broker_fee': self.broker_fee, "transfer_fee": self.transfer_fee, "tax_fee": self.tax_fee,

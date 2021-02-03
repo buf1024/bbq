@@ -4,14 +4,14 @@ _cal_list = ['1990-12-19', '1990-12-20', '1990-12-21', '1990-12-24', '1990-12-25
 
 
 # 支持参数: datetime / str, 其中 str格式为 %Y-%m-%d 或 %Y%m%d
-def is_trade_date(date):
-    from datetime import datetime
+def is_trade_date(date_input):
+    from datetime import datetime, date
     date_str = ''
-    if isinstance(date, datetime):
-        date_str = date.strftime('%Y-%m-%d')
+    if isinstance(date_input, datetime) or isinstance(date_input, date):
+        date_str = date_input.strftime('%Y-%m-%d')
     else:
         try:
-            if '-' in date:
+            if '-' in date_input:
                 date_str = datetime.strptime(date, '%Y-%m-%d').strftime('%Y-%m-%d')
             else:
                 date_str = datetime.strptime(date, '%Y%m%d').strftime('%Y-%m-%d')

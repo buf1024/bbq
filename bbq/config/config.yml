@@ -1,5 +1,5 @@
 log:
-  level: debug
+  level: info
   path: /Users/luoguochun/.config/bbq/logs
 mongo:
   uri: mongodb://localhost:27017/
@@ -20,13 +20,13 @@ message:
   wechat:
     token: SCU65265Tc40310137ed88be0281163cbc854ff925db79a6189f4d
 quotation:
-  frequency: 1min
+  frequency: 60min
   codes:
     - sh000001
     - sz000001
   # 回测时用 yyyy-mm-dd HH:MM:SS
-  start_date: null
-  end_date: null
+  start_date: 2020-12-01
+  end_date: 2020-12-02
 trade:
   # 账户id
   account-id: null
@@ -36,18 +36,25 @@ trade:
   transfer-fee: 0.00002
   tax-fee: 0.001
   # 交易品类 stock / fund
-  kind: stock
+  category: stock
   # 交易类型 real / simulate / backtest
-  type: simulate
+  type: backtest
   strategy:
     # 策略名称
-    id:
-    option:
+    id: builtin:Dummy
+    option: null
   risk:
-    id:
-    option:
+    id: builtin:Dummy
+    option: null
+#  broker:
+#    id: builtin:BrokerGitee
+#    option:
+#      token: a61f482097e041c30e05327fb8b0a2ae
+#      owner: heidonglgc
+#      repo: bbq-broker
+#      timeout: 3
   broker:
-    id: builtin:BrokerGitee
+    id: builtin:BrokerSimulate
     option:
       token: a61f482097e041c30e05327fb8b0a2ae
       owner: heidonglgc

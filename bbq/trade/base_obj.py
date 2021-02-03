@@ -1,11 +1,11 @@
 import bbq.log as log
-from bbq.data.mongodb import MongoDB
 from bbq.trade.tradedb import TradeDB
 from abc import ABC
 from functools import wraps
 import uuid
 from typing import Dict
 import yaml
+from bbq.data import *
 
 
 class BaseObj(ABC):
@@ -48,6 +48,9 @@ class BaseObj(ABC):
     @is_trading.setter
     def is_trading(self, value):
         self.trader.is_trading = value
+
+    def is_index(self, code: str) -> bool:
+        return self.trader.quot.is_index(code)
 
     async def sync_from_db(self) -> bool:
         return True

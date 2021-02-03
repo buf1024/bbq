@@ -109,13 +109,13 @@ class BrokerGitee(Broker):
 
     async def on_entrust(self, evt, payload):
         entrust = copy.copy(payload)
-        if evt == event.evt_broker_buy or evt == event.evt_broker_sell:
+        if evt == event.evt_entrust_buy or evt == event.evt_entrust_sell:
             body = '```yaml\n{}\n```\n\n'.format(entrust)
             trade_date = entrust.time.strftime('%Y-%m-%d')
             title = '买入委托({})@{}'.format(entrust.signal.source_name,
                                          trade_date)
             labels = ['买入委托']
-            if evt == event.evt_broker_sell:
+            if evt == event.evt_entrust_sell:
                 title = '卖出委托({})@{}'.format(entrust.signal.source_name,
                                              trade_date)
                 labels = ['卖出委托']
@@ -137,7 +137,7 @@ class BrokerGitee(Broker):
             await self.emit('broker_event', event.evt_broker_committed, copy.copy(entrust))
             await self.trader.msg_push.wechat_push(title=title, text=body)
 
-        if evt == event.evt_broker_cancel:
+        if evt == event.evt_entrust_cancel:
             labels = []
             if entrust.entrust_id in self.entrust:
                 issue = self.entrust[entrust.entrust_id]['entrust']
@@ -146,7 +146,7 @@ class BrokerGitee(Broker):
             await self.msg_gitee.update_issue(owner=self.owner, repo=self.repo,
                                               number=entrust.broker_entrust_id,
                                               labels=labels)
-            await self.emit('broker_event', event.evt_broker_cancel, copy.copy(entrust))
+            await self.emit('broker_event', event.evt_entrust_canceled, copy.copy(entrust))
 
     async def notify_error_comment(self, comment, text):
         body = '{}\n\n@{} {} 处理失败: {}'.format(comment['body'], self.owner,
@@ -191,7 +191,7 @@ class BrokerGitee(Broker):
                 self.entrust[entrust.entrust_id]['entrust'] = entrust
                 self.entrust[entrust.entrust_id]['issue'] = issue
 
-                await self.emit('broker_event', event.evt_broker_cancel, copy.copy(entrust))
+                await self.emit('broker_event', event.evt_entrust_canceled, copy.copy(entrust))
                 if entrust.volume_cancel + entrust.volume_deal == entrust.volume:
                     labels.append('委托完成')
                     await self.msg_gitee.update_issue(self.owner, self.repo, number=number, labels=labels,

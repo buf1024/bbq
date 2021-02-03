@@ -1,6 +1,6 @@
 from abc import ABC
 from collections import OrderedDict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from typing import Dict, Optional, Tuple
 import bbq.fetch as fetch
 import bbq.log as log
@@ -9,12 +9,54 @@ import traceback
 from bbq.data.stockdb import StockDB
 from bbq.data.funddb import FundDB
 from bbq.trade import event
+import pandas as pd
 
 """
 行情下发顺序：
 -> evt_start(backtest) -> evt_morning_start -> evt_quotation -> evt_morning_end 
                        -> evt_noon_start -> evt_quotation -> evt_noon_end 
 -> evt_end(backtest)
+
+payload 字典:
+- evt_start
+{
+    "frequency": '60min', 
+    'start': datetime.datetime(2021, 2, 2, 14, 17, 56, 830798),
+    'end': datetime.datetime(2021, 2, 2, 14, 17, 56, 830798)
+}
+
+- evt_morning_start
+{
+    'frequency': '60min',
+    'trade_date': datetime.datetime(2020, 12, 1, 0, 0),
+    'day_time': Timestamp('2020-12-01 10:30:00')
+}
+
+- evt_quotation
+{
+    'frequency': '60min', 
+    'trade_date': datetime.datetime(2020, 12, 1, 0, 0), 
+    'day_time': datetime.datetime(2021, 2, 2, 14, 17, 56, 856644), 
+    'list': {
+        'sh000001': {
+            'day': '2020-12-01 10:30:00', 
+            'open': 3388.987, 
+            'high': 3413.278, 
+            'low': 3413.278, 
+            'close': 3413.278, 
+            'volume': 10867266500, 
+            'code': 'sh000001', 
+            'day_time': Timestamp('2020-12-01 10:30:00'), 
+            'name': '上证综指', 
+            'day_high': 3413.278, 
+            'day_min': 3413.278, 
+            'day_open': 3451.94
+        }
+        ... // 其他code行情
+    }
+}
+
+2021-02-02 14:17:56,858 - Dummy - INFO - dummy risk on_quot: 
 """
 
 
@@ -34,12 +76,20 @@ class Quotation(ABC):
 
         self.code_info = {}
 
+        self.index = []
+
+        self.day_frequency = 0
+
+    def is_index(self, code: str) -> bool:
+        return code in self.index
+
     async def init(self, opt) -> bool:
         self.opt = opt
         try:
             frequency, codes = self.opt['frequency'].lower(), self.opt['codes']
             if 'min' not in frequency and 'm' not in frequency and \
-                    'sec' not in frequency and 's' not in frequency:
+                    'sec' not in frequency and 's' not in frequency and \
+                    'day' not in frequency and 'd' not in frequency:
                 self.log.error('frequency 格式不正确')
                 return False
             if frequency.endswith('min') or frequency.endswith('m'):
@@ -58,14 +108,31 @@ class Quotation(ABC):
 
                 self.frequency = value
 
+            if frequency.endswith('day') or frequency.endswith('d'):
+                value = int(frequency.split('d')[0])
+                if value <= 0:
+                    self.log.error('frequency 格式不正确')
+                    return False
+
+                self.frequency = value * 60 * 60 * 24
+                self.day_frequency = value
+
             if 'start_date' in self.opt and self.opt['start_date'] is not None:
                 self.start_date = self.opt['start_date']
+                if isinstance(self.start_date, date):
+                    self.start_date = datetime(year=self.start_date.year,
+                                               month=self.start_date.month,
+                                               day=self.start_date.day)
 
             if 'end_date' in self.opt and self.opt['end_date'] is not None:
                 self.end_date = self.opt['end_date']
+                if isinstance(self.end_date, date):
+                    self.end_date = datetime(year=self.end_date.year,
+                                             month=self.end_date.month,
+                                             day=self.end_date.day)
 
             if not await self.add_code(codes):
-                self.log.error('obtain code info failed')
+                self.log.error('获取股票信息失败')
                 return False
 
             return True
@@ -78,10 +145,27 @@ class Quotation(ABC):
         return None, None
 
     async def add_code(self, codes) -> bool:
-        self.codes = self.codes + codes
+        new_codes = []
+        for code in codes:
+            if code not in self.codes:
+                new_codes.append(code)
+        if len(new_codes) == 0:
+            return False
+        self.codes = self.codes + new_codes
         df = None
         if isinstance(self.db_data, StockDB):
-            df = await self.db_data.load_stock_info(filter={'code': {'$in': self.codes}}, projection=['code', 'name'])
+            df1 = await self.db_data.load_index_info(filter={'code': {'$in': self.codes}}, projection=['code', 'name'])
+            if df1 is not None or not df1.empty:
+                df = df1
+                for data in df.to_dict('records'):
+                    self.index.append(data['code'])
+
+            df2 = await self.db_data.load_stock_info(filter={'code': {'$in': self.codes}}, projection=['code', 'name'])
+            if df2 is not None or not df2.empty:
+                if df is None:
+                    df = df2
+                else:
+                    df = pd.concat((df, df2))
         elif isinstance(self.db_data, FundDB):
             df = await self.db_data.load_fund_info(filter={'code': {'$in': self.codes}}, projection=['code', 'name'])
         if df is None:
@@ -105,7 +189,7 @@ class Quotation(ABC):
 
         return False
 
-    async def get_base_event(self, now) -> Optional[Tuple[Optional[str], Optional[Dict]]]:
+    def get_status_dict(self, now):
         date_now = datetime(year=now.year, month=now.month, day=now.day)
         if len(self.quot_date) == 0 or date_now not in self.quot_date:
             self.trade_date = None
@@ -117,13 +201,14 @@ class Quotation(ABC):
                                             evt_morning_end=False,
                                             evt_noon_start=False,
                                             evt_noon_end=False)
+        self.trade_date = date_now
+        return self.quot_date[date_now]
 
-        status_dict = self.quot_date[date_now]
+    async def get_base_event(self, now) -> Optional[Tuple[Optional[str], Optional[Dict]]]:
+        status_dict = self.get_status_dict(now)
 
         if not status_dict['is_open']:
             return None, None
-
-        self.trade_date = date_now
 
         morning_start_date = datetime(year=now.year, month=now.month, day=now.day, hour=9, minute=30, second=0)
         morning_end_date = datetime(year=now.year, month=now.month, day=now.day, hour=11, minute=30, second=0)
@@ -131,30 +216,53 @@ class Quotation(ABC):
         noon_start_date = datetime(year=now.year, month=now.month, day=now.day, hour=13, minute=0, second=0)
         noon_end_date = datetime(year=now.year, month=now.month, day=now.day, hour=15, minute=0, second=0)
 
-        if morning_start_date <= now <= morning_end_date:
-            if not status_dict[event.evt_morning_start]:
-                status_dict[event.evt_morning_start] = True
-                return event.evt_morning_start, dict(frequency=self.opt['frequency'],
-                                                     trade_date=date_now,
-                                                     day_time=now)
-        elif morning_end_date <= now <= noon_start_date:
-            if not status_dict[event.evt_morning_end]:
-                status_dict[event.evt_morning_end] = True
-                return event.evt_morning_end, dict(frequency=self.opt['frequency'],
-                                                   trade_date=date_now,
-                                                   day_time=now)
-        elif noon_start_date <= now <= noon_end_date:
-            if not status_dict[event.evt_noon_start]:
-                status_dict[event.evt_noon_start] = True
-                return event.evt_noon_start, dict(frequency=self.opt['frequency'],
-                                                  trade_date=date_now,
-                                                  day_time=now)
+        def _base_event_emit(evt):
+            if not status_dict[evt]:
+                status_dict[evt] = True
+                return evt, dict(frequency=self.opt['frequency'],
+                                 trade_date=self.trade_date,
+                                 day_time=now)
+            return None, None
+
+        if morning_start_date <= now < morning_end_date:
+            # if not status_dict[event.evt_morning_start]:
+            #     status_dict[event.evt_morning_start] = True
+            #     return event.evt_morning_start, dict(frequency=self.opt['frequency'],
+            #                                          trade_date=self.trade_date,
+            #                                          day_time=now)
+            evt, playload = _base_event_emit(event.evt_morning_start)
+            if evt is not None:
+                return evt, playload
+        elif morning_end_date <= now < noon_start_date:
+            evt, playload = _base_event_emit(event.evt_morning_start)
+            if evt is not None:
+                return evt, playload
+            evt, playload = _base_event_emit(event.evt_morning_end)
+            if evt is not None:
+                return evt, playload
+        elif noon_start_date <= now < noon_end_date:
+            evt, playload = _base_event_emit(event.evt_morning_start)
+            if evt is not None:
+                return evt, playload
+            evt, playload = _base_event_emit(event.evt_morning_end)
+            if evt is not None:
+                return evt, playload
+            evt, playload = _base_event_emit(event.evt_noon_start)
+            if evt is not None:
+                return evt, playload
         elif now >= noon_end_date:
-            if not status_dict[event.evt_noon_end]:
-                status_dict[event.evt_noon_end] = True
-                return event.evt_noon_end, dict(frequency=self.opt['frequency'],
-                                                trade_date=date_now,
-                                                day_time=now)
+            evt, playload = _base_event_emit(event.evt_morning_start)
+            if evt is not None:
+                return evt, playload
+            evt, playload = _base_event_emit(event.evt_morning_end)
+            if evt is not None:
+                return evt, playload
+            evt, playload = _base_event_emit(event.evt_noon_start)
+            if evt is not None:
+                return evt, playload
+            evt, playload = _base_event_emit(event.evt_noon_end)
+            if evt is not None:
+                return evt, playload
 
         return None, None
 
@@ -172,6 +280,8 @@ class BacktestQuotation(Quotation):
 
         self.iter_tag = True
         self.day_time = None
+
+        self.end_quot_tag = False
 
     @staticmethod
     def pre_trade_date(start):
@@ -191,8 +301,12 @@ class BacktestQuotation(Quotation):
         if len(codes) > 0:
             if not await super().add_code(codes):
                 return False
-            if not await self.init_bar(codes):
-                return False
+            if self.day_frequency == 0:
+                if not await self.init_bar(codes):
+                    return False
+            else:
+                if not await self.init_daily_bar(codes):
+                    return False
         return True
 
     async def init_bar(self, codes) -> bool:
@@ -201,7 +315,7 @@ class BacktestQuotation(Quotation):
             df = fetch.fetch_stock_minute(code=code, period=str(int(self.frequency / 60)),
                                           start=self.start_date, end=self.end_date)
             if df is None:
-                self.log.error('指数/股票{}, {} k线无数据'.format(code, self.frequency))
+                self.log.error('指数/股票: {}, 频率: {}min k线无数据'.format(code, int(self.frequency / 60)))
                 return False
             df['name'] = self.code_info[code]
             bar[code] = df
@@ -246,6 +360,39 @@ class BacktestQuotation(Quotation):
             self.iter = iter(self.bar)
         return True
 
+    async def init_daily_bar(self, codes) -> bool:
+        if len(codes) > 0:
+            df_data = None
+            if isinstance(self.db_data, StockDB):
+                df_data = await self.db_data.load_stock_daily(
+                    filter={'code': {'$in': self.codes},
+                            'trade_date': {'$gte': self.start_date, '$lte': self.end_date}},
+                    sort=[('trade_date', 1)])
+            elif isinstance(self.db_data, FundDB):
+                df_data = await self.db_data.load_fund_daily(
+                    filter={'code': {'$in': self.codes},
+                            'trade_date': {'$gte': self.start_date, '$lte': self.end_date}},
+                    sort=[('trade_date', 1)])
+
+            if df_data is None or df_data.empty:
+                return False
+
+            df_data['day_high'] = df_data['high']
+            df_data['day_min'] = df_data['low']
+            df_data['day_open'] = df_data['low']
+
+            for data in df_data.to_dict('records'):
+                day_time = datetime.strptime(data['trade_date'].strftime('%Y-%m-%d') + ' 15:00:00', '%Y-%m-%d %H:%M:%S')
+                if day_time not in self.bar:
+                    self.bar[day_time] = OrderedDict()
+                data['name'] = self.code_info[data['code']]
+                data['day_time'] = day_time
+                self.bar[day_time][data['code']] = data
+
+        if self.day_time is None:
+            self.iter = iter(self.bar)
+        return True
+
     async def get_quot(self) -> Optional[Tuple[Optional[str], Optional[Dict]]]:
         now = datetime.now()
         try:
@@ -258,13 +405,38 @@ class BacktestQuotation(Quotation):
             if self.is_start and not self.is_end:
                 if self.iter_tag:
                     self.day_time = next(self.iter)
+
+                status_dict = self.get_status_dict(self.day_time)
+
+                quot = self.bar[self.day_time]
+                morning_end_date = datetime(year=self.day_time.year, month=self.day_time.month, day=self.day_time.day,
+                                            hour=11, minute=30, second=0)
+                noon_end_date = datetime(year=self.day_time.year, month=self.day_time.month, day=self.day_time.day,
+                                         hour=15, minute=0, second=0)
+                if status_dict['evt_morning_start'] and self.day_time == morning_end_date and not self.end_quot_tag:
+                    self.iter_tag = False
+                    self.end_quot_tag = True
+                    return event.evt_quotation, dict(frequency=self.opt['frequency'],
+                                                     trade_date=self.trade_date,
+                                                     day_time=now,
+                                                     list=quot)
+                if status_dict['evt_noon_start'] and self.day_time == noon_end_date and not self.end_quot_tag:
+                    self.iter_tag = False
+                    self.end_quot_tag = True
+                    return event.evt_quotation, dict(frequency=self.opt['frequency'],
+                                                     trade_date=self.trade_date,
+                                                     day_time=now,
+                                                     list=quot)
                 evt, payload = await self.get_base_event(now=self.day_time)
                 if evt is not None:
                     self.iter_tag = False
+                    if self.end_quot_tag:
+                        self.end_quot_tag = False
+                        self.iter_tag = True
                     return evt, payload
 
-                quot = self.bar[self.day_time]
                 self.iter_tag = True
+                self.end_quot_tag = False
                 return event.evt_quotation, dict(frequency=self.opt['frequency'],
                                                  trade_date=self.trade_date,
                                                  day_time=now,
@@ -277,7 +449,7 @@ class BacktestQuotation(Quotation):
                                        start=now,
                                        end=now)
         except Exception as e:
-            self.log.error('get_quot 异常, ex={}, call={}'.format(e, traceback.format_exc()))
+            self.log.error('BacktestQuotation get_quot 异常, ex={}, call={}'.format(e, traceback.format_exc()))
 
         return None, None
 

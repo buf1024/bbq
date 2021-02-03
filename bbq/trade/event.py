@@ -14,9 +14,9 @@ evt_noon_end = 'evt_noon_end'
 
 # 委托事件 playload = Entrust
 # 委托broker事件: 买/卖/取消
-evt_broker_buy = 'evt_broker_buy'
-evt_broker_sell = 'evt_broker_sell'
-evt_broker_cancel = 'evt_broker_cancel'
+evt_entrust_buy = 'evt_entrust_buy'
+evt_entrust_sell = 'evt_entrust_sell'
+evt_entrust_cancel = 'evt_entrust_cancel'
 
 # brokder产生的反馈事件:
 # 委托提交事件/委托(买, 卖)成交事件/撤销事件/资金同步事件/持仓同步事件
@@ -32,4 +32,7 @@ evt_broker_pos_sync = 'evt_broker_pos_sync'
 evt_sig_cancel = 'evt_sig_cancel'
 evt_sig_buy = 'evt_sig_buy'
 evt_sig_sell = 'evt_sig_sell'
+
+# 内部终止事件
+evt_term = '__evt_term'
 

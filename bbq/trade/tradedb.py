@@ -6,7 +6,7 @@ class TradeDB(MongoDB):
     _meta = {
         # 账户信息
         'account_info': {'account_id': '账户id', 'status': '账户状态(0正常 其他停止)',
-                         'kind': '交易种类: stock, fund', 'type': '账户类型: real, simulate, backtest',
+                         'category': '交易种类: stock, fund', 'type': '账户类型: real, simulate, backtest',
                          'cash_init': '初始资金', 'cash_available': '可用资金', 'cash_frozen': '冻结资金',
                          'total_net_value': '总净值', 'total_hold_value': '持仓市值', 'cost': '持仓成本',
                          'broker_fee': '手续费', "transfer_fee": '过户费', "tax_fee": '印花税',
@@ -168,8 +168,8 @@ class TradeDB(MongoDB):
 if __name__ == '__main__':
     import uuid
     from bbq.common import run_until_complete
-    acct1 = dict(account_id=str(uuid.uuid4()), status=0, kind='fund', type='stock', data=123)
-    acct2 = dict(account_id=str(uuid.uuid4()), status=0, kind='fund', type='stock', data=456)
+    acct1 = dict(account_id=str(uuid.uuid4()), status=0, category='fund', type='stock', data=123)
+    acct2 = dict(account_id=str(uuid.uuid4()), status=0, category='fund', type='stock', data=456)
 
     db = TradeDB()
     db.init()
@@ -179,7 +179,7 @@ if __name__ == '__main__':
         await db.save_account(data=acct2)
 
     async def test_load():
-        data = await db.load_account(filter=dict(status=0, kind='fund', type='stock'), limit=1)
+        data = await db.load_account(filter=dict(status=0, category='fund', type='stock'), limit=1)
         print(data)
 
     run_until_complete(
