@@ -328,27 +328,14 @@ class BacktestQuotation(Quotation):
     async def add_bar(self, bars) -> bool:
         if len(bars) > 0:
             for code, bar_df in bars.items():
-                start, end = bar_df.iloc[0]['day_time'], bar_df.iloc[-1]['day_time']
-                if self.day_time is not None:
-                    start = self.next_trade_date(self.day_time)
-                pre_start = self.pre_trade_date(start)
-                df_daily = fetch.fetch_stock_daily(code=code, start=pre_start, end=end, adjust=False)
-                if df_daily is None:
-                    self.log.error('fetch fetch_stock_daily failed')
-                    return False
-
-                while start <= end:
-                    next_day = start + timedelta(days=1)
-                    start_str = start.strftime('%Y-%m-%d') + ' 00:00:00'
-                    end_str = next_day.strftime('%Y-%m-%d') + ' 00:00:00'
-                    start = next_day
-                    df_data = bar_df.query("day_time >= '{}' and day_time < '{}'".format(start_str, end_str))
-                    if df_data.empty:
-                        continue
-
-                    df_data['day_high'] = df_data['close'].cummax()
-                    df_data['day_min'] = df_data['close'].cummin()
-                    df_data['day_open'] = df_daily[df_daily['trade_date'] == start_str].iloc[0]['close']
+                bar_df['trade_date'] = bar_df['day_time'].apply(lambda d: datetime(year=d.year, month=d.month, day=d.day))
+                group = bar_df.groupby('trade_date')
+                for trade_date in group.groups.keys():
+                    df_data = bar_df[bar_df['trade_date'] == trade_date]
+                    df_data['day_open'] = df_data.iloc[0]['open']
+                    for i in range(df_data.shape[0]):
+                        df_data['day_high'] = df_data[:i + 1]['high'].cummax()
+                        df_data['day_min'] = df_data[:i + 1]['low'].cummin()
 
                     for data in df_data.to_dict('records'):
                         day_time = data['day_time']
