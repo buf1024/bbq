@@ -2,6 +2,9 @@ from bbq.trade.base_obj import BaseObj
 
 
 class TradeSignal(BaseObj):
+    sig_sell, sig_buy, sig_cancel = 'sell', 'buy', 'cancel'
+    risk, strategy, broker, robot = 'risk', 'strategy', 'broker', 'robot'
+
     def __init__(self, signal_id: str, account):
         super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade, trader=account.trader)
         self.account = account
@@ -24,7 +27,7 @@ class TradeSignal(BaseObj):
     async def sync_to_db(self) -> bool:
         data = {'account_id': self.account.account_id,
                 'signal_id': self.signal_id, 'name': self.name, 'code': self.code,
-                'source': self.source, 'signal': self.signal,
+                'source': self.source, 'source_name': self.source_name, 'signal': self.signal,
                 'volume': self.volume, 'price': self.price,
                 'time': self.time
                 }
@@ -34,7 +37,7 @@ class TradeSignal(BaseObj):
     def to_dict(self):
         return {'account_id': self.account.account_id,
                 'signal_id': self.signal_id, 'name': self.name, 'code': self.code,
-                'source': self.source, 'signal': self.signal,
+                'source': self.source, 'source_name': self.source_name, 'signal': self.signal,
                 'volume': self.volume, 'price': self.price,
                 'time': self.time.strftime('%Y-%m-%d %H:%M:%S') if self.time is not None else None
                 }

@@ -3,6 +3,9 @@ from datetime import datetime
 
 
 class Entrust(BaseObj):
+    stat_init, stat_commit, stat_deal, stat_part_deal, stat_cancel = 'init', 'commit', 'deal', 'part_deal', 'cancel '
+    type_buy, type_sell, type_cancel = 'buy', 'sell', 'cancel'
+
     def __init__(self, entrust_id: str, account):
         super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade, trader=account.trader)
         self.account = account
@@ -15,7 +18,7 @@ class Entrust(BaseObj):
 
         self.broker_entrust_id = ''  # broker对应的委托id
         self.type = None  # buy, sell, cancel
-        self.status = 'init'  # init, 初始化 commit 已提交 deal 已成 part_deal 部成 cancel 已经取消
+        self.status = Entrust.stat_init  # init, 初始化 commit 已提交 deal 已成 part_deal 部成 cancel 已经取消
 
         self.price = 0.0  # 价格
         self.volume = 0  # 量

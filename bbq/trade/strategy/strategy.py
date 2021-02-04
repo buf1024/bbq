@@ -1,10 +1,10 @@
 import json
-from bbq.trade.base_obj import BaseObj
+from bbq.trade.action_obj import BaseActionObj
 from bbq.trade.account import Account
 from typing import Dict, Optional
 
 
-class Strategy(BaseObj):
+class Strategy(BaseActionObj):
     """
     策略类接口，可产生信号:
     1. evt_sig_cancel 取消委托

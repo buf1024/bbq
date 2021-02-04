@@ -14,7 +14,7 @@ class TradeDB(MongoDB):
                          'start_time': '开始时间', 'end_time': '结束时间', 'update_time': '更新时间'},
         # 策略信号
         'signal_info': {'account_id': '账户id', 'signal_id': '信号id',
-                        'source': '信号源, risk, strategy, broker, manual', 'source_name': '友好显示名称',
+                        'source': '信号源, risk/strategy/broker/robot', 'source_name': '友好显示名称',
                         'signal': '信号: sell, buy, cancel', 'name': '股票名称', 'code': '股票代码',
                         'price': '价', 'volume': '量', 'entrust_id': '委托ID', 'time': '信号时间'},
 
@@ -22,7 +22,7 @@ class TradeDB(MongoDB):
         'entrust_info': {'account_id': '账户id', 'entrust_id': '委托ID', 'name': '股票名称', 'code': '股票代码',
                          'broker_entrust_id': 'broker对应的委托id',
                          'type': '委托类型: buy, sell, cancel',
-                         'status': '委托状态: commit 已提交 deal 已成 part_deal 部成 cancel 已取消',
+                         'status': '委托状态: init 初始化 commit 已提交 deal 已成 part_deal 部成 cancel 已取消',
                          'price': '价', 'volume': '量', 'volume_deal': '已成量', 'volume_cancel': '已取消量',
                          'time': '委托时间'},
 

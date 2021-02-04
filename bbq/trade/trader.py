@@ -19,7 +19,7 @@ import sys
 import signal
 from bbq.trade.msg.msg_push import MsgPush
 from collections import defaultdict
-from bbq.trade import event
+from bbq.trade.enum import event
 
 
 class Trader:

@@ -33,6 +33,14 @@ class BaseObj(ABC):
     def get_uuid():
         return str(uuid.uuid4()).replace('-', '')
 
+    def get_obj_id(self, typ, is_builtin=True, cls_name=None):
+        loc = 'external'
+        if is_builtin:
+            loc = 'builtin'
+        if cls_name is None:
+            cls_name = self.__class__.__name__
+        return f'{typ}:{loc}:{cls_name}'
+
     async def emit(self, queue: str, evt: str, payload: object):
         if not self.trader.is_running(queue):
             self.log.error(
@@ -66,3 +74,4 @@ class BaseObj(ABC):
 
     def __str__(self):
         return yaml.dump(self.to_dict(), allow_unicode=True, sort_keys=False)
+

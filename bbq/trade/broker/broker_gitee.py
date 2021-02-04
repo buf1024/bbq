@@ -6,7 +6,7 @@ import asyncio
 import copy
 from bbq.trade.entrust import Entrust
 from datetime import datetime
-from bbq.trade import event
+from bbq.trade.enum import event
 
 
 class BrokerGitee(Broker):
@@ -126,7 +126,7 @@ class BrokerGitee(Broker):
                 self.log.error('create entrust:{} issue failed'.format(entrust))
                 return
 
-            entrust.status = 'commit'
+            entrust.status = entrust.stat_commit
             entrust.broker_entrust_id = issue['number']
 
             body = '```yaml\n{}\n```\n\n'.format(entrust)
@@ -199,7 +199,7 @@ class BrokerGitee(Broker):
                     del self.entrust[entrust.entrust_id]
                     return True
                 return False
-            if status == 'part_deal' or status == 'deal':
+            if status == Entrust.stat_part_deal or status == Entrust.stat_deal:
                 entrust.status = js['status']
                 volume = js['volume_deal']
                 entrust.volume_deal += volume

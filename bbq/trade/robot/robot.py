@@ -1,9 +1,9 @@
-from bbq.trade.base_obj import BaseObj
+from bbq.trade.action_obj import BaseActionObj
 from ..account import Account
 from typing import Optional, Dict
 
 
-class Robot(BaseObj):
+class Robot(BaseActionObj):
     """
     运维类接口，可产生运维事件和交易信号:
     1. evt_status_report 状态报告

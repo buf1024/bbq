@@ -8,7 +8,7 @@ from bbq.data.mongodb import MongoDB
 import traceback
 from bbq.data.stockdb import StockDB
 from bbq.data.funddb import FundDB
-from bbq.trade import event
+from bbq.trade.enum import event
 import pandas as pd
 
 """
@@ -366,7 +366,7 @@ class BacktestQuotation(Quotation):
 
             df_data['day_high'] = df_data['high']
             df_data['day_min'] = df_data['low']
-            df_data['day_open'] = df_data['low']
+            df_data['day_open'] = df_data['open']
 
             for data in df_data.to_dict('records'):
                 day_time = datetime.strptime(data['trade_date'].strftime('%Y-%m-%d') + ' 15:00:00', '%Y-%m-%d %H:%M:%S')
@@ -386,8 +386,8 @@ class BacktestQuotation(Quotation):
             if not self.is_start:
                 self.is_start = True
                 return event.evt_start, dict(frequency=self.opt['frequency'],
-                                             start=now,
-                                             end=now)
+                                            start=now,
+                                            end=now)
 
             if self.is_start and not self.is_end:
                 if self.iter_tag:
@@ -404,16 +404,16 @@ class BacktestQuotation(Quotation):
                     self.iter_tag = False
                     self.end_quot_tag = True
                     return event.evt_quotation, dict(frequency=self.opt['frequency'],
-                                                     trade_date=self.trade_date,
-                                                     day_time=now,
-                                                     list=quot)
+                                                    trade_date=self.trade_date,
+                                                    day_time=now,
+                                                    list=quot)
                 if status_dict['evt_noon_start'] and self.day_time == noon_end_date and not self.end_quot_tag:
                     self.iter_tag = False
                     self.end_quot_tag = True
                     return event.evt_quotation, dict(frequency=self.opt['frequency'],
-                                                     trade_date=self.trade_date,
-                                                     day_time=now,
-                                                     list=quot)
+                                                    trade_date=self.trade_date,
+                                                    day_time=now,
+                                                    list=quot)
                 evt, payload = await self.get_base_event(now=self.day_time)
                 if evt is not None:
                     self.iter_tag = False
@@ -425,16 +425,16 @@ class BacktestQuotation(Quotation):
                 self.iter_tag = True
                 self.end_quot_tag = False
                 return event.evt_quotation, dict(frequency=self.opt['frequency'],
-                                                 trade_date=self.trade_date,
-                                                 day_time=now,
-                                                 list=quot)
+                                                trade_date=self.trade_date,
+                                                day_time=now,
+                                                list=quot)
 
         except StopIteration:
             if not self.is_end:
                 self.is_end = True
             return event.evt_end, dict(frequency=self.opt['frequency'],
-                                       start=now,
-                                       end=now)
+                                      start=now,
+                                      end=now)
         except Exception as e:
             self.log.error('BacktestQuotation get_quot 异常, ex={}, call={}'.format(e, traceback.format_exc()))
 
@@ -526,9 +526,9 @@ class RealtimeQuotation(Quotation):
             if quot is not None:
                 self.reset_bar(now)
                 return event.evt_quotation, dict(frequency=self.opt['frequency'],
-                                                 trade_date=self.trade_date,
-                                                 day_time=now,
-                                                 list=quot)
+                                                trade_date=self.trade_date,
+                                                day_time=now,
+                                                list=quot)
         except Exception as e:
             self.log.error('get_quot 异常, ex={}, call={}'.format(e, traceback.format_exc()))
 

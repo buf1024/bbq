@@ -2,7 +2,7 @@ from .strategy import Strategy
 from ..account import Account
 from ..trade_signal import TradeSignal
 from datetime import datetime
-from bbq.trade import event
+from bbq.trade.enum import event
 
 
 class Dummy(Strategy):
@@ -32,19 +32,19 @@ class Dummy(Strategy):
 
                 if code not in self.test_codes_buy:
                     is_sig = True
-                    signal = 'buy'
+                    signal = TradeSignal.sig_buy
                     self.test_codes_buy.append(code)
                     self.trade_date_buy[code] = trade_date
                 if code not in self.test_codes_sell and code in self.test_codes_buy:
                     if self.trade_date_buy[code] != trade_date:
                         is_sig = True
-                        signal = 'sell'
+                        signal = TradeSignal.sig_sell
                         self.test_codes_sell.append(code)
                         self.trade_date_sell[code] = trade_date
 
                 if is_sig:
                     sig = TradeSignal(self.get_uuid(), self.account)
-                    sig.source = 'strategy:builtin:Dummy'
+                    sig.source = self.get_obj_id(typ=sig.strategy)
                     sig.source_desc = self.name()
                     sig.signal = signal
                     sig.code = code
@@ -52,4 +52,4 @@ class Dummy(Strategy):
                     sig.price = price
                     sig.volume = 100
                     sig.time = day_time
-                    await self.emit('signal', (event.evt_sig_buy if signal == 'buy' else event.evt_sig_sell), sig)
+                    await self.emit('signal', (event.evt_sig_buy if signal == sig.sig_buy else event.evt_sig_sell), sig)

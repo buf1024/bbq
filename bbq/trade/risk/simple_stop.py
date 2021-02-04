@@ -1,6 +1,7 @@
 from .risk import Risk
 from ..account import Account
 from ..trade_signal import TradeSignal
+from bbq.trade.enum import event
 
 
 class SimpleStop(Risk):
@@ -57,8 +58,9 @@ class SimpleStop(Risk):
 
             if is_at_risk:
                 sig = TradeSignal(self.get_uuid(), self.account)
-                sig.source = 'risk'
-                sig.signal = 'sell'
+                sig.source = self.get_obj_id(typ=sig.risk)
+                sig.source_name = self.name()
+                sig.signal = sig.sig_sell
                 sig.code = position.code
                 sig.price = sell_price
                 sig.volume = position.volume

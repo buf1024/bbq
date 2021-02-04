@@ -5,12 +5,12 @@ from bbq.trade.util_fac import get_broker
 from bbq.trade.util_fac import get_risk
 from bbq.trade.entrust import Entrust
 from bbq.trade.util_fac import get_strategy
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
 from bbq.trade.position import Position
 from bbq.trade.deal import Deal
 from datetime import datetime
 import copy
-from bbq.trade import event
+from bbq.trade.enum import event, action
 
 
 class Account(BaseObj):
@@ -138,7 +138,7 @@ class Account(BaseObj):
         for entrust_dict in entrusts:
             entrust = Entrust(entrust_id=entrust_dict['entrust_id'], account=self)
             entrust.from_dict(entrust_dict)
-            entrust.status = 'cancel'
+            entrust.status = entrust.stat_cancel
             await entrust.sync_to_db()
 
         return True
@@ -185,7 +185,7 @@ class Account(BaseObj):
         # evt_morning_start evt_quotation evt_morning_end
         # evt_noon_start evt_quotation evt_noon_end
         # evt_end(backtest)
-        self.log.info('account on quot, event={}, payload={}'.format(evt, payload))
+        self.log.debug(f'account on quot, event={evt}, payload={payload}')
         if evt == event.evt_morning_start or evt == event.evt_noon_start:
             self.is_trading = True
         if evt == event.evt_morning_end or evt == event.evt_noon_end:
@@ -198,8 +198,8 @@ class Account(BaseObj):
                     position.volume_available = position.volume
                     await position.sync_to_db()
             for entrust in self.entrust.values():
-                if entrust.status == 'commit':
-                    entrust.status = 'cancel'
+                if entrust.status == entrust.stat_commit:
+                    entrust.status = entrust.stat_cancel
                     await entrust.sync_to_db()
             self.cash_available += self.cash_frozen
             await self.sync_to_db()
@@ -219,16 +219,23 @@ class Account(BaseObj):
         position = self.position[code]
         return position.volume, position.volume_available
 
+    def get_active_entrust(self, code) -> List[Entrust]:
+        entrust_list = []
+        for entrust in self.entrust.values():
+            if entrust.code == code:
+                entrust_list.append(entrust)
+        return entrust_list
+
     def get_fee(self, typ, code, price, volume) -> float:
         total = price * volume
         broker_fee = total * self.broker_fee
         if broker_fee < 5:
             broker_fee = 5
         tax_fee = 0
-        if typ == 'buy':
+        if typ == action.act_buy:
             if code.startswith('sh6'):
                 tax_fee = total * self.transfer_fee
-        elif typ == 'sell':
+        elif typ == action.act_sell:
             if code.startswith('sz') or code.startswith('sh'):
                 tax_fee = total * self.tax_fee
         return round(broker_fee + tax_fee, 2)
@@ -275,12 +282,12 @@ class Account(BaseObj):
         if evt == event.evt_sig_buy or evt == event.evt_sig_sell:
             cost = 0
             if evt == event.evt_sig_buy:
-                cost = self.get_cost(typ='buy',
+                cost = self.get_cost(typ=action.act_buy,
                                      code=sig.code, price=sig.price, volume=sig.volume)
                 if cost > self.cash_available:
                     self.log.warn('not enough money to buy, cost={}, available={}'.format(cost, self.cash_available))
                     return
-                if sig.signal != 'buy':
+                if sig.signal != sig.sig_buy:
                     self.log.error('signal not right, evt={}, signal={}'.format(evt, sig.signal))
                     return
             if evt == event.evt_sig_sell:
@@ -289,7 +296,7 @@ class Account(BaseObj):
                     self.log.warn('not volume to sell, entrust={}, available={}'.format(sig.volume, volume_available))
                     return
 
-                if sig.signal != 'sell':
+                if sig.signal != sig.sig_sell:
                     self.log.error('signal not right, evt={}, signal={}'.format(evt, sig.signal))
                     return
 
@@ -299,7 +306,7 @@ class Account(BaseObj):
             entrust.time = sig.time
             entrust.broker_entrust_id = ''
             entrust.type = sig.signal
-            entrust.status = 'init'
+            entrust.status = entrust.stat_init
             entrust.price = sig.price
             entrust.volume = sig.volume
             entrust.volume_deal = 0
@@ -383,7 +390,7 @@ class Account(BaseObj):
 
             await position.sync_to_db()
 
-        self.cash_frozen = round(self.cash_frozen - self.get_cost('buy', position.code, deal.price, deal.volume), 2)
+        self.cash_frozen = round(self.cash_frozen - self.get_cost(action.act_buy, position.code, deal.price, deal.volume), 2)
         await self.update_account(None)
 
     async def deduct_position(self, deal):
@@ -437,22 +444,22 @@ class Account(BaseObj):
                 self.deal.append(deal)
 
             await deal.sync_to_db()
-            if entrust.type == 'buy':
+            if entrust.type == entrust.type_buy:
                 await self.add_position(deal)
-            elif entrust.type == 'sell':
+            elif entrust.type == entrust.type_sell:
                 await self.deduct_position(deal)
 
             if entrust.volume == entrust.volume_deal + entrust.volume_cancel:
                 if not self.trader.is_backtest():
                     del self.entrust[entrust.entrust_id]
 
-        if evt == event.evt_entrust_canceled:
+        if evt == event.evt_entrust_cancel:
             entrust = self.entrust[payload.entrust_id]
             entrust.volume_cancel = payload.volume_cancel
             if entrust.volume_deal != 0:
-                entrust.status = 'part_deal'
+                entrust.status = entrust.stat_part_deal
             else:
-                entrust.status = 'cancel'
+                entrust.status = entrust.stat_cancel
             await entrust.sync_to_db()
             if not self.trader.is_backtest():
                 del self.entrust[entrust.entrust_id]
