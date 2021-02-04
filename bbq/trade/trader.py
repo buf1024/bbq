@@ -11,7 +11,7 @@ import multiprocessing as mp
 from typing import Dict, Optional
 from bbq.trade.account import Account
 from bbq.trade.util_fac import *
-from datetime import datetime
+from datetime import datetime, date
 from bbq.trade.strategy_info import StrategyInfo
 from bbq.trade.quotation import BacktestQuotation, RealtimeQuotation
 import os
@@ -78,7 +78,7 @@ class Trader:
             return None
         self.log.info('account inited')
 
-        is_init = await self.init_quotation(opt=self.config['quotation'])
+        is_init = await self.init_quotation(opt=self.config['trade']['quotation'])
         if not is_init:
             self.log.error('初始化行情异常')
             return None
@@ -174,7 +174,16 @@ class Trader:
 
     async def create_new_account(self) -> Optional[Account]:
         typ = self.config['trade']['type']
-        account = Account(typ=typ, account_id=Account.get_uuid(),
+        account_id = self.config['trade']['account-id']
+        if account_id is None:
+            account_id = Account.get_uuid()
+        data = await self.db_trade.load_account(filter={'account_id': account_id, 'status': 0, 'type': typ},
+                                                limit=1)
+        if len(data) != 0:
+            self.log.error(f'新建账户 {alias} 已经存在')
+            return None
+
+        account = Account(typ=typ, account_id=account_id,
                           db_data=self.db_data, db_trade=self.db_trade, trader=self)
 
         trade_dict = self.config['trade']
@@ -201,7 +210,14 @@ class Trader:
         risk_id = trade_dict['risk']['id'] if trade_dict['risk'] is not None else None
         risk_opt = trade_dict['risk']['option'] if trade_dict['risk'] is not None else None
 
-        quot_opt = self.config['quotation'] if self.config['quotation'] is not None else None
+        quot_opt = self.config['trade']['quotation'] if self.config['trade']['quotation'] is not None else None
+        if quot_opt is not None:
+            if 'start_date' in quot_opt and isinstance(quot_opt['start_date'], date):
+                d = quot_opt['start_date']
+                quot_opt['start_date'] = datetime(year=d.year, month=d.month, day=d.day)
+            if 'end_date' in quot_opt and isinstance(quot_opt['end_date'], date):
+                d = quot_opt['end_date']
+                quot_opt['end_date'] = datetime(year=d.year, month=d.month, day=d.day)
 
         if broker_id is None:
             if typ in ['backtest', 'simulate']:
@@ -271,58 +287,63 @@ class Trader:
         trade_dict = self.config['trade']
         acct_id, cat, typ = trade_dict['account-id'], trade_dict['category'], trade_dict['type']
         if cat not in ['fund', 'stock'] and typ not in ['backtest', 'realtime', 'simulate']:
-            self.log.error('category/type not correct, category={}, type={}'.format(cat, typ))
+            self.log.error('category/type 不正确, category={}, type={}'.format(cat, typ))
             return False
         if acct_id is not None and len(acct_id) > 0:
             # 直接load数据库
             accounts = await self.db_trade.load_account(
                 filter=dict(status=0, category=cat, type=typ, account_id=acct_id))
-            if len(accounts) == 0:
-                self.log.info('数据中没有已运行的real/simulate数据, account_id={}'.format(acct_id))
-                return False
-
-            self.account = Account(account_id=acct_id, typ=typ, db_data=self.db_data, db_trade=self.db_trade,
-                                   trader=self)
-            if not await self.account.sync_from_db():
-                self.log.info('从数据库中初始或account失败, account_id={}'.format(acct_id))
-                self.account = None
-                return False
-            quot_opt = await self.db_trade.load_strategy(filter={'account_id': self.account.account_id},
-                                                         projection=['quot_opt'], limit=1)
-            quot_opt = None if len(quot_opt) == 0 else quot_opt[0]
-            self.config['quotation'] = quot_opt['quot_opt']
-
-            return True
-
-        strategy_js, risk_js, broker_js = trade_dict['strategy'], trade_dict['risk'], trade_dict['broker']
-        if typ == 'real' or typ == 'simulate':
-            if strategy_js is None and risk_js is None and broker_js is None:
-                # fork 多个进程数据库存在的
-                accounts = await self.db_trade.load_account(filter=dict(status=0, category=cat, type=typ))
-                if len(accounts) == 0:
-                    self.log.info('数据中没有已运行的real/simulate数据')
+            if len(accounts) > 0:
+                self.account = Account(account_id=acct_id, typ=typ, db_data=self.db_data, db_trade=self.db_trade,
+                                       trader=self)
+                if not await self.account.sync_from_db():
+                    self.log.info('从数据库中初始或account失败, account_id={}'.format(acct_id))
+                    self.account = None
                     return False
-                for account in accounts:
-                    self.log.info('开始fork程序运行account_id={}'.format(account['account_id']))
-                    p = mp.Process(target=entry,
-                                   kwargs=dict(conf=None,
-                                               log_path=self.config['log']['path'],
-                                               log_level=self.config['log']['level'],
-                                               uri=self.config['mongo']['uri'],
-                                               pool=self.config['mongo']['pool'],
-                                               strategy_path=self.config['strategy']['trade'],
-                                               broker_path=self.config['strategy']['broker'],
-                                               risk_path=self.config['strategy']['risk'],
-                                               init_cash=0, transfer_fee=0, tax_fee=0, broker_fee=0,
-                                               account_id=account['account_id'], trade_category=cat,
-                                               trade_type=typ,
-                                               quot_freq=None, quot_date=None, quot_code=None,
-                                               strategy=None, risk=None, broker=None),
-                                   daemon=False)
-                    p.start()
-                    self.log.info('process pid={}, alive={}'.format(p.pid, p.is_alive()))
-                self.log.info('main process exit')
-                sys.exit(0)
+                quot_opt = await self.db_trade.load_strategy(filter={'account_id': self.account.account_id},
+                                                             projection=['quot_opt'], limit=1)
+                quot_opt = None if len(quot_opt) == 0 else quot_opt[0]
+                self.config['trade']['quotation'] = quot_opt['quot_opt']
+
+                return True
+
+        # strategy_js, risk_js, broker_js = trade_dict['strategy'], trade_dict['risk'], trade_dict['broker']
+        if (typ == 'real' or typ == 'simulate') and acct_id is None:
+            # if strategy_js is None and risk_js is None and broker_js is None:
+            # fork 多个进程数据库存在的
+            accounts = await self.db_trade.load_account(filter=dict(status=0, category=cat, type=typ))
+            if len(accounts) == 0:
+                self.log.info('数据中没有已运行的real/simulate数据')
+                return False
+            strategy_path = self.config['strategy']['trade'],
+            broker_path = self.config['strategy']['broker'],
+            risk_path = self.config['strategy']['risk'],
+            if len(strategy_path) > 0 and isinstance(strategy_path[0], list):
+                strategy_path = ','.join(strategy_path[0])
+            if len(broker_path) > 0 and isinstance(broker_path[0], list):
+                broker_path = ','.join(broker_path[0])
+            if len(risk_path) > 0 and isinstance(risk_path[0], list):
+                risk_path = ','.join(risk_path[0])
+
+            for account in accounts:
+                self.log.info('开始fork程序运行account_id={}'.format(account['account_id']))
+                p = mp.Process(target=entry,
+                               kwargs=dict(conf=None,
+                                           log_path=self.config['log']['path'],
+                                           log_level=self.config['log']['level'],
+                                           uri=self.config['mongo']['uri'],
+                                           pool=self.config['mongo']['pool'],
+                                           strategy_path=strategy_path, broker_path=broker_path, risk_path=risk_path,
+                                           init_cash=0, transfer_fee=0, tax_fee=0, broker_fee=0,
+                                           account_id=account['account_id'], trade_category=cat,
+                                           trade_type=typ,
+                                           quot_freq=None, quot_date=None, quot_codes=None,
+                                           strategy=None, risk=None, broker=None),
+                               daemon=False)
+                p.start()
+                self.log.info('process pid={}, alive={}'.format(p.pid, p.is_alive()))
+            self.log.info('main process exit')
+            os._exit(0)
 
         # 新生成trade / backtest
         self.account = await self.create_new_account()
@@ -492,6 +513,7 @@ def main(conf: str, log_path: str, log_level: str,
 
 
 def entry(**opts):
+    print(opts)
     conf, log_path, log_level = opts['conf'], opts['log_path'], opts['log_level']
     uri, pool = opts['uri'], opts['pool']
     strategy_path, risk_path, broker_path = opts['strategy_path'], opts['risk_path'], opts['broker_path']
@@ -531,11 +553,15 @@ def entry(**opts):
     conf_cmd = dict(log=dict(path=log_path, level=log_level),
                     mongo=dict(uri=uri, pool=pool),
                     strategy=dict(broker=broker_path, trade=strategy_path, risk=risk_path),
-                    quotation=dict(frequency=quot_freq, start_date=q_start, end_date=q_end, codes=q_codes),
-                    trade={'account-id': account_id, 'category': trade_category, 'type': trade_type,
-                           'init-cash': init_cash,
-                           'transfer-fee': transfer_fee, 'tax-fee': tax_fee, 'broker-fee': broker_fee,
-                           'strategy': strategy_js, 'risk': risk_js, 'broker': broker_js})
+                    trade={
+                        'quotation': {
+                            'frequency': quot_freq, 'start_date': q_start, 'end_date': q_end, 'codes': q_codes
+                        },
+                        'account-id': account_id, 'category': trade_category, 'type': trade_type,
+                        'init-cash': init_cash,
+                        'transfer-fee': transfer_fee, 'tax-fee': tax_fee, 'broker-fee': broker_fee,
+                        'strategy': strategy_js, 'risk': risk_js, 'broker': broker_js
+                    })
     conf_file = None
     if conf is not None:
         _, conf_file = init_config(conf)

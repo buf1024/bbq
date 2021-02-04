@@ -398,6 +398,7 @@ class MyFetch(BaseFetch):
         df['high'] = df['high'].astype(float)
         df['low'] = df['low'].astype(float)
         df['volume'] = df['volume'].astype(int)
+        df.drop(columns=['day'], inplace=True)
         df = df.reindex()
         self.log.debug('获取股票{} {}分钟数据, count={}'.format(code, period, df.shape[0]))
 

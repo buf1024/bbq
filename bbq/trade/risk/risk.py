@@ -59,7 +59,7 @@ class Risk(BaseActionObj):
             risk_opt = opt['risk_opt']
         return await self.init(opt=risk_opt)
 
-    @BaseObj.discard_saver
+    @BaseActionObj.discard_saver
     async def sync_to_db(self) -> bool:
         data = {'account_id': self.account.account_id,
                 'risk_id': self.risk_id,

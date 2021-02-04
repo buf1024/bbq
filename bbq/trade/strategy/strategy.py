@@ -59,7 +59,7 @@ class Strategy(BaseActionObj):
             strategy_opt = opt['strategy_opt']
         return await self.init(opt=strategy_opt)
 
-    @BaseObj.discard_saver
+    @BaseActionObj.discard_saver
     async def sync_to_db(self) -> bool:
         data = {'account_id': self.account.account_id,
                 'strategy_id': self.strategy_id,

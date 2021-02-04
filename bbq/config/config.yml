@@ -11,6 +11,7 @@ strategy:
     - /Users/luoguochun/.config/bbq/strategy/trade
   risk:
     - /Users/luoguochun/.config/bbq/strategy/risk
+    - /Users/luoguochun/.config/bbq/strategy/risk
 message:
   email:
     host: smtp.126.com
@@ -19,14 +20,6 @@ message:
     secret: DAZXJPKTVXRVOESQ
   wechat:
     token: SCU65265Tc40310137ed88be0281163cbc854ff925db79a6189f4d
-quotation:
-  frequency: 60min
-  codes:
-    - sh000001
-    - sz000001
-  # 回测时用 yyyy-mm-dd HH:MM:SS
-  start_date: 2020-12-01
-  end_date: 2020-12-02
 trade:
   # 账户id
   account-id: null
@@ -38,7 +31,15 @@ trade:
   # 交易品类 stock / fund
   category: stock
   # 交易类型 real / simulate / backtest
-  type: backtest
+  type: real
+  quotation:
+    frequency: 60min
+    codes:
+      - sh000001
+      - sz000001
+    # 回测时用 yyyy-mm-dd HH:MM:SS
+    start_date: 2020-12-01
+    end_date: 2020-12-02
   strategy:
     # 策略名称
     id: builtin:Dummy

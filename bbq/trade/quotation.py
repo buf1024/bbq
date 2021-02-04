@@ -18,45 +18,69 @@ import pandas as pd
 -> evt_end(backtest)
 
 payload 字典:
-- evt_start
+- evt_start 开始事件 回测/实盘 第一次获取行情时产生
 {
-    "frequency": '60min', 
-    'start': datetime.datetime(2021, 2, 2, 14, 17, 56, 830798),
-    'end': datetime.datetime(2021, 2, 2, 14, 17, 56, 830798)
+    'frequency': '60min',  # 频率
+    'start': datetime.datetime(2021, 2, 2, 14, 17, 56, 830798), # 行情程序开始时间
 }
 
-- evt_morning_start
+- evt_end 结束事件 回测结束行情时产生 实盘永不结束
 {
-    'frequency': '60min',
-    'trade_date': datetime.datetime(2020, 12, 1, 0, 0),
-    'day_time': Timestamp('2020-12-01 10:30:00')
+    'frequency': '60min',  # 频率
+    'start': datetime.datetime(2021, 2, 4, 15, 55, 58, 669801), # 行情程序开始时间
+    'end': datetime.datetime(2021, 2, 4, 15, 55, 58, 669801) # 行情程序结束时间
+}
+
+- evt_morning_start 早市开市事件 
+{
+    'frequency': '60min',  # 频率
+    'trade_date': datetime.datetime(2020, 12, 1, 0, 0),  # 交易日
+    'day_time': Timestamp('2020-12-01 10:30:00') # 行情时间
+}
+
+- evt_morning_end  早市结束事件 
+{
+    'frequency': '60min',  # 频率
+    'trade_date': datetime.datetime(2020, 12, 1, 0, 0),  # 交易日
+    'day_time': Timestamp('2020-12-01 11:30:00') # 行情时间, 
+}
+
+- evt_noon_start 午市开市事件
+{
+    'frequency': '60min',  # 频率,
+    'trade_date': datetime.datetime(2020, 12, 1, 0, 0),  # 交易日
+    'day_time': Timestamp('2020-12-01 14:00:00') # 行情时间, 
+}
+
+- evt_noon_end 午市结束事件
+{
+    'frequency': '60min',  # 频率,
+    'trade_date': datetime.datetime(2020, 12, 1, 0, 0),  # 交易日
+    'day_time': Timestamp('2020-12-01 15:00:00') # 行情时间, 
 }
 
 - evt_quotation
 {
-    'frequency': '60min', 
-    'trade_date': datetime.datetime(2020, 12, 1, 0, 0), 
+    'frequency': '60min',  # 频率 
+    'trade_date': datetime.datetime(2020, 12, 1, 0, 0),  # 交易日 
     'day_time': datetime.datetime(2021, 2, 2, 14, 17, 56, 856644), 
     'list': {
         'sh000001': {
-            'day': '2020-12-01 10:30:00', 
-            'open': 3388.987, 
+            'open': 3388.987,  
             'high': 3413.278, 
             'low': 3413.278, 
             'close': 3413.278, 
             'volume': 10867266500, 
             'code': 'sh000001', 
-            'day_time': Timestamp('2020-12-01 10:30:00'), 
+            'day_time': Timestamp('2020-12-01 10:30:00') # 行情时间, 
             'name': '上证综指', 
-            'day_high': 3413.278, 
-            'day_min': 3413.278, 
-            'day_open': 3451.94
+            'day_high': 3413.278,  # 日内最高
+            'day_min': 3413.278,   # 日内最低
+            'day_open': 3451.94    # 日内开盘
         }
         ... // 其他code行情
     }
 }
-
-2021-02-02 14:17:56,858 - Dummy - INFO - dummy risk on_quot: 
 """
 
 
@@ -79,6 +103,9 @@ class Quotation(ABC):
         self.index = []
 
         self.day_frequency = 0
+
+        self.is_start = False
+        self.is_end = False
 
     def is_index(self, code: str) -> bool:
         return code in self.index
@@ -225,11 +252,6 @@ class Quotation(ABC):
             return None, None
 
         if morning_start_date <= now < morning_end_date:
-            # if not status_dict[event.evt_morning_start]:
-            #     status_dict[event.evt_morning_start] = True
-            #     return event.evt_morning_start, dict(frequency=self.opt['frequency'],
-            #                                          trade_date=self.trade_date,
-            #                                          day_time=now)
             evt, playload = _base_event_emit(event.evt_morning_start)
             if evt is not None:
                 return evt, playload
@@ -272,9 +294,6 @@ class BacktestQuotation(Quotation):
         super().__init__(db=db)
 
         self.bar = OrderedDict()
-
-        self.is_start = False
-        self.is_end = False
 
         self.iter = None
 
@@ -328,7 +347,8 @@ class BacktestQuotation(Quotation):
     async def add_bar(self, bars) -> bool:
         if len(bars) > 0:
             for code, bar_df in bars.items():
-                bar_df['trade_date'] = bar_df['day_time'].apply(lambda d: datetime(year=d.year, month=d.month, day=d.day))
+                bar_df['trade_date'] = bar_df['day_time'].apply(
+                    lambda d: datetime(year=d.year, month=d.month, day=d.day))
                 group = bar_df.groupby('trade_date')
                 for trade_date in group.groups.keys():
                     df_data = bar_df[bar_df['trade_date'] == trade_date]
@@ -382,12 +402,12 @@ class BacktestQuotation(Quotation):
 
     async def get_quot(self) -> Optional[Tuple[Optional[str], Optional[Dict]]]:
         now = datetime.now()
+        start = now
         try:
             if not self.is_start:
                 self.is_start = True
                 return event.evt_start, dict(frequency=self.opt['frequency'],
-                                            start=now,
-                                            end=now)
+                                             start=start)
 
             if self.is_start and not self.is_end:
                 if self.iter_tag:
@@ -404,16 +424,16 @@ class BacktestQuotation(Quotation):
                     self.iter_tag = False
                     self.end_quot_tag = True
                     return event.evt_quotation, dict(frequency=self.opt['frequency'],
-                                                    trade_date=self.trade_date,
-                                                    day_time=now,
-                                                    list=quot)
+                                                     trade_date=self.trade_date,
+                                                     day_time=self.day_time,
+                                                     list=quot)
                 if status_dict['evt_noon_start'] and self.day_time == noon_end_date and not self.end_quot_tag:
                     self.iter_tag = False
                     self.end_quot_tag = True
                     return event.evt_quotation, dict(frequency=self.opt['frequency'],
-                                                    trade_date=self.trade_date,
-                                                    day_time=now,
-                                                    list=quot)
+                                                     trade_date=self.trade_date,
+                                                     day_time=self.day_time,
+                                                     list=quot)
                 evt, payload = await self.get_base_event(now=self.day_time)
                 if evt is not None:
                     self.iter_tag = False
@@ -425,16 +445,17 @@ class BacktestQuotation(Quotation):
                 self.iter_tag = True
                 self.end_quot_tag = False
                 return event.evt_quotation, dict(frequency=self.opt['frequency'],
-                                                trade_date=self.trade_date,
-                                                day_time=now,
-                                                list=quot)
+                                                 trade_date=self.trade_date,
+                                                 day_time=self.day_time,
+                                                 list=quot)
 
         except StopIteration:
             if not self.is_end:
                 self.is_end = True
+            end = datetime.now()
             return event.evt_end, dict(frequency=self.opt['frequency'],
-                                      start=now,
-                                      end=now)
+                                       start=start,
+                                       end=end)
         except Exception as e:
             self.log.error('BacktestQuotation get_quot 异常, ex={}, call={}'.format(e, traceback.format_exc()))
 
@@ -481,7 +502,6 @@ class RealtimeQuotation(Quotation):
             for quot in quots.to_dict('records'):
                 code = quot['code']
                 if code not in self.codes:
-                    print('not in')
                     continue
                 self.bar[code] = dict(code=code,
                                       name=self.code_info[code],
@@ -511,8 +531,11 @@ class RealtimeQuotation(Quotation):
 
     async def get_quot(self) -> Optional[Tuple[Optional[str], Optional[Dict]]]:
         try:
-            # now = datetime.now()
-            now = datetime(year=2020, month=12, day=9, hour=14, minute=0, second=0)
+            now = datetime.now()
+            if not self.is_start:
+                self.is_start = True
+                return event.evt_start, dict(frequency=self.opt['frequency'],
+                                             start=now)
             evt, payload = await self.get_base_event(now=now)
             if evt is not None:
                 return evt, payload
@@ -525,10 +548,11 @@ class RealtimeQuotation(Quotation):
 
             if quot is not None:
                 self.reset_bar(now)
+                day_time = quot[0]['day_time']
                 return event.evt_quotation, dict(frequency=self.opt['frequency'],
-                                                trade_date=self.trade_date,
-                                                day_time=now,
-                                                list=quot)
+                                                 trade_date=self.trade_date,
+                                                 day_time=day_time,
+                                                 list=quot)
         except Exception as e:
             self.log.error('get_quot 异常, ex={}, call={}'.format(e, traceback.format_exc()))
 

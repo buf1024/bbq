@@ -172,7 +172,7 @@ class Account(BaseObj):
     async def sync_to_db(self) -> bool:
         data = {'account_id': self.account_id, 'status': self.status,
                 'category': self.category, 'type': self.typ,
-                'cash_init': self.cash_init, 'cash_available': self.cash_available,
+                'cash_init': self.cash_init, 'cash_available': self.cash_available, 'cash_frozen': self.cash_frozen,
                 'total_net_value': self.total_net_value, 'total_hold_value': self.total_hold_value, 'cost': self.cost,
                 'broker_fee': self.broker_fee, "transfer_fee": self.transfer_fee, "tax_fee": self.tax_fee,
                 'profit': self.profit, 'profit_rate': self.profit_rate,
