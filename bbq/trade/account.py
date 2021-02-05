@@ -42,13 +42,14 @@ class Account(BaseObj):
         self.position = {}
         self.entrust = {}
 
-        # 成交历史 backtest
-        self.deal = []
-        self.signal = []
-
         self.broker = None
         self.strategy = None
         self.risk = None
+
+        # 成交历史 backtest
+        self.deal = []
+        self.signal = []
+        self.acct_his = []
 
     async def sync_acct_from_db(self) -> Optional[Dict]:
         data = await self.db_trade.load_account(filter={'account_id': self.account_id, 'status': 0, 'type': self.typ},
@@ -269,7 +270,7 @@ class Account(BaseObj):
         :param payload:  TradeSignal / entrust_id
         :return:
         """
-        self.log.info('account on_signal: evt={}, signal={}'.format(evt, payload))
+        self.log.debug('account on_signal: evt={}, signal={}'.format(evt, payload))
         if not self.is_trading:
             self.log.info('is not on trading, omit signal')
             return

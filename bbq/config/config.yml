@@ -1,5 +1,5 @@
 log:
-  level: debug
+  level: info
   path: /Users/luoguochun/.config/bbq/logs
 mongo:
   uri: mongodb://localhost:27017/
@@ -22,7 +22,7 @@ message:
     token: SCU65265Tc40310137ed88be0281163cbc854ff925db79a6189f4d
 trade:
   # 账户id
-  account-id: null
+  account-id: my-debug-account
   # 初始资金
   init-cash: 0
   broker-fee: 0.00025
@@ -31,12 +31,12 @@ trade:
   # 交易品类 stock / fund
   category: stock
   # 交易类型 real / simulate / backtest
-  type: real
+  type: simulate
   quotation:
-    frequency: 60min
+    frequency: 3s
     codes:
       - sh000001
-      - sz000001
+      - sh601618
     # 回测时用 yyyy-mm-dd HH:MM:SS
     start_date: 2020-12-01
     end_date: 2020-12-02

@@ -43,13 +43,8 @@ class Dummy(Strategy):
                         self.trade_date_sell[code] = trade_date
 
                 if is_sig:
-                    sig = TradeSignal(self.get_uuid(), self.account)
-                    sig.source = self.get_obj_id(typ=sig.strategy)
-                    sig.source_desc = self.name()
-                    sig.signal = signal
-                    sig.code = code
-                    sig.name = name
-                    sig.price = price
-                    sig.volume = 100
-                    sig.time = day_time
+                    sig = TradeSignal(self.get_uuid(), self.account,
+                                      source=self.get_obj_id(typ=TradeSignal.strategy), source_name=self.name(),
+                                      signal=signal, code=code, name=name, price=price, time=day_time)
+
                     await self.emit('signal', (event.evt_sig_buy if signal == sig.sig_buy else event.evt_sig_sell), sig)

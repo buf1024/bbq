@@ -548,7 +548,7 @@ class RealtimeQuotation(Quotation):
 
             if quot is not None:
                 self.reset_bar(now)
-                day_time = quot[0]['day_time']
+                day_time = now
                 return event.evt_quotation, dict(frequency=self.opt['frequency'],
                                                  trade_date=self.trade_date,
                                                  day_time=day_time,

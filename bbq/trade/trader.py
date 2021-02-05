@@ -513,7 +513,6 @@ def main(conf: str, log_path: str, log_level: str,
 
 
 def entry(**opts):
-    print(opts)
     conf, log_path, log_level = opts['conf'], opts['log_path'], opts['log_level']
     uri, pool = opts['uri'], opts['pool']
     strategy_path, risk_path, broker_path = opts['strategy_path'], opts['risk_path'], opts['broker_path']

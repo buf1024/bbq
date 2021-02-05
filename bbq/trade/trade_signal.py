@@ -1,27 +1,31 @@
 from bbq.trade.base_obj import BaseObj
+from datetime import datetime
 
 
 class TradeSignal(BaseObj):
     sig_sell, sig_buy, sig_cancel = 'sell', 'buy', 'cancel'
     risk, strategy, broker, robot = 'risk', 'strategy', 'broker', 'robot'
 
-    def __init__(self, signal_id: str, account):
+    def __init__(self, signal_id: str, account, *,
+                 source: str = '',  source_name: str = '', signal: str = '',
+                 code: str = '', name: str = '', price: float = 0.0,  volume: int = 0,
+                 time: datetime = None, entrust_id: str = ''):
         super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade, trader=account.trader)
         self.account = account
 
         self.signal_id = signal_id
-        self.source = ''  # 信号源, risk:xxx, strategy:xx, broker:xx, robot:
-        self.source_name = ''
-        self.signal = ''  # sell, buy, cancel
+        self.source = source  # 信号源, risk:xxx, strategy:xx, broker:xx, robot:
+        self.source_name = source_name
+        self.signal = signal  # sell, buy, cancel
 
-        self.name = ''  # 股票名称
-        self.code = ''  # 股票代码
-        self.time = None  # 时间
+        self.name = name  # 股票名称
+        self.code = code  # 股票代码
+        self.time = time  # 时间
 
-        self.price = 0.0
-        self.volume = 0
+        self.price = price
+        self.volume = volume
 
-        self.entrust_id = ''  # sell / cancel 有效
+        self.entrust_id = entrust_id  # sell / cancel 有效
 
     @BaseObj.discard_saver
     async def sync_to_db(self) -> bool:
