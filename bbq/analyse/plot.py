@@ -6,7 +6,7 @@ from pyecharts.charts import *
 import talib
 from pyecharts.charts.chart import Chart
 from .tools import linear_fitting
-
+from pyecharts.globals import SymbolType
 
 def up_color() -> str:
     return '#F11300'
@@ -23,7 +23,7 @@ def plot_overlap(main_chart, *overlap):
 
 
 def plot_chart(chart_cls: ClassVar, x_index: list, y_data: list, title: str,
-               show_label=False, symbol=None, with_global_opts: bool = False,
+               show_label=False, symbol=None, symbol_rotate=None, with_global_opts: bool = False,
                *overlap):
     chart = chart_cls()
     chart.add_xaxis(xaxis_data=x_index)
@@ -35,7 +35,8 @@ def plot_chart(chart_cls: ClassVar, x_index: list, y_data: list, title: str,
                         is_smooth=True, symbol=symbol)
     else:
         chart.add_yaxis(series_name=title, y_axis=y_data,
-                        label_opts=opts.LabelOpts(is_show=show_label), symbol_size=8)
+                        label_opts=opts.LabelOpts(is_show=show_label),
+                        symbol=symbol, symbol_rotate=symbol_rotate, symbol_size=8)
     if with_global_opts:
         chart.set_global_opts(xaxis_opts=opts.AxisOpts(is_scale=True),
                               yaxis_opts=opts.AxisOpts(
