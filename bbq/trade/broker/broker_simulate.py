@@ -12,6 +12,7 @@ class BrokerSimulate(Broker):
         return '神算子模拟券商'
 
     async def on_entrust(self, evt, payload):
+        self.log.info('on entrust, evt={}, entrust={}'.format(evt, payload))
         entrust = copy.copy(payload)
         if evt == event.evt_entrust_buy:
             entrust.broker_entrust_id = self.get_uuid()

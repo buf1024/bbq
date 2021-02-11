@@ -15,9 +15,13 @@ class BaseActionObj(BaseObj):
         cost = self.trader.account.get_cost(typ=action.act_buy, code=code, price=price, volume=volume)
         return self.trader.account.cash_available >= cost
 
-    def can_sell(self, code: str) -> int:
+    def can_sell_volume(self, code: str) -> int:
         _, vol = self.trader.account.get_position_volume(code=code)
         return vol
+
+    def can_sell(self, code: str) -> int:
+        _, vol = self.trader.account.get_position_volume(code=code)
+        return vol > 0
 
     def can_cancel(self, code: str):
         entrusts = self.trader.account.get_active_entrust(code=code)
@@ -30,4 +34,4 @@ class BaseActionObj(BaseObj):
         await self.emit('signal', event.evt_sig_sell, sig)
 
     async def cancel(self, sig):
-        await self.emit('signal', event.evt_sig_sell, sig)
+        await self.emit('signal', event.evt_sig_cancel, sig)

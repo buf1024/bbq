@@ -11,7 +11,21 @@ class TradeDB(MongoDB):
                          'total_net_value': '总净值', 'total_hold_value': '持仓市值', 'cost': '持仓成本',
                          'broker_fee': '手续费', "transfer_fee": '过户费', "tax_fee": '印花税',
                          'profit': '盈利', 'profit_rate': '盈利比例',
+                         'close_profit': '平仓盈利',
+                         'total_profit': '总盈利', 'total_profit_rate': '总盈利比例',
                          'start_time': '开始时间', 'end_time': '结束时间', 'update_time': '更新时间'},
+
+        # 账户日结信息
+        'account_info_his': {'account_id': '账户id', 'status': '账户状态(0正常 其他停止)',
+                             'category': '交易种类: stock, fund', 'type': '账户类型: real, simulate, backtest',
+                             'cash_init': '初始资金', 'cash_available': '可用资金', 'cash_frozen': '冻结资金',
+                             'total_net_value': '总净值', 'total_hold_value': '持仓市值', 'cost': '持仓成本',
+                             'broker_fee': '手续费', "transfer_fee": '过户费', "tax_fee": '印花税',
+                             'profit': '盈利', 'profit_rate': '盈利比例',
+                             'close_profit': '平仓盈利',
+                             'total_profit': '总盈利', 'total_profit_rate': '总盈利比例',
+                             'start_time': '开始时间', 'end_time': '结束时间', 'update_time': '更新时间'},
+
         # 策略信号
         'signal_info': {'account_id': '账户id', 'signal_id': '信号id',
                         'source': '信号源, risk/strategy/broker/robot', 'source_name': '友好显示名称',
@@ -29,10 +43,10 @@ class TradeDB(MongoDB):
         # 成交历史
         'deal_info': {'account_id': '账户id', 'deal_id': '成交ID', 'entrust_id': '委托ID', 'type': '成交类型',
                       'name': '股票名称', 'code': '股票代码', 'price': '价', 'volume': '量', 'fee': '交易费用',
-                      'time': '成交时间'},
+                      'time': '成交时间', 'profit': '盈利'},
 
         # 持仓信息
-        'position_info': {'account_id': '账户id', 'position_id': '持仓ID',  'name': '股票名称', 'code': '股票代码',
+        'position_info': {'account_id': '账户id', 'position_id': '持仓ID', 'name': '股票名称', 'code': '股票代码',
                           'volume': '持仓量', 'volume_available': '可用持仓量', 'volume_frozen': '冻结持仓量',
                           'fee': '持仓费用', 'price': '平均持仓价',
                           'profit_rate': '盈利比例', 'max_profit_rate': '最大盈利比例', 'min_profit_rate': '最小盈利比例',
@@ -58,6 +72,10 @@ class TradeDB(MongoDB):
     @property
     def account_info(self):
         return self.get_coll(self._db, 'account_info')
+
+    @property
+    def account_info_his(self):
+        return self.get_coll(self._db, 'account_info_his')
 
     @property
     def signal_info(self):
@@ -90,6 +108,21 @@ class TradeDB(MongoDB):
         inserted_ids = await self.do_update(coll=self.account_info,
                                             filter={'account_id': data['account_id']}, update=data)
         self.log.debug('保存账户信息成功')
+        return inserted_ids
+
+    async def load_account_his(self, **kwargs) -> List:
+        self.log.debug('查询账户日结, kwargs={} ...'.format(kwargs))
+        data = await self.do_load(self.account_info_his, to_frame=False, **kwargs)
+        self.log.debug('查询账户日结成功 data={}'.format(data))
+        return data
+
+    async def save_account_his(self, data: Dict):
+        self.log.debug('保存账户日结信息, data = {}'.format(data))
+        inserted_ids = await self.do_update(coll=self.account_info_his,
+                                            filter={'account_id': data['account_id'],
+                                                    'end_time': data['end_time']},
+                                            update=data)
+        self.log.debug('保存账户日结信息成功')
         return inserted_ids
 
     async def load_signal(self, **kwargs) -> List:
@@ -168,19 +201,23 @@ class TradeDB(MongoDB):
 if __name__ == '__main__':
     import uuid
     from bbq.common import run_until_complete
+
     acct1 = dict(account_id=str(uuid.uuid4()), status=0, category='fund', type='stock', data=123)
     acct2 = dict(account_id=str(uuid.uuid4()), status=0, category='fund', type='stock', data=456)
 
     db = TradeDB()
     db.init()
 
+
     async def test_save():
         await db.save_account(data=acct1)
         await db.save_account(data=acct2)
 
+
     async def test_load():
         data = await db.load_account(filter=dict(status=0, category='fund', type='stock'), limit=1)
         print(data)
+
 
     run_until_complete(
         test_load()

@@ -15,6 +15,7 @@ class Deal(BaseObj):
         self.type = ''  # 成交类型
         self.price = 0.0  # 价格
         self.volume = 0  # 量
+        self.profit = 0.0  # 盈利
 
         self.fee = 0
 
@@ -25,7 +26,7 @@ class Deal(BaseObj):
                 'name': self.name, 'code': self.code,
                 'volume': self.volume, 'price': self.price,
                 'fee': self.fee, 'time': self.time,
-                'type': self.type
+                'type': self.type, 'profit': self.profit
                 }
         await self.db_trade.save_deal(data=data)
         return True
@@ -35,6 +36,6 @@ class Deal(BaseObj):
                 'deal_id': self.deal_id, 'entrust_id': self.entrust_id,
                 'name': self.name, 'code': self.code, 'type': self.type,
                 'volume': self.volume, 'price': self.price,
-                'fee': self.fee,
+                'fee': self.fee, 'profit': self.profit,
                 'time': self.time.strftime('%Y-%m-%d %H:%M:%S') if self.time is not None else None
                 }

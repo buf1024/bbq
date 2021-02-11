@@ -15,11 +15,11 @@ from datetime import datetime, date
 from bbq.trade.strategy_info import StrategyInfo
 from bbq.trade.quotation import BacktestQuotation, RealtimeQuotation
 import os
-import sys
 import signal
 from bbq.trade.msg.msg_push import MsgPush
 from collections import defaultdict
 from bbq.trade.enum import event
+from bbq.trade.report import Report
 
 
 class Trader:
@@ -165,6 +165,16 @@ class Trader:
 
     async def daily_report(self):
         print('daily_report')
+
+    async def trade_report(self):
+        print('trade_report')
+        report = Report(account=self.account)
+        is_inited = await report.collect_data()
+        if not is_inited:
+            print('collect not data')
+            return False
+        plot = report.plot()
+        plot.render('/Users/luoguochun/Downloads/render.html')
 
     async def on_quot_sub(self, evt, payload):
         if evt == 'evt_quot_codes' and self.running:
@@ -461,7 +471,7 @@ class Trader:
                     evt_handled = True
             if close_func is not None:
                 if evt == event.evt_morning_end or evt == event.evt_noon_end or evt == event.evt_end:
-                    await self.account.strategy.on_close(evt, payload)
+                    await close_func(evt, payload)
                     evt_handled = True
             if not evt_handled and func is not None:
                 await func(evt, payload)

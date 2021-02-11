@@ -24,22 +24,22 @@ trade:
   # 账户id
   account-id: my-debug-account
   # 初始资金
-  init-cash: 0
+  init-cash: 100000
   broker-fee: 0.00025
   transfer-fee: 0.00002
   tax-fee: 0.001
   # 交易品类 stock / fund
   category: stock
   # 交易类型 real / simulate / backtest
-  type: simulate
+  type: backtest
   quotation:
-    frequency: 3s
+    frequency: 1d
     codes:
       - sh000001
       - sh601618
     # 回测时用 yyyy-mm-dd HH:MM:SS
     start_date: 2020-12-01
-    end_date: 2020-12-02
+    end_date: 2020-12-31
   strategy:
     # 策略名称
     id: builtin:Dummy

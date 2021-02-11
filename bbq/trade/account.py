@@ -28,9 +28,18 @@ class Account(BaseObj):
         self.total_net_value = 0.0
 
         self.total_hold_value = 0.0
-        self.cost = 0
-        self.profit = 0
-        self.profit_rate = 0
+        self.cost = 0    # 持仓陈本
+        self.profit = 0  # 持仓盈亏
+        self.profit_rate = 0  # 持仓盈比例
+
+        self.close_profit = 0  # 平仓盈亏
+
+        self.total_profit = 0  # 总盈亏
+        self.total_profit_rate = 0  # 总盈亏比例
+
+        self.cost = 0    # 持仓陈本
+        self.profit = 0  # 持仓盈亏
+        self.profit_rate = 0  # 持仓盈比例
 
         self.broker_fee = 0.00025
         self.transfer_fee = 0.00002
@@ -177,6 +186,8 @@ class Account(BaseObj):
                 'total_net_value': self.total_net_value, 'total_hold_value': self.total_hold_value, 'cost': self.cost,
                 'broker_fee': self.broker_fee, "transfer_fee": self.transfer_fee, "tax_fee": self.tax_fee,
                 'profit': self.profit, 'profit_rate': self.profit_rate,
+                'close_profit': self.close_profit,
+                'total_profit': self.total_profit, 'total_profit_rate': self.total_profit_rate,
                 'start_time': self.start_time, 'end_time': self.end_time, 'update_time': datetime.now()}
         await self.db_trade.save_account(data=data)
         return True
@@ -186,13 +197,14 @@ class Account(BaseObj):
         # evt_morning_start evt_quotation evt_morning_end
         # evt_noon_start evt_quotation evt_noon_end
         # evt_end(backtest)
-        self.log.debug(f'account on quot, event={evt}, payload={payload}')
+        self.log.info(f'account on quot, event={evt}, payload={payload}')
         if evt == event.evt_morning_start or evt == event.evt_noon_start:
             self.is_trading = True
         if evt == event.evt_morning_end or evt == event.evt_noon_end:
             self.is_trading = False
 
         if evt == event.evt_noon_end:
+            self.end_time = payload['day_time']
             for position in self.position.values():
                 if position.volume != position.volume_available:
                     position.volume_frozen = 0
@@ -209,6 +221,9 @@ class Account(BaseObj):
                 self.entrust.clear()
 
             await self.trader.daily_report()
+
+        if evt == event.evt_end:
+            await self.trader.trade_report()
 
         if evt == event.evt_quotation:
             await self.update_account(payload=payload)
@@ -239,11 +254,11 @@ class Account(BaseObj):
         elif typ == action.act_sell:
             if code.startswith('sz') or code.startswith('sh'):
                 tax_fee = total * self.tax_fee
-        return round(broker_fee + tax_fee, 2)
+        return round(broker_fee + tax_fee, 4)
 
     def get_cost(self, typ, code, price, volume) -> float:
         fee = self.get_fee(typ=typ, code=code, price=price, volume=volume)
-        return round(fee + price * volume, 2)
+        return round(fee + price * volume, 4)
 
     async def update_account(self, payload):
         self.profit = 0
@@ -253,13 +268,15 @@ class Account(BaseObj):
             if payload is not None and position.code in payload:
                 await position.on_quot(payload)
             self.profit = self.profit + position.profit
-            self.total_hold_value = round(self.total_hold_value + (position.now_price * position.volume), 2)
-            self.cost = round(self.cost + (position.price * position.volume + position.fee), 2)
-        self.profit = round(self.profit, 2)
+            self.total_hold_value = round(self.total_hold_value + (position.now_price * position.volume), 4)
+            self.cost = round(self.cost + (position.price * position.volume + position.fee), 4)
+        self.profit = round(self.profit, 4)
 
         if self.cost > 0:
-            self.profit_rate = round(self.profit / self.cost * 100, 2)
+            self.profit_rate = round(self.profit / self.cost * 100, 4)
         self.total_net_value = self.cash_available + self.cash_frozen + self.total_hold_value
+        self.total_profit = round(self.close_profit + self.profit, 4)
+        self.total_profit_rate = round(self.total_profit / self.cash_init * 100, 4)
         await self.sync_to_db()
 
     async def on_signal(self, evt, payload):
@@ -270,7 +287,7 @@ class Account(BaseObj):
         :param payload:  TradeSignal / entrust_id
         :return:
         """
-        self.log.debug('account on_signal: evt={}, signal={}'.format(evt, payload))
+        self.log.info('account on_signal: evt={}, signal={}'.format(evt, payload))
         if not self.is_trading:
             self.log.info('is not on trading, omit signal')
             return
@@ -281,6 +298,9 @@ class Account(BaseObj):
             self.signal.append(sig)
 
         if evt == event.evt_sig_buy or evt == event.evt_sig_sell:
+            if sig.volume <= 0:
+                self.log.warn('invalid signal volume, volume={}, '.format(sig.volume))
+
             cost = 0
             if evt == event.evt_sig_buy:
                 cost = self.get_cost(typ=action.act_buy,
@@ -343,7 +363,7 @@ class Account(BaseObj):
         position.max_price = position.now_price if position.now_price > position.max_price else position.max_price
         position.min_price = position.now_price if position.now_price < position.min_price else position.min_price
 
-        position.profit = round((position.now_price - position.price) * position.volume - position.fee, 2)
+        position.profit = round((position.now_price - position.price) * position.volume, 4)
         if position.profit > position.max_profit:
             position.max_profit = position.profit
             position.max_profit_time = position.time
@@ -351,7 +371,7 @@ class Account(BaseObj):
             position.min_profit = position.profit
             position.min_profit_time = position.time
 
-        position.profit_rate = round(position.profit / (position.volume * position.price + position.fee) * 100, 2)
+        position.profit_rate = round(position.profit / (position.volume * position.price) * 100, 4)
         if position.profit_rate > position.max_profit_rate:
             position.max_profit_rate = position.profit_rate
         if position.profit_rate < position.min_profit_rate:
@@ -369,10 +389,8 @@ class Account(BaseObj):
             position.volume_available = 0
 
             position.fee = deal.fee
-            position.price = deal.price
-
+            position.price = round((deal.price * deal.volume + deal.fee) / deal.volume, 4)
             position.now_price = deal.price
-
             self.update_position(position)
 
             await position.sync_to_db()
@@ -382,11 +400,10 @@ class Account(BaseObj):
             position = self.position[deal.code]
             position.time = deal.time
             position.fee += deal.fee
-            position.price = round((position.price * position.volume + deal.price * deal.volume) / (
+            position.price = round((position.price * position.volume + deal.price * deal.volume + deal.fee) / (
                     position.volume + deal.volume), 4)
             position.volume += deal.volume
 
-            position.now_price = deal.price
             self.update_position(position)
 
             await position.sync_to_db()
@@ -398,19 +415,24 @@ class Account(BaseObj):
         if deal.code not in self.position:
             self.log.error('deduct_position code not found: {}'.format(deal.code))
             return
+
         position = self.position[deal.code]
+
+        deal.profit = round((deal.price - position.price) * deal.volume - deal.fee, 4)
+        self.close_profit = round(self.close_profit + deal.profit, 4)
+        self.total_profit = round(self.total_profit + deal.profit, 4)
+
         position.time = deal.time
-        position.fee = round(position.fee + deal.fee, 2)
+        position.fee = round(position.fee + deal.fee, 4)
         position.volume -= deal.volume
         if position.volume > 0:
-            position.now_price = deal.price
-            position.volume_frozen -= deal.volume
+            # position.now_price = deal.price
             self.update_position(position)
             await position.sync_to_db()
 
         if position.volume == 0:
             del self.position[position.code]
-            await self.db_data.delete_position(position)
+            await self.db_trade.delete_position(dict(position_id=position.position_id))
 
         self.cash_available = round(self.cash_available + deal.volume * deal.price - deal.fee, 2)
         await self.update_account(None)
@@ -444,11 +466,12 @@ class Account(BaseObj):
             if self.trader.is_backtest():
                 self.deal.append(deal)
 
-            await deal.sync_to_db()
             if entrust.type == entrust.type_buy:
                 await self.add_position(deal)
             elif entrust.type == entrust.type_sell:
                 await self.deduct_position(deal)
+
+            await deal.sync_to_db()
 
             if entrust.volume == entrust.volume_deal + entrust.volume_cancel:
                 if not self.trader.is_backtest():
@@ -481,10 +504,12 @@ class Account(BaseObj):
     def to_dict(self):
         return {'account_id': self.account_id, 'status': self.status,
                 'category': self.category, 'type': self.typ,
-                'cash_init': self.cash_init, 'cash_available': self.cash_available,
+                'cash_init': self.cash_init, 'cash_available': self.cash_available, 'cash_frozen': self.cash_frozen,
                 'total_net_value': self.total_net_value, 'total_hold_value': self.total_hold_value, 'cost': self.cost,
                 'broker_fee': self.broker_fee, "transfer_fee": self.transfer_fee, "tax_fee": self.tax_fee,
                 'profit': self.profit, 'profit_rate': self.profit_rate,
+                'close_profit': self.close_profit,
+                'total_profit': self.total_profit, 'total_profit_rate': self.total_profit_rate,
                 'start_time': self.start_time.strftime('%Y-%m-%d %H:%M:%S') if self.start_time is not None else None,
                 'end_time': self.start_time.strftime('%Y-%m-%d %H:%M:%S') if self.start_time is not None else None,
                 'position': self.get_obj_list(self.position.values()),
