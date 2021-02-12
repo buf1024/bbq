@@ -11,6 +11,7 @@ class Strategy(BaseActionObj):
     2. evt_sig_buy 委托买
     3. evt_sig_sell 委托卖
     """
+
     def __init__(self, strategy_id, account: Account):
         super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade, trader=account.trader)
         self.account = account
@@ -66,4 +67,3 @@ class Strategy(BaseActionObj):
                 'strategy_opt': json.dumps(self.opt) if self.opt is not None else None}
         await self.db_trade.save_strategy(data=data)
         return True
-

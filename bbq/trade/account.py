@@ -55,9 +55,10 @@ class Account(BaseObj):
         self.strategy = None
         self.risk = None
 
-        # 成交历史 backtest
+        # 成交 backtest
         self.deal = []
         self.signal = []
+
         self.acct_his = []
 
     async def sync_acct_from_db(self) -> Optional[Dict]:
@@ -205,6 +206,7 @@ class Account(BaseObj):
 
         if evt == event.evt_noon_end:
             self.end_time = payload['day_time']
+
             for position in self.position.values():
                 if position.volume != position.volume_available:
                     position.volume_frozen = 0
@@ -219,6 +221,9 @@ class Account(BaseObj):
 
             if not self.trader.is_backtest():
                 self.entrust.clear()
+
+            if self.trader.is_backtest():
+                self.acct_his.append(self.to_dict(skip_obj=True))
 
             await self.trader.daily_report()
 
@@ -295,7 +300,7 @@ class Account(BaseObj):
         sig = payload
         await sig.sync_to_db()
         if self.trader.is_backtest():
-            self.signal.append(sig)
+            self.signal.append(sig.to_dict())
 
         if evt == event.evt_sig_buy or evt == event.evt_sig_sell:
             if sig.volume <= 0:
@@ -463,13 +468,14 @@ class Account(BaseObj):
             deal.volume = entrust.volume_deal
 
             deal.fee = self.get_fee(typ=entrust.type, code=deal.code, price=deal.price, volume=deal.volume)
-            if self.trader.is_backtest():
-                self.deal.append(deal)
 
             if entrust.type == entrust.type_buy:
                 await self.add_position(deal)
             elif entrust.type == entrust.type_sell:
                 await self.deduct_position(deal)
+
+            if self.trader.is_backtest():
+                self.deal.append(deal.to_dict())
 
             await deal.sync_to_db()
 
@@ -498,11 +504,14 @@ class Account(BaseObj):
     def get_obj_list(lst):
         data = []
         for obj in lst:
-            data.append(obj.to_dict())
+            if isinstance(obj, dict):
+                data.append(obj)
+            else:
+                data.append(obj.to_dict())
         return data
 
-    def to_dict(self):
-        return {'account_id': self.account_id, 'status': self.status,
+    def to_dict(self, skip_obj=False):
+        data = {'account_id': self.account_id, 'status': self.status,
                 'category': self.category, 'type': self.typ,
                 'cash_init': self.cash_init, 'cash_available': self.cash_available, 'cash_frozen': self.cash_frozen,
                 'total_net_value': self.total_net_value, 'total_hold_value': self.total_hold_value, 'cost': self.cost,
@@ -511,9 +520,15 @@ class Account(BaseObj):
                 'close_profit': self.close_profit,
                 'total_profit': self.total_profit, 'total_profit_rate': self.total_profit_rate,
                 'start_time': self.start_time.strftime('%Y-%m-%d %H:%M:%S') if self.start_time is not None else None,
-                'end_time': self.start_time.strftime('%Y-%m-%d %H:%M:%S') if self.start_time is not None else None,
+                'end_time': self.end_time.strftime('%Y-%m-%d %H:%M:%S') if self.start_time is not None else None,
                 'position': self.get_obj_list(self.position.values()),
                 'entrust': self.get_obj_list(self.entrust.values()),
                 'deal': self.get_obj_list(self.deal),
                 'signal': self.get_obj_list(self.signal)
                 }
+        if skip_obj:
+            del data['position']
+            del data['entrust']
+            del data['deal']
+            del data['signal']
+        return data

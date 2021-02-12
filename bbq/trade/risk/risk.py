@@ -11,6 +11,7 @@ class Risk(BaseActionObj):
     2. evt_sig_buy 委托买
     3. evt_sig_sell 委托卖
     """
+
     def __init__(self, risk_id, account: Account):
         super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade, trader=account.trader)
         self.account = account

@@ -1,5 +1,6 @@
 from bbq.trade.base_obj import BaseObj
 from datetime import datetime
+from typing import Dict
 
 
 class TradeSignal(BaseObj):

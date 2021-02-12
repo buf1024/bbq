@@ -229,6 +229,9 @@ class Trader:
                 d = quot_opt['end_date']
                 quot_opt['end_date'] = datetime(year=d.year, month=d.month, day=d.day)
 
+            if self.is_backtest():
+                account.start_time = quot_opt['start_date']
+
         if broker_id is None:
             if typ in ['backtest', 'simulate']:
                 broker_id = 'builtin:BrokerSimulate'

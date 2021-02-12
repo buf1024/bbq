@@ -1,4 +1,5 @@
 from bbq.trade.base_obj import BaseObj
+from typing import Dict
 
 
 class Deal(BaseObj):

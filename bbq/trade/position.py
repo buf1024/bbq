@@ -1,6 +1,7 @@
 from bbq.trade.base_obj import BaseObj
 from datetime import datetime
 import sys
+from typing import Dict
 
 
 class Position(BaseObj):
