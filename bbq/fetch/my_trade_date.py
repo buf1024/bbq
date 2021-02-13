@@ -12,9 +12,11 @@ def is_trade_date(date_input):
     else:
         try:
             if '-' in date_input:
-                date_str = datetime.strptime(date, '%Y-%m-%d').strftime('%Y-%m-%d')
+                date_str = datetime.strptime(date_input, '%Y-%m-%d').strftime('%Y-%m-%d')
+            elif '/' in date_input:
+                date_str = datetime.strptime(date_input, '%Y/%m/%d').strftime('%Y-%m-%d')
             else:
-                date_str = datetime.strptime(date, '%Y%m%d').strftime('%Y-%m-%d')
+                date_str = datetime.strptime(date_input, '%Y%m%d').strftime('%Y-%m-%d')
         except:
             return False
     if date_str not in _cal_list:

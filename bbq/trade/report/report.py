@@ -1,4 +1,4 @@
-from ..account import Account
+# from ..account import Account
 import pandas as pd
 from pyecharts import options as opts
 from pyecharts.charts import *
@@ -7,7 +7,7 @@ from pyecharts.globals import SymbolType
 from bbq.analyse.plot import \
     kline_tooltip_fmt_func, kline_orig_data, up_color, down_color, plot_overlap
 from typing import Optional, Sequence
-from datetime import datetime
+from datetime import datetime, date
 import bbq.fetch as fetch
 
 
@@ -44,12 +44,9 @@ class Report:
                  '70.4l206.72 173.44c19.2 16 50.56 16 69.76 0l206.72-173.44C785.28 620.16 763.52 575.36 719.36 ' \
                  '575.36z'
 
-    pos_top = 50
-    empty_height = 100
-    line_height = 200
-    kline_height = 450
+    pos_top = 75
 
-    def __init__(self, account: Account):
+    def __init__(self, account):
         self.account = account
         self.db_data = account.db_data
 
@@ -62,16 +59,22 @@ class Report:
 
     @staticmethod
     def _convert_time(d):
-        if isinstance(d, str):
-            return datetime.strptime(d[:len('2020-01-01')], '%Y-%m-%d')
+        if isinstance(d, str) and '/' in d:
+            d = datetime.strptime(d[:len('2020-01-01')], '%Y/%m/%d')
+        if isinstance(d, str) and '-' in d:
+            d = datetime.strptime(d[:len('2020-01-01')], '%Y-%m-%d')
         return datetime(year=d.year, month=d.month, day=d.day)
 
     @staticmethod
-    def _to_x_data(lst):
+    def _to_x_data(lst, target='str'):
         data = []
         for trade_date in lst:
             if fetch.is_trade_date(trade_date):
-                data.append(trade_date.strftime('%Y/%m/%d')[2:])
+                trade_date = Report._convert_time(trade_date)
+                if target == 'str':
+                    data.append(trade_date.strftime('%Y/%m/%d')[2:])
+                else:
+                    data.append(trade_date)
         return data
 
     async def collect_data(self):
@@ -85,7 +88,7 @@ class Report:
         end_time = datetime(year=self.account.end_time.year, month=self.account.end_time.month,
                             day=self.account.end_time.day)
 
-        self.trade_date = self._to_x_data(list(pd.date_range(start_time, end_time)))
+        self.trade_date = self._to_x_data(list(pd.date_range(start_time, end_time)), 'datetime')
 
         self.acct_his = self.account.acct_his
         if not self.is_backtest:
@@ -107,18 +110,21 @@ class Report:
         deal_his = self.account.deal
         if not self.is_backtest:
             deal_his = await self.db_data.load_deal(filter={'account_id': self.account.account_id},
-                                                    sort=[('end_time', 1)])
+                                                    sort=[('time', 1)])
         deal_his_df = pd.DataFrame(deal_his)
-        self.deal_his = deal_his_df
         if not deal_his_df.empty:
-            self.deal_his = self.deal_his[self.deal_his['type'] == 'sell']
+            deal_his_df = deal_his_df[deal_his_df['type'] == 'sell']
+            deal_his_df['time'] = deal_his_df['time'].apply(self._convert_time)
+            self.deal_his = deal_his_df
+
+        self.trade_date = self._to_x_data(self.trade_date)
 
         self.acct_his.to_csv('/Users/luoguochun/Downloads/acct_his.csv')
         self.deal_his.to_csv('/Users/luoguochun/Downloads/deal_his.csv')
         self.is_ready = True
         return self.is_ready
 
-    def _plot_cash(self, grid, pos, height):
+    def plot_cash(self):
         def _text(data):
             if len(data) == 0:
                 return f'0元, 0元, 0%'
@@ -136,15 +142,16 @@ class Report:
         line_cash.add_yaxis(
             series_name='资金', y_axis=y_data,
             label_opts=opts.LabelOpts(is_show=False),
-            is_smooth=False, symbol='none',
-            itemstyle_opts=opts.ItemStyleOpts(color=self.color_down))
+            is_smooth=True, symbol='none',
+        )
 
         graphic_text.append(
             opts.GraphicText(
-                graphic_item=opts.GraphicItem(left='left', top=f'{pos}px', z=-100, ),
+                graphic_item=opts.GraphicItem(left='left', top=f'{self.pos_top}px', z=-100, ),
                 graphic_textstyle_opts=opts.GraphicTextStyleOpts(
-                    text=f'  -- 资金({_text(y_data)})', font=self.color_down,
-                    graphic_basicstyle_opts=opts.GraphicBasicStyleOpts(fill=self.color_down)
+                    text=f'  -- 资金({_text(y_data)})',
+                    font=self.color_down,
+                    graphic_basicstyle_opts=opts.GraphicBasicStyleOpts(fill=self.color_up)
                 )
             )
         )
@@ -154,40 +161,71 @@ class Report:
         max_y, min_y = max(y_data), min(y_data)
         max_rate = round((max_y - self.account.cash_init) / self.account.cash_init * 100, 2),
         min_rate = round((min_y - self.account.cash_init) / self.account.cash_init * 100, 2)
+        max_back = round((max_y - min_y) / max_y * 100, 2)
+        max_x_coord = self.trade_date[y_data.index(max_y)]
+        min_index = y_data.index(min_y)
+        min_x_coord = self.trade_date[y_data.index(min_y)]
         line_net = Line()
         line_net.add_xaxis(xaxis_data=x_data)
         line_net.add_yaxis(
             series_name='净值', y_axis=y_data,
             label_opts=opts.LabelOpts(is_show=False),
-            is_smooth=False, symbol='none',
-            markline_opts=opts.MarkLineOpts(
-                symbol='none', data=[
-                    opts.MarkLineItem(name=f'MAX({max_y}, {max_rate}%)', y=max_y, symbol='none'),
-                    opts.MarkLineItem(name=f'MIN({min_y}, {min_rate}%)', y=min_y, symbol='none'),
-                ],
-                label_opts=opts.LabelOpts(position='insideMiddle')
+            is_smooth=True, symbol='none',
+            markpoint_opts=opts.MarkPointOpts(
+                data=[
+                    opts.MarkPointItem(
+                        name=f'MAX({max_x_coord}, {max_y})',
+                        symbol=self.arrow_down, symbol_size=10, coord=[max_x_coord, max_y * 1.0005],
+                        itemstyle_opts=opts.ItemStyleOpts(color=self.color_up)
+                    ),
+                    opts.MarkPointItem(
+                        name=f'MIN({min_x_coord}, {min_y})',
+                        symbol=self.arrow_up, symbol_size=10, coord=[min_x_coord, min_y * 0.9995],
+                        itemstyle_opts=opts.ItemStyleOpts(color=self.color_up)
+                    ),
+                ]
             ),
-            itemstyle_opts=opts.ItemStyleOpts(color=self.color_up)
         )
         graphic_text.append(
             opts.GraphicText(
-                graphic_item=opts.GraphicItem(left='left', top=f'{pos + 20}px', z=-100, ),
+                graphic_item=opts.GraphicItem(left='left', top=f'{self.pos_top + 20}px', z=-100, ),
                 graphic_textstyle_opts=opts.GraphicTextStyleOpts(
-                    text=f'  -- 净值({_text(y_data)})', font=self.color_up,
+                    text=f'  -- 净值({_text(y_data)})',
+                    font=self.color_up,
                     graphic_basicstyle_opts=opts.GraphicBasicStyleOpts(fill=self.color_up)
                 )
             )
         )
         graphic_text.append(
             opts.GraphicText(
-                graphic_item=opts.GraphicItem(left='left', top=f'{pos+self.line_height}px', z=-100, ),
+                graphic_item=opts.GraphicItem(left='left', top=f'{self.pos_top + 40}px', z=-100, ),
                 graphic_textstyle_opts=opts.GraphicTextStyleOpts(
-                    text = f'  -- 亏损(0元, 0%, 0次, 0%)', font=self.color_up,
+                    text=f'  -- 最大回撤: {max_back}%',
+                    font=self.color_up,
                     graphic_basicstyle_opts=opts.GraphicBasicStyleOpts(fill=self.color_up)
                 )
             )
         )
-
+        graphic_text.append(
+            opts.GraphicText(
+                graphic_item=opts.GraphicItem(left='left', top=f'{self.pos_top + 60}px', z=-100, ),
+                graphic_textstyle_opts=opts.GraphicTextStyleOpts(
+                    text=f'  -- 最大盈亏: {round(max_y - self.account.cash_init, 4)}({max_rate}%)',
+                    font=self.color_up,
+                    graphic_basicstyle_opts=opts.GraphicBasicStyleOpts(fill=self.color_up)
+                )
+            )
+        )
+        graphic_text.append(
+            opts.GraphicText(
+                graphic_item=opts.GraphicItem(left='left', top=f'{self.pos_top + 80}px', z=-100, ),
+                graphic_textstyle_opts=opts.GraphicTextStyleOpts(
+                    text=f'  -- 最小盈亏: {round(min_y - self.account.cash_init, 4)}({min_rate}%)',
+                    font=self.color_up,
+                    graphic_basicstyle_opts=opts.GraphicBasicStyleOpts(fill=self.color_up)
+                )
+            )
+        )
 
         line = plot_overlap(line_cash, line_net)
         line.set_global_opts(
@@ -198,107 +236,112 @@ class Report:
                     is_show=True, areastyle_opts=opts.AreaStyleOpts(opacity=1)
                 ),
             ),
-            legend_opts=opts.LegendOpts(pos_left='10%', orient='vertical'),
             graphic_opts=opts.GraphicGroup(
-                graphic_item=opts.GraphicItem(left='10%', top=pos, ),
+                graphic_item=opts.GraphicItem(left='10%'),
                 children=graphic_text,
-            )
+            ),
+            datazoom_opts=[opts.DataZoomOpts(pos_bottom="-2%", filter_mode='none')],
+            title_opts=opts.TitleOpts(title='资金变动')
         )
 
-        grid.add(line, grid_opts=opts.GridOpts(pos_top=f'{pos}px', height=f'{height}px'))
-        return grid
+        return line
 
-    def _plot_profit(self, grid, pos, height) -> Optional[Chart]:
-        graphic_text = []
-        x_data = []
-        y_data = []
+    def plot_profit(self) -> Optional[Chart]:
+        line = Line()
+        line.add_xaxis(xaxis_data=self.trade_date)
+        line.add_yaxis(series_name='盈亏', y_axis=[])
 
-        df = self.deal_his[self.deal_his['profit'] >= 0] if not self.deal_his.empty else pd.DataFrame()
-        text = f'  -- 盈利(0元, 0%, 0次, 0%)'
-        if not df.empty:
-            x_data = self._to_x_data(list(df['time']))
-            y_data = [round(x, 2) for x in list(df['profit'])]
-            profit_total, times = round(sum(df['profit']), 2), df.shape[0]
-            win_rate, rate = round(df.shape[0] / self.deal_his.shape[0] * 100, 2), round(
-                sum(df['profit']) / self.account.cash_init * 100, 2)
-            text = f'  -- 盈利({profit_total}元, {rate}%, {times}次, {win_rate}%)'
+        deal_his = self.deal_his[['time', 'profit']] if not self.deal_his.empty else pd.DataFrame()
+        win_text = f'  -- 盈利(0元, 0%, 0次, 0%)'
+        lost_text = f'  -- 亏损(0元, 0%, 0次, 0%)'
+        if not deal_his.empty:
+            times = deal_his.shape[0]
 
-        graphic_text.append(
-            opts.GraphicText(
-                graphic_item=opts.GraphicItem(left='left', top=f'{pos}px', z=-100, ),
-                graphic_textstyle_opts=opts.GraphicTextStyleOpts(
-                    text=text, font=self.color_up,
-                    graphic_basicstyle_opts=opts.GraphicBasicStyleOpts(fill=self.color_up)
-                )
-            )
-        )
+            win_df = deal_his[deal_his['profit'] >= 0]
+            win_times = win_df.shape[0]
+            win_times_rate = round(win_times / times * 100, 2)
+            win_rate = round(sum(win_df['profit']) / self.account.cash_init * 100, 2) if not win_df.empty else 0
+            win_total = round(sum(win_df['profit']), 2) if not win_df.empty else 0
+            win_text = f'  -- 盈利({win_total}元, {win_rate}%, {win_times}次, {win_times_rate}%)'
 
-        scatter_up = Scatter()
-        scatter_up.add_xaxis(x_data)
-        scatter_up.add_yaxis('盈利', y_data,
-                             itemstyle_opts=opts.ItemStyleOpts(color=self.color_up))
+            lost_df = deal_his[deal_his['profit'] < 0]
+            lost_times = lost_df.shape[0]
+            lost_times_rate = round(lost_times / times * 100, 2)
+            lost_rate = round(sum(lost_df['profit']) / self.account.cash_init * 100, 2) if not lost_df.empty else 0
+            lost_total = round(sum(lost_df['profit']), 2) if not lost_df.empty else 0
+            lost_text = f'  -- 亏损({lost_total}元, {lost_rate}%, {lost_times}次, {lost_times_rate}%)'
 
-        x_data = []
-        df = self.deal_his[self.deal_his['profit'] < 0] if not self.deal_his.empty else pd.DataFrame()
-        text = f'  -- 亏损(0元, 0%, 0次, 0%)'
-        if not df.empty:
-            x_data = self._to_x_data(list(df['time']))
-            y_data = [round(x, 2) for x in list(df['profit'])]
-            profit_total, times = round(sum(df['profit']), 2), df.shape[0]
-            lost_rate, rate = round(df.shape[0] / self.deal_his.shape[0] * 100, 2), round(
-                sum(df['profit']) / self.account.cash_init * 100, 2)
-            text = f'  -- 亏损({profit_total}元, {rate}%, {times}次, {lost_rate}%)'
+            deal_his_group = deal_his.groupby('time').sum()
+            deal_his_group.reset_index(inplace=True)
+            df = deal_his_group[deal_his_group['profit'] >= 0]
 
-        scatter_down = Scatter()
-        scatter_down.add_xaxis(x_data)
-        scatter_down.add_yaxis('亏损', y_data,
-                               itemstyle_opts=opts.ItemStyleOpts(color=self.color_down))
+            if not df.empty:
+                x_data = self._to_x_data(list(df['time']))
+                y_data = [round(x, 2) for x in list(df['profit'])]
+                scatter_up = Scatter()
+                scatter_up.add_xaxis(x_data)
+                scatter_up.add_yaxis('盈利', y_data, itemstyle_opts=opts.ItemStyleOpts(color=self.color_up))
+                line = plot_overlap(line, scatter_up)
 
-        graphic_text.append(
-            opts.GraphicText(
-                graphic_item=opts.GraphicItem(left='left', top=f'{pos + 20}px', z=-100, ),
-                graphic_textstyle_opts=opts.GraphicTextStyleOpts(
-                    text=text, font=self.color_down,
-                    graphic_basicstyle_opts=opts.GraphicBasicStyleOpts(fill=self.color_down)
-                )
-            )
-        )
+            df = deal_his_group[deal_his_group['profit'] < 0]
+            if not df.empty:
+                x_data = self._to_x_data(list(df['time']))
+                y_data = [round(x, 2) for x in list(df['profit'])]
+                scatter_down = Scatter()
+                scatter_down.add_xaxis(x_data)
+                scatter_down.add_yaxis('亏损', y_data, itemstyle_opts=opts.ItemStyleOpts(color=self.color_down))
+                line = plot_overlap(line, scatter_down)
 
-        scatter = plot_overlap(scatter_up, scatter_down)
-        scatter.set_global_opts(
+        line.set_global_opts(
             xaxis_opts=opts.AxisOpts(is_show=True, is_scale=True),
             yaxis_opts=opts.AxisOpts(
-                position='right', is_scale=True,
+                position='left', is_scale=True,
                 splitarea_opts=opts.SplitAreaOpts(
                     is_show=True, areastyle_opts=opts.AreaStyleOpts(opacity=1)
                 ),
             ),
-            legend_opts=opts.LegendOpts(pos_left='20%', orient='vertical'),
             graphic_opts=opts.GraphicGroup(
-                graphic_item=opts.GraphicItem(left='10%', top=pos, ),
-                children=graphic_text,
-            )
+                graphic_item=opts.GraphicItem(left='10%'),
+                children=[
+                    opts.GraphicText(
+                        graphic_item=opts.GraphicItem(left='left', top=f'{self.pos_top}px', z=-100, ),
+                        graphic_textstyle_opts=opts.GraphicTextStyleOpts(
+                            text=win_text, font=self.color_up,
+                            graphic_basicstyle_opts=opts.GraphicBasicStyleOpts(fill=self.color_up)
+                        )
+                    ),
+                    opts.GraphicText(
+                        graphic_item=opts.GraphicItem(left='left', top=f'{self.pos_top + 20}px', z=-100, ),
+                        graphic_textstyle_opts=opts.GraphicTextStyleOpts(
+                            text=lost_text, font=self.color_down,
+                            graphic_basicstyle_opts=opts.GraphicBasicStyleOpts(fill=self.color_down)
+                        )
+                    )
+                ],
+            ),
+            datazoom_opts=[opts.DataZoomOpts(pos_bottom="-2%", filter_mode='none')],
+            title_opts=opts.TitleOpts(title='盈亏')
         )
 
-        grid.add(scatter, grid_opts=opts.GridOpts(pos_top=f'{pos}px', height=f'{height}px'))
-        return grid
+        return line
 
     def _plot_kline(self) -> Optional[Sequence[Chart]]:
         pass
 
     def plot(self):
-        if not self.is_ready:
-            return None
-
-        # todo
-        height = self.pos_top + self.line_height * 2 + self.kline_height + self.empty_height
-        grid = Grid(init_opts=opts.InitOpts(height=f'{height}px'))
-
-        pos = self.pos_top
-        self._plot_cash(grid=grid, pos=pos, height=self.line_height)
-
-        pos = pos + self.line_height
-        self._plot_profit(grid=grid, pos=pos, height=self.line_height)
+        pass
+        # if not self.is_ready:
+        #     return None
+        #
+        # # todo
+        # height = self.pos_top + self.line_height * 2 + self.kline_height + self.empty_height
+        # grid = Grid(init_opts=opts.InitOpts(height=f'{height}px'))
+        #
+        # pos = self.pos_top
+        # self._plot_cash(grid=grid, pos=pos, height=self.line_height)
+        #
+        # pos = pos + self.line_height
+        # self._plot_profit(grid=grid, pos=pos, height=self.line_height)
         # klines = self._plot_kline()
         #
         # # grid.add(cash_line, grid_opts=opts.GridOpts())
@@ -312,3 +355,37 @@ class Report:
         #     pos = pos + self.kline_height
 
         return grid
+
+
+if __name__ == '__main__':
+    import pandas as pd
+    import bbq.fetch as fetch
+
+
+    class Account:
+        cash_init = 100000
+        color_up = '#F11300'
+        color_down = '#00A800'
+
+        class Trader:
+            @staticmethod
+            def is_backtest():
+                return True
+
+        trader = Trader()
+        db_data = None
+
+
+    report = Report(Account())
+    report.acct_his = pd.read_csv('/Users/luoguochun/Downloads/acct_his.csv', index_col=0)
+    report.deal_his = pd.read_csv('/Users/luoguochun/Downloads/deal_his.csv', index_col=0)
+    report.is_ready = True
+    report.trade_date = []
+
+    for trade_date in list(pd.date_range('2020-12-01', '2020-12-31')):
+        if fetch.is_trade_date(trade_date):
+            report.trade_date.append(trade_date.strftime('%Y/%m/%d')[2:])
+
+    # line = report.plot_cash()
+    line = report.plot_profit()
+    line.render('/Users/luoguochun/Downloads/render.html')
