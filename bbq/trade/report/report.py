@@ -1,14 +1,16 @@
 # from ..account import Account
+from datetime import datetime
+from typing import Optional, Sequence
 import pandas as pd
+import bbq.fetch as fetch
 from pyecharts import options as opts
 from pyecharts.charts import *
 from pyecharts.charts.chart import Chart
-from pyecharts.globals import SymbolType
 from bbq.analyse.plot import \
-    kline_tooltip_fmt_func, kline_orig_data, up_color, down_color, plot_overlap
-from typing import Optional, Sequence
-from datetime import datetime, date
-import bbq.fetch as fetch
+    up_color, down_color, plot_overlap, plot_kline
+from bbq.data import FundDB
+from pyecharts.components import Table
+from pyecharts.options import ComponentTitleOpts
 
 
 #
@@ -49,11 +51,15 @@ class Report:
     def __init__(self, account):
         self.account = account
         self.db_data = account.db_data
+        self.db_trade = account.db_trade
 
         self.is_backtest = account.trader.is_backtest()
         self.acct_his = None
         self.deal_his = None
         self.trade_date = []
+
+        self.codes = []
+        self.daily = None
 
         self.is_ready = False
 
@@ -68,6 +74,10 @@ class Report:
     @staticmethod
     def _to_x_data(lst, target='str'):
         data = []
+        is_list = True
+        if not isinstance(lst, list):
+            lst = [lst]
+            is_list = False
         for trade_date in lst:
             if fetch.is_trade_date(trade_date):
                 trade_date = Report._convert_time(trade_date)
@@ -75,6 +85,9 @@ class Report:
                     data.append(trade_date.strftime('%Y/%m/%d')[2:])
                 else:
                     data.append(trade_date)
+        if not is_list:
+            if len(data) > 0:
+                data = data[0]
         return data
 
     async def collect_data(self):
@@ -92,8 +105,8 @@ class Report:
 
         self.acct_his = self.account.acct_his
         if not self.is_backtest:
-            self.acct_his = await self.db_data.load_account_his(filter={'account_id': self.account.account_id},
-                                                                sort=[('end_time', 1)])
+            self.acct_his = await self.db_trade.load_account_his(filter={'account_id': self.account.account_id},
+                                                                 sort=[('end_time', 1)])
 
         acct_his_df = pd.DataFrame(self.acct_his)
         if not acct_his_df.empty:
@@ -109,18 +122,27 @@ class Report:
 
         deal_his = self.account.deal
         if not self.is_backtest:
-            deal_his = await self.db_data.load_deal(filter={'account_id': self.account.account_id},
-                                                    sort=[('time', 1)])
+            deal_his = await self.db_trade.load_deal(filter={'account_id': self.account.account_id},
+                                                     sort=[('time', 1)])
         deal_his_df = pd.DataFrame(deal_his)
         if not deal_his_df.empty:
-            deal_his_df = deal_his_df[deal_his_df['type'] == 'sell']
-            deal_his_df['time'] = deal_his_df['time'].apply(self._convert_time)
+            # deal_his_df = deal_his_df[deal_his_df['type'] == 'sell']
+            deal_his_df['trade_date'] = deal_his_df['time'].apply(self._convert_time)
             self.deal_his = deal_his_df
+
+            deal_his_group = deal_his_df.groupby('code')
+            self.codes = list(deal_his_group.groups.keys())
+            func_daily = self.db_data.load_fund_daily if isinstance(self.db_data,
+                                                                    FundDB) else self.db_data.load_stock_daily
+            self.daily = await func_daily(filter={'code': {'$in': self.codes},
+                                                  'trade_date': {'$gte': start_time, '$lte': end_time}},
+                                          sort=[('trade_date', 1)])
 
         self.trade_date = self._to_x_data(self.trade_date)
 
         self.acct_his.to_csv('/Users/luoguochun/Downloads/acct_his.csv')
         self.deal_his.to_csv('/Users/luoguochun/Downloads/deal_his.csv')
+        self.daily.to_csv('/Users/luoguochun/Downloads/daily.csv')
         self.is_ready = True
         return self.is_ready
 
@@ -163,7 +185,6 @@ class Report:
         min_rate = round((min_y - self.account.cash_init) / self.account.cash_init * 100, 2)
         max_back = round((max_y - min_y) / max_y * 100, 2)
         max_x_coord = self.trade_date[y_data.index(max_y)]
-        min_index = y_data.index(min_y)
         min_x_coord = self.trade_date[y_data.index(min_y)]
         line_net = Line()
         line_net.add_xaxis(xaxis_data=x_data)
@@ -249,9 +270,10 @@ class Report:
     def plot_profit(self) -> Optional[Chart]:
         line = Line()
         line.add_xaxis(xaxis_data=self.trade_date)
-        line.add_yaxis(series_name='盈亏', y_axis=[])
+        line.add_yaxis(series_name='', y_axis=[])
 
-        deal_his = self.deal_his[['time', 'profit']] if not self.deal_his.empty else pd.DataFrame()
+        deal_his = self.deal_his[self.deal_his['type'] == 'sell'] if not self.deal_his.empty else pd.DataFrame()
+        deal_his = deal_his[['trade_date', 'profit']] if not deal_his.empty else pd.DataFrame()
         win_text = f'  -- 盈利(0元, 0%, 0次, 0%)'
         lost_text = f'  -- 亏损(0元, 0%, 0次, 0%)'
         if not deal_his.empty:
@@ -271,12 +293,12 @@ class Report:
             lost_total = round(sum(lost_df['profit']), 2) if not lost_df.empty else 0
             lost_text = f'  -- 亏损({lost_total}元, {lost_rate}%, {lost_times}次, {lost_times_rate}%)'
 
-            deal_his_group = deal_his.groupby('time').sum()
+            deal_his_group = deal_his.groupby('trade_date').sum()
             deal_his_group.reset_index(inplace=True)
             df = deal_his_group[deal_his_group['profit'] >= 0]
 
             if not df.empty:
-                x_data = self._to_x_data(list(df['time']))
+                x_data = self._to_x_data(list(df['trade_date']))
                 y_data = [round(x, 2) for x in list(df['profit'])]
                 scatter_up = Scatter()
                 scatter_up.add_xaxis(x_data)
@@ -285,7 +307,7 @@ class Report:
 
             df = deal_his_group[deal_his_group['profit'] < 0]
             if not df.empty:
-                x_data = self._to_x_data(list(df['time']))
+                x_data = self._to_x_data(list(df['trade_date']))
                 y_data = [round(x, 2) for x in list(df['profit'])]
                 scatter_down = Scatter()
                 scatter_down.add_xaxis(x_data)
@@ -325,43 +347,102 @@ class Report:
 
         return line
 
-    def _plot_kline(self) -> Optional[Sequence[Chart]]:
-        pass
+    def _plot_kline(self, code, code_sell, code_buy) -> Optional[Chart]:
+        def get_markpoints(color, typ, symbol, factor, data):
+            mark_points = {}
+            for item in data.to_dict('records'):
+                index = self._to_x_data(item['trade_date'])
+                tm = item['time']
+                if isinstance(tm, str):
+                    if '/' in tm:
+                        tm = datetime.strptime(tm, '%Y/%m/%d %H:%M:%S')
+                    else:
+                        tm = datetime.strptime(tm, '%Y-%m-%d %H:%M:%S')
+                t = tm.strftime('%H:%M')
+                index = self.trade_date.index(index)
+                close = daily_close[index]
+                if index not in mark_points:
+                    mark_points[index] = dict(name=f'{typ}:{item["price"]},{item["volume"]},{t}',
+                                              symbol=symbol,
+                                              color=color,
+                                              coord=[index, close * factor])
+                else:
+                    mark_points[index]['name'] = mark_points[index]['name'] + f'{item["price"]},{item["volume"]},{t}'
+            return mark_points.values()
+
+        daily = self.daily[self.daily['code'] == code]
+        daily_close = list(daily['close'])
+        line = Line()
+        line.add_xaxis(xaxis_data=self.trade_date)
+        points = []
+        if not code_sell.empty:
+            p = get_markpoints(color=self.color_down, typ='S', symbol=self.arrow_down, factor=1.002, data=code_sell)
+            points = points + list(p)
+        if not code_buy.empty:
+            p = get_markpoints(color=self.color_up, typ='B', symbol=self.arrow_up, factor=0.998, data=code_buy)
+            points = points + list(p)
+
+        data = []
+        for point in points:
+            opt = opts.MarkPointItem(name=point['name'], symbol=point['symbol'],
+                                     symbol_size=10, coord=point['coord'],
+                                     itemstyle_opts=opts.ItemStyleOpts(color=point['color']))
+            data.append(opt)
+
+        line.add_yaxis(series_name='收盘价',
+                       label_opts=opts.LabelOpts(is_show=False),
+                       is_smooth=True, symbol='none',
+                       y_axis=daily_close, markpoint_opts=opts.MarkPointOpts(data=data))
+        kline = plot_kline(data=daily, overlap=('MA5', 'MA10', 'MA20', line))
+        return kline
+
+    def plot_kline(self) -> Optional[Sequence[Chart]]:
+        charts = []
+        if len(self.codes) > 0 and self.daily is not None:
+            deal_his = self.deal_his if not self.deal_his.empty else pd.DataFrame()
+            deal_his_sell = deal_his[deal_his['type'] == 'sell']
+            deal_his_buy = deal_his[deal_his['type'] == 'buy']
+            for code in self.codes:
+                code_sell = deal_his_sell[deal_his_sell['code'] == code] if not deal_his_sell.empty else pd.DataFrame()
+                code_buy = deal_his_buy[deal_his_buy['code'] == code] if not deal_his_buy.empty else pd.DataFrame()
+                chart = self._plot_kline(code, code_sell, code_buy)
+                charts.append(chart)
+        return charts
+
+    def plot_static(self):
+        table = Table()
+
+        headers = ["策略", " ", "  ", "   "]
+        rows = [
+            ['账户', '', '', ''],
+            ['期初', '', '期末', '', ],
+            ["Darwin", 112, 120900, 1714.7],
+            ["Hobart", 1357, 205556, 619.5],
+            ["Sydney", 2058, 4336374, 1214.8],
+            ["Melbourne", 1566, 3806092, 646.9],
+            ["Perth", 5386, 1554769, 869.4],
+        ]
+        table.add(headers, rows)
+        table.set_global_opts(
+            title_opts=ComponentTitleOpts(title="统计")
+        )
+        return table
 
     def plot(self):
-        pass
-        # if not self.is_ready:
-        #     return None
-        #
-        # # todo
-        # height = self.pos_top + self.line_height * 2 + self.kline_height + self.empty_height
-        # grid = Grid(init_opts=opts.InitOpts(height=f'{height}px'))
-        #
-        # pos = self.pos_top
-        # self._plot_cash(grid=grid, pos=pos, height=self.line_height)
-        #
-        # pos = pos + self.line_height
-        # self._plot_profit(grid=grid, pos=pos, height=self.line_height)
-        # klines = self._plot_kline()
-        #
-        # # grid.add(cash_line, grid_opts=opts.GridOpts())
-        #
-        # pos = pos + self.line_height
-        # grid.add(profit_scatter, grid_opts=opts.GridOpts(pos_top=pos, height=self.line_height))
-        #
-        # pos = pos + self.line_height
-        # for kline in klines:
-        #     grid.add(kline, grid_opts=opts.GridOpts(pos_top=pos, height=self.kline_height))
-        #     pos = pos + self.kline_height
+        if not self.is_ready:
+            return None
 
-        return grid
+        page = Page(page_title='策略统计')
+        page.add(self.plot_cash())
+        page.add(self.plot_profit())
+        klines = self.plot_kline()
+        for kline in klines:
+            page.add(kline)
+        # page.add(self.plot_static())
+        return page
 
 
 if __name__ == '__main__':
-    import pandas as pd
-    import bbq.fetch as fetch
-
-
     class Account:
         cash_init = 100000
         color_up = '#F11300'
@@ -374,18 +455,31 @@ if __name__ == '__main__':
 
         trader = Trader()
         db_data = None
+        db_trade = None
 
 
     report = Report(Account())
     report.acct_his = pd.read_csv('/Users/luoguochun/Downloads/acct_his.csv', index_col=0)
+    report.acct_his['start_time'] = pd.to_datetime(report.acct_his['start_time'])
+    report.acct_his['end_time'] = pd.to_datetime(report.acct_his['end_time'])
+
     report.deal_his = pd.read_csv('/Users/luoguochun/Downloads/deal_his.csv', index_col=0)
+    report.deal_his['time'] = pd.to_datetime(report.deal_his['time'])
+    report.deal_his['trade_date'] = pd.to_datetime(report.deal_his['trade_date'])
+
+    report.daily = pd.read_csv('/Users/luoguochun/Downloads/daily.csv', index_col=0)
+    report.daily['trade_date'] = pd.to_datetime(report.daily['trade_date'])
+
     report.is_ready = True
     report.trade_date = []
+    report.codes = ['sh601618']
 
     for trade_date in list(pd.date_range('2020-12-01', '2020-12-31')):
         if fetch.is_trade_date(trade_date):
             report.trade_date.append(trade_date.strftime('%Y/%m/%d')[2:])
 
     # line = report.plot_cash()
-    line = report.plot_profit()
+    # line = report.plot_profit()
+    # line = report.plot_kline()
+    line = report.plot()
     line.render('/Users/luoguochun/Downloads/render.html')
