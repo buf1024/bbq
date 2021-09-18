@@ -1,20 +1,21 @@
-from bbq.fetch import fetch_stock_new
+from bbq.fetch import fetch_stock_new_quote
 from bbq.selector.strategy.strategy import Strategy
+import pandas as pd
 
 
-class NewFresh(Strategy):
+class StockNewFresh(Strategy):
     def __init__(self, db):
         super().__init__(db)
         self.trade_date = 60
         self.ratio_up = 0.5
         self.low_max_date = 10
-        self.first_up = 3
+        self.first_up = 2
 
     async def init(self, **kwargs):
         self.trade_date = kwargs['trade_date'] if kwargs is not None and 'trade_date' in kwargs else 60
         self.ratio_up = kwargs['ratio_up'] if kwargs is not None and 'ratio_up' in kwargs else 0.5
         self.low_max_date = kwargs['low_max_date'] if kwargs is not None and 'low_max_date' in kwargs else 10
-        self.first_up = kwargs['first_up'] if kwargs is not None and 'first_up' in kwargs else 10
+        self.first_up = kwargs['first_up'] if kwargs is not None and 'first_up' in kwargs else 2
 
         try:
             self.trade_date = int(self.trade_date)
@@ -42,9 +43,9 @@ class NewFresh(Strategy):
     async def select(self):
         """
         根据策略，选择股票
-        :return: [(code, info), (code, info)...]/None
+        :return: [{code, ctx...}, {code, ctx}, ...]/None
         """
-        quotes = fetch_stock_new()
+        quotes = fetch_stock_new_quote()
         if quotes is None:
             self.log.error('获取次新股行情失败')
             return None
@@ -52,7 +53,6 @@ class NewFresh(Strategy):
                  await self.db.stock_daily.count_documents({'code': code}) <= self.trade_date]
 
         select_codes = []
-        info_dict = {}
         for code in codes:
             daily = await self.db.load_stock_daily(filter={'code': code}, sort=[('trade_date', -1)])
             if daily is None:
@@ -96,19 +96,32 @@ class NewFresh(Strategy):
 
                 total_chg = (daily.iloc[0]['close'] - daily_new.iloc[idxmin]['close']) / daily_new.iloc[idxmin]['close']
                 msg = '代码 {}, 上市上涨天数({}), 首高({}, {}), 首低({}, {}), 首低后{}交易日: 上升({}), 下降({}), ' \
-                      '比例({:.2f}%), 涨幅: {:.2f}%'.format(code, first_up,
-                                                        daily.iloc[idxmax]['close'],
-                                                        daily.iloc[idxmax]['trade_date'].strftime('%Y-%m-%d'),
-                                                        daily_new.iloc[idxmin]['close'],
-                                                        daily_new.iloc[idxmin]['trade_date'].strftime('%Y-%m-%d'),
-                                                        total, up, down, chg * 100, total_chg * 100)
+                      '上升比例({:.2f}%), 涨幅: {:.2f}%'.format(code, first_up,
+                                                          daily.iloc[idxmax]['close'],
+                                                          daily.iloc[idxmax]['trade_date'].strftime('%Y-%m-%d'),
+                                                          daily_new.iloc[idxmin]['close'],
+                                                          daily_new.iloc[idxmin]['trade_date'].strftime('%Y-%m-%d'),
+                                                          total, up, down, chg * 100, total_chg * 100)
                 # self.log.debug(msg)
                 if chg > self.ratio_up and total <= self.low_max_date:
-                    info_dict[code] = dict(chg=chg, msg=msg)
-                    select_codes.append(code)
-        select_codes = sorted(select_codes, key=lambda c: info_dict[c]['chg'], reverse=True)
+                    select_codes.append({'code': code,
+                                         '上市上涨天数': first_up,
+                                         '首高': daily.iloc[idxmax]['close'],
+                                         '首高日期': daily.iloc[idxmax]['trade_date'],
+                                         '首低': daily_new.iloc[idxmin]['close'],
+                                         '首低日期': daily_new.iloc[idxmin]['trade_date'],
+                                         '首低后交易日': total,
+                                         '上升': up,
+                                         '下降': down,
+                                         '上升比例': chg,
+                                         '涨幅': total_chg,
+                                         'msg': msg})
+        df = None
+        if len(select_codes) > 0:
+            select_codes = sorted(select_codes, key=lambda c: c['上升比例'], reverse=True)
+            df = pd.DataFrame(select_codes)
 
-        for code in select_codes:
-            self.log.info(info_dict[code]['msg'])
+        return df
 
-        return select_codes
+
+

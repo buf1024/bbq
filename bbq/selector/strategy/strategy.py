@@ -1,5 +1,6 @@
 import bbq.log as log
-from typing import List
+import pandas as pd
+from typing import Optional
 
 
 class Strategy:
@@ -25,17 +26,22 @@ class Strategy:
         """
         return True
 
-    async def select(self):
+    async def select(self) -> Optional[pd.DataFrame]:
         """
         根据策略，选择股票
-        :return: [code, code, ...]/None
+        :return: [{code, ctx...}, {code, ctx}, ...]/None
         """
-        raise Exception('{} not implement'.format(self.select.__qualname__))
+        raise Exception('选股策略 {} 没实现选股函数'.format(self.__class__.__name__))
 
-    async def regression(self, codes: List[str]):
-        """
-        根据策略，对股票进行回归
-        :param codes:
-        :return: 策略匹配度 0 ~ 1
-        """
-        return 1.0
+    async def run(self, count=10, **kwargs) -> Optional[pd.DataFrame]:
+        if not await self.init(**kwargs):
+            self.log.error('策略 {} 初始化失败'.format(self.__class__.__name__))
+            return None
+
+        data = await self.select()
+        if data is not None and not data.empty:
+            if len(data) > count:
+                data = data[:count]
+        await self.destroy()
+
+        return data

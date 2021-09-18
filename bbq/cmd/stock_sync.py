@@ -6,37 +6,39 @@ import click
 
 import bbq.fetch as fetch
 from bbq.common import run_until_complete, setup_db, setup_log
+from bbq.config import init_def_config
 from bbq.data.data_sync import DataSync
 from bbq.data.data_sync import Task
 from bbq.data.stockdb import StockDB
-from bbq.config import init_def_config
 
 
 class StockDailyTask(Task):
-    def __init__(self, ctx, name: str, code: str):
-        super().__init__(ctx, name)
+    def __init__(self, data_sync, name: str, code: str):
+        super().__init__(data_sync, name)
         self.code = code
 
     async def task(self):
         self.log.info('开始同步股票日线数据, code={}'.format(self.code))
-        query_func = partial(self.ctx.db.load_stock_daily, filter={'code': self.code}, projection=['trade_date'],
+        query_func = partial(self.db.load_stock_daily, filter={'code': self.code}, projection=['trade_date'],
                              sort=[('trade_date', -1)], limit=1)
         fetch_func = partial(self.to_async, func=partial(fetch.fetch_stock_daily, code=self.code))
         save_func = self.db.save_stock_daily
-        await self.incr_sync_on_trade_date(query_func=query_func, fetch_func=fetch_func, save_func=save_func,
+        await self.incr_sync_on_trade_date(query_func=query_func,
+                                           fetch_func=fetch_func,
+                                           save_func=save_func,
                                            sync_start_time_func=lambda now: datetime(year=now.year, month=now.month,
                                                                                      day=now.day, hour=15, minute=30))
         self.log.info('股票日线数据task完成, code={}'.format(self.code))
 
 
 class StockIndexTask(Task):
-    def __init__(self, ctx, name: str, code: str):
-        super().__init__(ctx, name)
+    def __init__(self, data_sync, name: str, code: str):
+        super().__init__(data_sync, name)
         self.code = code
 
     async def task(self):
         self.log.info('开始同步股票指标数据, code={}'.format(self.code))
-        query_func = partial(self.ctx.db.load_stock_index, filter={'code': self.code}, projection=['trade_date'],
+        query_func = partial(self.db.load_stock_index, filter={'code': self.code}, projection=['trade_date'],
                              sort=[('trade_date', -1)], limit=1)
         fetch_func = partial(self.to_async, func=partial(fetch.fetch_stock_index, code=self.code))
         save_func = self.db.save_stock_index
@@ -45,48 +47,64 @@ class StockIndexTask(Task):
 
 
 class StockFactorTask(Task):
-    def __init__(self, ctx, name: str, code: str):
-        super().__init__(ctx, name)
+    def __init__(self, data_sync, name: str, code: str):
+        super().__init__(data_sync, name)
         self.code = code
 
     async def task(self):
         self.log.info('开始获取复权因子数据')
-        data = fetch.fetch_stock_adj_factor(code=self.code)
-        if data is None:
-            return False
 
-        data_db = await self.db.load_stock_fq_factor(filter={'code': self.code}, projection=['trade_date'])
-        if data_db is None or data_db.shape[0] != data.shape[0]:
-            data_new = self.gen_incr_data('trade_Date', data_db, data)
-            if data_new is not None:
-                self.log.info('删除原有{}复权因子'.format(self.code))
-                await self.db.do_delete(self.db.stock_fq_factor, filter={'code': self.code}, just_one=False)
-                await self.db.save_stock_fq_factor(data)
+        # data = fetch.fetch_stock_adj_factor(code=self.code)
+        # if data is None:
+        #     return False
+        #
+        # data_db = await self.db.load_stock_fq_factor(filter={'code': self.code}, projection=['trade_date'])
+        # if data_db is None or data_db.shape[0] != data.shape[0]:
+        #     data_new = self.gen_incr_data('trade_date', data_db, data)
+        #     if data_new is not None:
+        #         self.log.info('删除原有{}复权因子'.format(self.code))
+        #         await self.db.do_delete(self.db.stock_fq_factor, filter={'code': self.code}, just_one=False)
+        #         await self.db.save_stock_fq_factor(data)
+
+        query_func = partial(self.db.load_stock_fq_factor, filter={'code': self.code}, projection=['sync_date'],
+                             sort=[('sync_date', -1)], limit=1)
+        fetch_func = partial(self.to_async, func=partial(fetch.fetch_stock_adj_factor, code=self.code))
+
+        async def _save_func(code, data):
+            self.log.info('全量同步复权因子: {}'.format(self.code))
+            await self.db.do_delete(self.db.stock_fq_factor, filter={'code': code}, just_one=False)
+            await self.db.save_stock_fq_factor(data)
+
+        save_func = partial(_save_func, code=self.code)
+
+        await self.incr_sync_on_trade_date(cmp_key='sync_date', query_func=query_func, fetch_func=fetch_func,
+                                           save_func=save_func)
+
         self.log.info('获取复权因子数据完成')
 
 
 class IndexDailyTask(Task):
-    def __init__(self, ctx, name: str, code: str):
-        super().__init__(ctx, name)
+    def __init__(self, data_sync, name: str, code: str):
+        super().__init__(data_sync, name)
         self.code = code
 
     async def task(self):
         self.log.info('开始同步指数日线数据, code={}'.format(self.code))
-        query_func = partial(self.ctx.db.load_index_daily, filter={'code': self.code}, projection=['trade_date'],
+        query_func = partial(self.db.load_index_daily, filter={'code': self.code}, projection=['trade_date'],
                              sort=[('trade_date', -1)], limit=1)
-        fetch_func = partial(self.to_async, func=partial(fetch.fetch_index_daily, code=self.code))
+        fetch_func = partial(self.to_async, func=partial(fetch.fetch_stock_index_daily, code=self.code))
         save_func = self.db.save_index_daily
         await self.incr_sync_on_trade_date(query_func=query_func, fetch_func=fetch_func, save_func=save_func)
         self.log.info('指数日线数据task完成, code={}'.format(self.code))
 
 
 class StockNorthFlowTask(Task):
-    def __init__(self, ctx):
-        super().__init__(ctx, 'north_flow')
+    def __init__(self, data_sync):
+        super().__init__(data_sync, 'north_flow')
 
     async def task(self):
         self.log.info('开始获取北向资金数据')
-        query_func = partial(self.ctx.db.load_stock_north_south_flow, projection=['trade_date'],
+        query_func = partial(self.db.load_stock_north_south_flow, projection=['trade_date'],
                              sort=[('trade_date', -1)], limit=1)
         filter_cond = None
         now = datetime.now()
@@ -103,26 +121,43 @@ class StockNorthFlowTask(Task):
 
 
 class StockHisDivEndTask(Task):
-    def __init__(self, ctx):
-        super().__init__(ctx, 'his_divend')
+    def __init__(self, data_sync):
+        super().__init__(data_sync, 'his_divend')
 
     async def task(self):
         self.log.info('开始获取历史分红数据')
-        await self.incr_sync_on_code(query_func=partial(self.db.load_stock_his_divend, projection=['code']),
-                                     fetch_func=fetch.fetch_stock_his_divend,
-                                     save_func=self.db.save_stock_his_divend)
+        # await self.incr_sync_on_code(query_func=partial(self.db.load_stock_his_divend, projection=['code']),
+        #                              fetch_func=fetch.fetch_stock_his_divend,
+        #                              save_func=self.db.save_stock_his_divend)
+
+        query_func = partial(self.db.load_stock_his_divend, projection=['sync_date'],
+                             sort=[('sync_date', -1)], limit=1)
+
+        async def fetch_func(*_1, **_2):
+            return fetch.fetch_stock_his_divend()
+
+        async def _save_func(data):
+            self.log.info('全量同步历史分红数据')
+            await self.db.do_delete(self.db.stock_his_divend, just_one=False)
+            await self.db.save_stock_his_divend(data)
+
+        save_func = _save_func
+
+        await self.incr_sync_on_trade_date(cmp_key='sync_date', query_func=query_func, fetch_func=fetch_func,
+                                           save_func=save_func)
+
         self.log.info('获取历史分红数据完成')
 
 
 class SWIndexInfoTask(Task):
-    def __init__(self, ctx):
-        super().__init__(ctx, 'sw_index_info')
+    def __init__(self, data_sync):
+        super().__init__(data_sync, 'sw_index_info')
 
     async def task(self):
         self.log.info('开始获取申万一级行业数据')
         await self.incr_sync_on_code(query_func=partial(self.db.load_sw_index_info, projection=['index_code']),
-                                     fetch_func=fetch.fetch_sw_index_info,
-                                     save_func=self.db.save_sw_index_info, key='index_code')
+                                     fetch_func=fetch.fetch_stock_sw_index_info,
+                                     save_func=self.db.save_sw_index_info, cmp_key='index_code')
         self.log.info('获取获取申万一级行业数据完成')
 
 
@@ -150,13 +185,13 @@ class StockSync(DataSync):
             indexes = await self.db.load_index_info(projection=['code'])
 
         if codes is None or indexes is None:
-            self.log.error('股票信息和指数信息为空, 先同步基础数据')
+            self.log.error('股票信息和指数信息为空, 请求先同步基础数据...')
             return False
 
         self.log.info('开始准备task...')
         if self.funcs is None or 'stock_daily' in self.funcs:
             for _, item in codes.iterrows():
-                self.add_task(StockDailyTask(self, name='stack_daily_{}'.format(item['code']), code=item['code']))
+                self.add_task(StockDailyTask(data_sync=self, name='stack_daily_{}'.format(item['code']), code=item['code']))
 
         if self.funcs is None or 'stock_index' in self.funcs:
             for _, item in codes.iterrows():
@@ -166,9 +201,9 @@ class StockSync(DataSync):
             for _, item in indexes.iterrows():
                 self.add_task(IndexDailyTask(self, name='index_daily_{}'.format(item['code']), code=item['code']))
 
-        if self.funcs is None or 'stock_qf_factor' in self.funcs:
+        if self.funcs is None or 'stock_fq_factor' in self.funcs:
             for _, item in codes.iterrows():
-                self.add_task(StockFactorTask(self, name='stock_qf_factor_{}'.format(item['code']), code=item['code']))
+                self.add_task(StockFactorTask(self, name='stock_fq_factor_{}'.format(item['code']), code=item['code']))
 
         if self.funcs is None or 'stock_north_flow' in self.funcs:
             self.add_task(StockNorthFlowTask(self))
@@ -176,6 +211,7 @@ class StockSync(DataSync):
         if self.funcs is None or 'stock_his_divend' in self.funcs:
             self.add_task(StockHisDivEndTask(self))
 
+        # 没有用
         if self.funcs is not None and 'sw_index_info' in self.funcs:
             self.add_task(SWIndexInfoTask(self))
 
@@ -191,10 +227,13 @@ class StockSync(DataSync):
 @click.option('--con-fetch-num', default=10, type=int, help='concurrent net fetch number')
 @click.option('--con-save-num', default=100, type=int, help='concurrent db save number')
 @click.option('--function', type=str,
-              help='sync one, split by ",", available: stock_daily,stock_index,index_daily,stock_qf_factor,'
+              help='sync one, split by ",", available: stock_daily,stock_index,index_daily,stock_fq_factor,'
                    'stock_north_flow,stock_his_divend,sw_index_info')
 @click.option('--debug/--no-debug', default=True, type=bool, help='show debug log')
-def main(uri: str, pool: int, skip_basic: bool, con_fetch_num: int, con_save_num: int, function: str, debug: bool):
+def main(uri: str = 'mongodb://localhost:27017/', pool: int = 5,
+         skip_basic: bool = False,
+         con_fetch_num: int = 10, con_save_num: int = 100,
+         function: str = None, debug: bool = True):
     _, conf_dict = init_def_config()
     conf_dict['mongo'].update(dict(uri=uri, pool=pool))
     conf_dict['log'].update(dict(level="debug" if debug else "critical"))

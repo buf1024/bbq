@@ -9,6 +9,10 @@ from bbq import log
 from abc import ABC
 import asyncio
 
+import nest_asyncio
+
+nest_asyncio.apply()
+
 
 class MongoDB(ABC):
     _MongoStat = namedtuple('_MongoStat', ['client', 'count', 'last'])
@@ -32,12 +36,21 @@ class MongoDB(ABC):
 
         return wrapper
 
-    def init(self):
+    def test_coll(self):
+        return None
+
+    def init(self) -> bool:
         try:
             for _ in range(self.pool):
                 client = motor.motor_asyncio.AsyncIOMotorClient(self.uri)
                 self.clients.append(self._MongoStat(client=client, count=0, last=time.time()))
+            test_coll = self.test_coll()
+            if test_coll is not None:
+                loop = asyncio.get_event_loop()
+                loop.run_until_complete(test_coll.count_documents({}))
         except Exception as e:
+            self.log.error(type(e))
+            raise e
             self.log.error('连接mongodb失败: uri={}, ex={}'.format(self.uri, e))
             return False
 
@@ -72,6 +85,9 @@ class MongoDB(ABC):
                             for item in data:
                                 del item['_id']
                         return data
+
+                break
+
             except (ServerSelectionTimeoutError, AutoReconnect) as e:
                 self.log.error('mongodb 调用 {}, 连接异常: ex={}, call {}, {}s后重试'.format(self.do_load.__name__,
                                                                                     e, traceback.format_exc(),

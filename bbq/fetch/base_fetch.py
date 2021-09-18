@@ -1,33 +1,13 @@
-import traceback
-import bbq.log as log
 from abc import ABC
-from functools import wraps
-import time
-
-from bbq.fetch.my_trade_date import is_trade_date
 from datetime import datetime, timedelta
+
+import bbq.log as log
+from bbq.fetch.my_trade_date import is_trade_date
 
 
 class BaseFetch(ABC):
     def __init__(self):
         self.log = log.get_logger(self.__class__.__name__)
-
-    @staticmethod
-    def retry_client(func):
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            for i in range(3):
-                try:
-                    res = func(self, *args, **kwargs)
-                    return res
-                except Exception as e:
-                    msg = traceback.format_exc()
-                    self.log.error('请求 %s 异常: \n%s', func.__name__, msg)
-                    self.log.debug('请求 %s {}s后重试.'.format((i + 1) * 6), func.__name__)
-                    time.sleep((i + 1)**2 * 6)
-            return None
-
-        return wrapper
 
     @staticmethod
     def sina2xueqiu(code: str):
@@ -57,3 +37,9 @@ class BaseFetch(ABC):
                 return True
             tmp = tmp + timedelta(days=1)
         return False
+
+    @staticmethod
+    def df_size(df):
+        if df is None:
+            return 0
+        return df.shape[0]

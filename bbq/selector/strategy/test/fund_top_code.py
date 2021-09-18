@@ -6,7 +6,7 @@ from tqdm import tqdm
 from datetime import timedelta, datetime
 
 
-class TopFund(Strategy):
+class FundTopCode(Strategy):
     def __init__(self, db):
         super().__init__(db)
         self.days = 30
@@ -70,7 +70,7 @@ class TopFund(Strategy):
     async def select(self):
         """
         根据策略，选择基金
-        :return: [code, code, ...]/None
+        :return: [{code, ctx...}, {code, ctx}, ...]/None
         """
 
         data = await self.db.load_fund_net(limit=1, sort=[('trade_date', -1)])
@@ -78,10 +78,14 @@ class TopFund(Strategy):
             self.log.error('数据为空')
             return None
 
+        data['net_acc'] = data['net_acc'].apply(lambda x: float(x))
+
         day_mx = data.iloc[0]['trade_date']
         day_mx = datetime(year=day_mx.year, month=day_mx.month, day=day_mx.day)
         day_cond = day_mx + timedelta(days=-self.days)
         data = await self.db.load_fund_net(filter={'trade_date': {'$gte': day_cond}}, sort=[('trade_date', -1)])
+
+        data['net_acc'] = data['net_acc'].apply(lambda x: float(x))
 
         group_data = data.groupby('code')
         select = []
@@ -98,23 +102,28 @@ class TopFund(Strategy):
             name = name_df.iloc[0]['name']
 
             rise = round(
-                (cal_data.iloc[-1]['net_accumulate'] - cal_data.iloc[0]['net_accumulate']) * 100 / cal_data.iloc[0][
-                    'net_accumulate'], 2)
-            a, b, score, x_index, y_index = linear_fitting(cal_data, field='net_accumulate')
+                (cal_data.iloc[-1]['net_acc'] - cal_data.iloc[0]['net_acc']) * 100 / cal_data.iloc[0][
+                    'net_acc'], 2)
+            a, b, score, x_index, y_index = linear_fitting(cal_data, field='net_acc')
+            if a is None or b is None or x_index is None or y_index is None:
+                continue
             a, b, score = round(a, 4), round(b, 4), round(score, 4)
             if self.coef is not None and self.score is not None:
                 if a > self.coef and score > self.score:
-                    got_data = dict(coef=a, score=score, rise=rise, code=code, name=name)
-                    print('got you: data={}'.format(got_data))
+                    got_data = dict(code=code, name=name, coef=a, score=score, rise=rise / 100)
+                    self.log.info('got data: {}'.format(got_data))
                     select.append(got_data)
-            else:
-                got_data = dict(coef=a, score=score, rise=rise, code=code, name=name)
-                select.append(got_data)
+            # else:
+            #     got_data = dict(code=code, name=name, coef=a, score=score, rise=rise / 100)
+            #     select.append(got_data)
 
         proc_bar.close()
 
+        df = None
         if len(select) > 0:
             select = sorted(select, key=lambda v: v[self.sort_by], reverse=True)
+            df = pd.DataFrame(select)
 
-        print('done')
-        return pd.DataFrame(select)
+        return df
+
+

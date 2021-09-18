@@ -28,6 +28,9 @@ def load_strategy(dir_path, package, exclude=()):
     :param exclude: 排除的文件， 默认__开头的文件都会排除
     :return:
     """
+    if len(dir_path) > 0 and dir_path[0] == '~':
+        dir_path = os.path.expanduser('~') + dir_path[1:]
+
     strategy = {}
     for root_path, dirs, files in os.walk(dir_path):
         if root_path.find('__') >= 0 or root_path.startswith('.'):
@@ -45,7 +48,7 @@ def load_strategy(dir_path, package, exclude=()):
                 continue
             module_str = '{}.{}'.format(package + package_suf, file_name[:-3])
             if module_str.startswith('.'):
-                module_str=module_str[1:]
+                module_str = module_str[1:]
             module = importlib.import_module(module_str)
 
             file_names = file_name[:-3].split('_')
@@ -68,9 +71,7 @@ def run_until_complete(*coro):
     loop = None
     try:
         loop = asyncio.get_event_loop()
-        loop.run_until_complete(
-            asyncio.gather(*coro)
-        )
+        return loop.run_until_complete(asyncio.gather(*coro))
     finally:
         if loop is not None:
             loop.close()
@@ -87,8 +88,7 @@ def setup_log(conf_dict, file_name):
 def setup_db(conf_dict, cls):
     db = cls(uri=conf_dict['mongo']['uri'], pool=conf_dict['mongo']['pool'])
     if not db.init():
-        print('初始化数据库失败')
-        return None
+        raise Exception('初始化数据库失败')
 
     return db
 
@@ -109,7 +109,7 @@ def load_cmd_yml(value):
 if __name__ == '__main__':
     import sys
 
-    sys.path.append('/Users/luoguochun/tmp/hellome')
+    sys.path.append('~/tmp/hellome')
 
 
     @singleton
@@ -120,6 +120,6 @@ if __name__ == '__main__':
 
     print('cls b1={}, b2={}'.format(id(B()), id(B())))
 
-    st = load_strategy('/Users/luoguochun/tmp/hellome', '')
+    st = load_strategy('~/tmp/hellome', '')
 
     print(st)

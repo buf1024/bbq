@@ -1,11 +1,12 @@
 import yaml
 import click
+import base64
+
 from bbq.common import run_until_complete
 from bbq.common import setup_db, setup_log
 from bbq.data.funddb import FundDB
 from bbq.data.stockdb import StockDB
 from bbq.selector.strategy import strategies
-import base64
 from bbq.config import init_def_config
 
 
@@ -13,24 +14,16 @@ async def select_async(js, config):
     ctx = config['ctx']
     strategy = config['strategy']
     count = config['count']
-    regression = config['regression']
 
     cls_inst = strategies[strategy](db=ctx.obj['db'])
-    if not await cls_inst.init(**js):
-        print('strategy init failed')
-        return
+    codes = await cls_inst.run()
 
-    codes = await cls_inst.select()
     if codes is not None:
         if len(codes) > count:
             codes = codes[:count]
         print('select codes:\n  {}'.format(', '.join(codes)))
-        if regression:
-            result = await cls_inst.regression(codes)
-            print('select regression result:\n{}'.format(result))
-    if codes is None:
+    else:
         print('no code selected')
-    await cls_inst.destroy()
 
 
 @click.group()
@@ -87,10 +80,8 @@ def list(ctx):
 @click.option('--strategy', type=str, help='strategy name')
 @click.option('--argument', type=str, help='strategy argument, yml string/base64 yml string')
 @click.option('--count', type=int, help='select count, default 10')
-@click.option('--regression/--no-regression', type=bool, help='auto regression, default False')
-def select(ctx, strategy: str, argument: str, count: int, regression: bool):
+def select(ctx, strategy: str, argument: str, count: int):
     count = 10 if count is None else count
-    regression = False if regression is None else regression
 
     names = strategies.keys()
     if strategy not in names:
@@ -108,7 +99,7 @@ def select(ctx, strategy: str, argument: str, count: int, regression: bool):
                 if i != 0:
                     print('argument is not legal yml string/base64 encode yml string, please check --argument')
                     return
-    config = dict(ctx=ctx, strategy=strategy, count=count, regression=regression)
+    config = dict(ctx=ctx, strategy=strategy, count=count)
     run_until_complete(select_async(js=js, config=config))
 
 

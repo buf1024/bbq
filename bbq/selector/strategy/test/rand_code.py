@@ -2,11 +2,12 @@ import random
 from bbq.selector.strategy.strategy import Strategy
 
 
-class Random(Strategy):
+class RandCode(Strategy):
     def __init__(self, db):
         super().__init__(db)
         self.count = 10
         self.market = None
+        self.db_load_func = None
 
     async def init(self, **kwargs):
         self.count = kwargs['count'] if kwargs is not None and 'count' in kwargs else 10
@@ -22,8 +23,13 @@ class Random(Strategy):
             return False
 
         if self.market is not None:
-            if self.market != 'sz' and self.market != 'sh':
+            if self.market != 'fund' and self.market != 'stock':
                 self.log.error('策略参数 market={} 不正确, 值为: sz 或 sh'.format(self.market))
+                return False
+
+        self.db_load_func = self.db.load_stock_info \
+            if self.market == 'stock' or self.market is None \
+            else self.db.load_fund_info
 
         return True
 
@@ -31,17 +37,18 @@ class Random(Strategy):
         return '  名称: 随机策略\n' + \
                '  说明: 随机选股测试策略\n' + \
                '  参数: count  -- 选择个数(默认10)\n' + \
-               '        market -- 选择市场(值为: sz 或 sh, 无默认值)'
+               '        market -- 选择品种(值为: fund 或 stock, 默认stock)'
 
     async def select(self):
         """
         根据策略，选择股票
-        :return: [(code, info), (code, info)...]/None
+        :return: [{code, ctx...}, {code, ctx}, ...]/None
         """
-        flter = {'code': {'$regex': '^' + self.market}} if self.market is not None else None
-        codes = await self.db.load_stock_info(filter=flter, projection=['code'])
+        codes = await self.db_load_func(projection=['code'])
         if codes is None:
-            return []
+            return None
 
-        choice = codes['code'].tolist()
-        return random.sample(choice, self.count)
+        choice = random.sample(range(len(codes)), self.count)
+        df = codes.iloc[choice]
+
+        return df.reset_index(drop=True)

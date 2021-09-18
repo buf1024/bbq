@@ -45,6 +45,9 @@ def linear_fitting(data: pd.DataFrame, *, field='close') -> \
     x_train = np.array(x_data_ext).reshape((len(x_data_ext), 1))
     y_train = np.array(y_data_ext).reshape((len(y_data_ext), 1))
 
+    if len(x_train) == 0 or len(y_train) == 0:
+        return None, None, None, None, None
+
     # 新建一个线性回归模型，并把数据放进去对模型进行训练
     line_model = LinearRegression()
     line_model.fit(x_train, y_train)

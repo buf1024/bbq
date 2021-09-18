@@ -6,27 +6,26 @@ from .fund_eastmoney import FundEastmoney
 from .sina import Sina
 from typing import List
 
-__my_fetch = MyFetch()
+my_fetch = MyFetch()
+eastmoney_fetch = FundEastmoney()
+sina_fetch = Sina()
 
-__fund_fetch = FundEastmoney()
+fetch_stock_listing_date = my_fetch.fetch_stock_listing_date
+fetch_stock_info = my_fetch.fetch_stock_info
+fetch_stock_daily = my_fetch.fetch_stock_daily
+fetch_stock_index = my_fetch.fetch_stock_index
+fetch_stock_index_daily = my_fetch.fetch_stock_index_daily
+fetch_stock_north_south_flow = my_fetch.fetch_stock_north_south_flow
+fetch_stock_his_divend = my_fetch.fetch_stock_his_divend
+fetch_stock_sw_index_info = my_fetch.fetch_stock_sw_index_info
+fetch_stock_rt_quote = my_fetch.fetch_stock_rt_quote
+fetch_stock_new_quote = my_fetch.fetch_stock_new_quote
+fetch_stock_adj_factor = my_fetch.fetch_stock_adj_factor
+fetch_stock_minute = my_fetch.fetch_stock_minute
 
-fetch_stock_info = __my_fetch.fetch_stock_info
-fetch_stock_daily = __my_fetch.fetch_stock_daily
-fetch_stock_index = __my_fetch.fetch_stock_index
-fetch_index_daily = __my_fetch.fetch_index_daily
-fetch_stock_north_south_flow = __my_fetch.fetch_stock_north_south_flow
-fetch_stock_his_divend = __my_fetch.fetch_stock_his_divend
-fetch_sw_index_info = __my_fetch.fetch_sw_index_info
-fetch_stock_rt_quote = __my_fetch.fetch_stock_rt_quote
-fetch_stock_new = __my_fetch.fetch_stock_new
-fetch_stock_adj_factor = __my_fetch.fetch_stock_adj_factor
-fetch_stock_minute = __my_fetch.fetch_stock_minute
-
-fetch_fund_block_list = __fund_fetch.fetch_fund_block_list
-fetch_fund_list = __fund_fetch.fetch_fund_list
-fetch_fund_net = __fund_fetch.fetch_fund_net
-fetch_fund_info = __fund_fetch.fetch_fund_info
-fetch_fund_daily = __my_fetch.fetch_fund_daily_xueqiu
+fetch_fund_net = my_fetch.fetch_fund_net
+fetch_fund_info = my_fetch.fetch_fund_info
+fetch_fund_daily = my_fetch.fetch_fund_daily_xueqiu
 
 
 def fetch_index_info(codes: List[str] = None) -> pd.DataFrame:
@@ -43,3 +42,23 @@ def fetch_index_info(codes: List[str] = None) -> pd.DataFrame:
 
 
 is_trade_date = is_trade_date
+
+__all__ = [
+    'fetch_stock_listing_date',
+    'fetch_stock_info',
+    'fetch_stock_daily',
+    'fetch_stock_index',
+    'fetch_stock_index_daily',
+    'fetch_stock_north_south_flow',
+    'fetch_stock_his_divend',
+    'fetch_stock_sw_index_info',
+    'fetch_stock_rt_quote',
+    'fetch_stock_new_quote',
+    'fetch_stock_adj_factor',
+    'fetch_stock_minute',
+    'fetch_fund_net',
+    'fetch_fund_info',
+    'fetch_fund_daily',
+    'fetch_index_info',
+    'is_trade_date'
+]

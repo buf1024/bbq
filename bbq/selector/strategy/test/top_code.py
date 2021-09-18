@@ -1,6 +1,8 @@
 from bbq.selector.strategy.strategy import Strategy
 from bbq.data.stockdb import StockDB
 from bbq.analyse.tools import linear_fitting
+import pandas as pd
+from tqdm import tqdm
 
 
 class TopCode(Strategy):
@@ -63,16 +65,18 @@ class TopCode(Strategy):
     async def select(self):
         """
         根据策略，选择股票
-        :return: [code, code, ...]/None
+        :return: [{code, ctx...}, {code, ctx}, ...]/None
         """
         codes = None
         if isinstance(self.db, StockDB):
             codes = await self.db.load_stock_info(projection=['code', 'name'])
         else:
-            codes = await self.db.load_fund_info(filter={'type': {'$regex': '场内'}}, projection=['code', 'name'])
+            codes = await self.db.load_fund_info(projection=['code', 'name'])
 
         select = []
-        for item in codes.to_dict('records'):
+        proc_bar = tqdm(codes.to_dict('records'))
+        for item in proc_bar:
+            proc_bar.set_description('处理 {}'.format(item['code']))
             kdata = None
             if isinstance(self.db, StockDB):
                 kdata = await self.db.load_stock_daily(filter={'code': item['code']}, limit=self.days,
@@ -86,15 +90,30 @@ class TopCode(Strategy):
 
             rise = round((kdata.iloc[-1]['close'] - kdata.iloc[0]['close']) * 100 / kdata.iloc[0]['close'], 2)
             a, b, score, x_index, y_index = linear_fitting(kdata)
+            if a is None or b is None or x_index is None or y_index is None:
+                continue
             a, b, score = round(a, 4), round(b, 4), round(score, 4)
             if self.coef is not None and self.score is not None:
                 if a > self.coef and score > self.score:
-                    print('got you: a={}, score={}, {}({})'.format(a, score, item['name'], item['code']))
-                    select.append(dict(coef=a, score=score, rise=rise, code=item['code'], name=item['name']))
-            else:
-                select.append(dict(coef=a, score=score, rise=rise, code=item['code'], name=item['name']))
+                    got_data = dict(code=item['code'], name=item['name'], coef=a, score=score, rise=rise / 100)
+                    self.log.info('got you: {}'.format(got_data))
+                    select.append(got_data)
+            # else:
+            #     select.append(dict(code=item['code'], name=item['name'], coef=a, score=score, rise=rise / 100))
+            #
+        proc_bar.close()
+        df = None
         if len(select) > 0:
             select = sorted(select, key=lambda v: v[self.sort_by], reverse=True)
+            df = pd.DataFrame(select)
 
-        print('done')
-        return select
+        return df
+
+
+if __name__ == '__main__':
+    from bbq import default, run_until_complete
+
+    fdb, sdb = default()
+    s = TopCode(db=fdb)
+    res = run_until_complete(s.run())
+    print(res)

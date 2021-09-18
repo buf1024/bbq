@@ -62,3 +62,6 @@ def init_config(conf_file: str) -> Tuple:
         conf_dict = yaml.load(f.read(), yaml.FullLoader)
 
     return conf_file, conf_dict
+
+
+__all__ = ['init_def_config', 'init_config']

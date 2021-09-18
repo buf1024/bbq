@@ -6,7 +6,7 @@ import pandas as pd
 class StockDB(MongoDB):
     _meta = {
         # 股票信息
-        'stock_info': {'code': '代码', 'name': '名称', 'block': '板块'},
+        'stock_info': {'code': '代码', 'name': '名称', 'listing_date': '上市日期', 'block': '板块'},
         # 股票日线数据
         'stock_daily': {'code': '代码', 'trade_date': '交易日', 'close': '收盘价', 'open': '开盘价', 'high': '最高价', 'low': '最低价',
                         'volume': '成交量(股)', 'turnover': '换手率', 'hfq_factor': '后复权因子'},
@@ -15,9 +15,10 @@ class StockDB(MongoDB):
                         'pb': '市净率', 'ps': '市销率', 'ps_ttm': '市销率TTM', 'dv_ratio': '股息率', 'dv_ttm': '股息率TTM',
                         'total_mv': '总市值'},
         # 股票复权因子
-        'stock_fq_factor': {'code': '代码', 'trade_date': '交易日', 'hfq_factor': '后复权因子', 'qfq_factor': '前复权因子'},
+        'stock_fq_factor': {'code': '代码', 'trade_date': '交易日', 'hfq_factor': '后复权因子', 'qfq_factor': '前复权因子',
+                            'sync_date': '最近同步时间(避免全量同步程序使用)'},
 
-        # 日线信息
+        # 指数信息
         'index_info': {'code': '代码', 'name': '名称'},
         # 指数日线数据, 如: index_daily
         'index_daily': {'code': '代码', 'trade_date': '交易日', 'close': '收盘价', 'open': '开盘价', 'high': '最高价', 'low': '最低价',
@@ -31,7 +32,7 @@ class StockDB(MongoDB):
         # 历史分红数据
         'stock_his_divend': {'code': '代码', 'name': '名称', 'listing_date': '上市日期', 'divend_acc': '累计股息',
                              'divend_avg': '年均股息', 'divend_count': '分红次数', 'financed_total': '融资总额',
-                             'financed_count': '融资次数'},
+                             'financed_count': '融资次数', 'sync_date': '最近同步时间(避免全量同步程序使用)'},
 
         # 申万行业数据
         'sw_index_info': {'index_code': '行业代码', 'index_name': '行业名称', 'stock_code': '股票代码', 'stock_name': '股票名称',
@@ -78,6 +79,9 @@ class StockDB(MongoDB):
     @property
     def sw_index_info(self):
         return self.get_coll(self._db, 'sw_index_info')
+
+    def test_coll(self):
+        return self.stock_info
 
     async def load_stock_info(self, **kwargs) -> Optional[pd.DataFrame]:
         """
@@ -184,7 +188,6 @@ class StockDB(MongoDB):
 
     async def load_stock_fq_factor(self, **kwargs) -> Optional[pd.DataFrame]:
         """
-        :param code:
         :param kwargs:  filter=None, projection=None, skip=0, limit=0, sort=None, to_frame=True
         :return: DataFrame([code,trade_date,open,high,low,close,vol,amount])
         """
@@ -336,7 +339,7 @@ if __name__ == '__main__':
         count = await db.stock_info.count_documents({})
         print('count={}'.format(count))
 
-    db = StockDB()
+    db = StockDB(uri='mongodb://localhost:27017/')
     db.init()
     run_until_complete(
         test_count(db)

@@ -3,15 +3,15 @@ import traceback
 from abc import ABC
 from datetime import datetime, timedelta
 from functools import partial
+import numpy as np
 
 from bbq import log
-from bbq.data.mongodb import MongoDB
 from bbq.fetch import is_trade_date
 
 
 class CommSync(ABC):
-    def __init__(self, ctx):
-        self.ctx = ctx
+    def __init__(self, data_sync):
+        self.data_sync = data_sync
         self.log = log.get_logger(self.__class__.__name__)
 
     @staticmethod
@@ -38,13 +38,14 @@ class CommSync(ABC):
 
         return is_synced
 
-    async def incr_sync_on_trade_date(self, query_func, fetch_func, save_func, key='trade_date',
+    async def incr_sync_on_trade_date(self, query_func, fetch_func, save_func,
+                                      cmp_key='trade_date',
                                       filter_data_func=None, sync_start_time_func=None):
         trade_date = await query_func()
         start = None
         end = datetime.now()
         if trade_date is not None:
-            start = trade_date[key].iloc[0] + timedelta(days=1)
+            start = trade_date[cmp_key].iloc[0] + timedelta(days=1)
 
         is_synced = self.is_synced(start, end, sync_start_time_func)
 
@@ -57,31 +58,37 @@ class CommSync(ABC):
             data = filter_data_func(data) if filter_data_func is not None else data
             if data is not None and not data.empty:
                 save_func = partial(save_func, data=data)
-                await self.ctx.submit_db(save_func)
+                await self.data_sync.submit_db(save_func)
 
     @staticmethod
-    def gen_incr_data(key, data_db, data):
+    def gen_incr_data(cmp_key, data_db, data):
         data_new = data
         if data_db is not None:
-            diff_set = set(data[key].values).difference(set(data_db[key].values))
+            diff_set = set(data[cmp_key].values).difference(set(data_db[cmp_key].values))
             if len(diff_set) > 0:
+                diff_set = list(diff_set)
+                if isinstance(diff_set[0], np.datetime64):
+                    diff_set = [datetime.utcfromtimestamp(
+                        (x - np.datetime64('1970-01-01T00:00:00Z')) / np.timedelta64(1, 's')).strftime('%Y-%m-%d')
+                        for x in diff_set]
+
                 diff_values = '["{}"]'.format('","'.join(diff_set))
-                data_new = data.query('{} in {}'.format(key, diff_values))
+                data_new = data.query('{} in {}'.format(cmp_key, diff_values))
             else:
                 data_new = None
         return data_new
 
-    async def incr_sync_on_code(self, query_func, fetch_func, save_func, key='code'):
+    async def incr_sync_on_code(self, query_func, fetch_func, save_func, cmp_key='code'):
         data = fetch_func()
         if data is None:
             return False
 
         data_db = await query_func()
         if data_db is None or data_db.shape[0] != data.shape[0]:
-            data_new = self.gen_incr_data(key, data_db, data)
+            data_new = self.gen_incr_data(cmp_key, data_db, data)
             if data_new is not None:
                 save_func = partial(save_func, data=data_new)
-                await self.ctx.submit_db(save_func)
+                await self.data_sync.submit_db(save_func)
         return data
 
     @staticmethod
@@ -90,10 +97,10 @@ class CommSync(ABC):
 
 
 class Task(CommSync):
-    def __init__(self, ctx, name):
-        super().__init__(ctx)
+    def __init__(self, data_sync, name):
+        super().__init__(data_sync)
         self.name = name
-        self.db = ctx.db
+        self.db = self.data_sync.db
 
     async def task(self):
         pass
@@ -101,16 +108,18 @@ class Task(CommSync):
     async def run(self):
         try:
             self.log.info('开始运行task: {}'.format(self.name))
+            await self.data_sync.queue.get()
             await self.task()
         except Exception as e:
             self.log.error('运行task异常: ex={} stack={}'.format(e, traceback.format_exc()))
         finally:
-            await self.ctx.queue.get()
-            self.ctx.queue.task_done()
+            self.data_sync.queue.task_done()
 
 
 class DataSync(CommSync):
-    def __init__(self, db: MongoDB, concurrent_fetch_count: int = 50, concurrent_save_count: int = 100, loop=None):
+    def __init__(self, db,
+                 concurrent_fetch_count: int = 50,
+                 concurrent_save_count: int = 100, loop=None):
         super().__init__(self)
 
         self.db = db
@@ -152,9 +161,9 @@ class DataSync(CommSync):
                 await self.queue.put(task.name)
                 self.log.info('准备运行task: {}'.format(task.name))
                 self.loop.create_task(task.run())
-
-            await self.queue.join()
-            await self.queue_db.join()
+            if len(self.tasks) > 0:
+                await self.queue.join()
+                await self.queue_db.join()
             self.log.info('同步完成')
 
         except Exception as e:

@@ -15,7 +15,7 @@ setup(
     install_requires=[
         'numpy',
         'pandas',
-        'akshare==0.7.6',
+        'akshare==0.9.92',
         'opendatatools==1.0.0',
         'aiohttp==3.7.2',
         'motor',
@@ -28,13 +28,18 @@ setup(
         'scipy==1.5.4',
         'sklearn',
         'TA-Lib==0.4.19',
+        'nest-asyncio==1.5.1',
         'tqdm',
+        'pugsql',
+        'pymysql',
         'protobuf',
     ],
     entry_points={
         'console_scripts': [
             'fundsync=bbq.cmd.fund_sync:main',
             'stocksync=bbq.cmd.stock_sync:main',
+            'm2sql=bbq.cmd.mongo2sql_sync:main',
+            'bbqsync=bbq.cmd.bbqsync:main',
             'stockselect=bbq.cmd.stock_select:main',
             'trader=bbq.trade.trader:main'
         ]

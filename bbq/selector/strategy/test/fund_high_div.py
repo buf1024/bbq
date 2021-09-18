@@ -3,7 +3,7 @@ from bbq.data.funddb import FundDB
 from datetime import datetime
 
 
-class HighDiv(Strategy):
+class FundHighDiv(Strategy):
     def __init__(self, db):
         super().__init__(db)
 
@@ -64,7 +64,7 @@ class HighDiv(Strategy):
     async def select(self):
         """
         根据策略，选择股票
-        :return: [code, code, ...]/None
+        :return: [{code, ctx...}, {code, ctx}, ...]/None
         """
         net_df = await self.db.load_fund_net(filter={'dividend': {'$regex': '每份派现金'}},
                                              sort=[('code', 1), ('trade_date', -1)])
@@ -91,3 +91,4 @@ class HighDiv(Strategy):
 
         print('done')
         return data
+
