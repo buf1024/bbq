@@ -51,8 +51,8 @@ class MongoDB(ABC):
         except Exception as e:
             self.log.error(type(e))
             raise e
-            self.log.error('连接mongodb失败: uri={}, ex={}'.format(self.uri, e))
-            return False
+            # self.log.error('连接mongodb失败: uri={}, ex={}'.format(self.uri, e))
+            # return False
 
         return True
 

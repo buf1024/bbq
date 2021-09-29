@@ -1,4 +1,13 @@
 from setuptools import find_packages, setup
+import os
+import shutil
+
+dest_file = os.sep.join([os.path.expanduser('~'), '.config', 'bbq', 'config.yml'])
+
+if not os.path.exists(dest_file):
+    conf_file = os.sep.join([os.getcwd(), 'bbq', 'config', 'config.yml'])
+
+    shutil.copy(conf_file, dest_file)
 
 setup(
     name='bbq',
@@ -30,7 +39,7 @@ setup(
         'TA-Lib==0.4.19',
         'nest-asyncio==1.5.1',
         'tqdm',
-        'pugsql',
+        'hisql',
         'pymysql',
         'protobuf',
     ],
@@ -38,10 +47,11 @@ setup(
         'console_scripts': [
             'fundsync=bbq.cmd.fund_sync:main',
             'stocksync=bbq.cmd.stock_sync:main',
-            'm2sql=bbq.cmd.mongo2sql_sync:main',
+            'bbqm2sql=bbq.cmd.mongo2sql_sync:main',
             'bbqsync=bbq.cmd.bbqsync:main',
-            'stockselect=bbq.cmd.stock_select:main',
-            'trader=bbq.trade.trader:main'
+            'bbqselect=bbq.cmd.stock_select:main',
+            'bbqtrader=bbq.cmd.trader:main',
+            'bbqmonitor=bbq.cmd.monitor:main'
         ]
     },
 )

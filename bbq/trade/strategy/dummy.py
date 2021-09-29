@@ -2,7 +2,7 @@ from .strategy import Strategy
 from ..account import Account
 from ..trade_signal import TradeSignal
 from copy import copy
-from bbq.trade.enum import event
+import bbq.trade.consts as consts
 
 
 class Dummy(Strategy):
@@ -20,7 +20,7 @@ class Dummy(Strategy):
 
     async def on_quot(self, evt, payload):
         self.log.info('dummy strategy on_quot: evt={}, payload={}'.format(evt, payload))
-        if evt == event.evt_quotation:
+        if evt == consts.evt_quotation:
             for quot in payload['list'].values():
                 code, name, price = quot['code'], quot['name'], quot['close']
                 if self.is_index(code):

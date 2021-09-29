@@ -7,10 +7,12 @@ from pyecharts import options as opts
 from pyecharts.charts import *
 from pyecharts.charts.chart import Chart
 from bbq.analyse.plot import \
-    up_color, down_color, plot_overlap, plot_kline
+    up_color, down_color, mix_color, plot_overlap, my_plot, plot_chart
 from bbq.data import FundDB
 from pyecharts.components import Table
 from pyecharts.options import ComponentTitleOpts
+from pyecharts.globals import SymbolType
+from pyecharts.commons.utils import JsCode
 
 
 #
@@ -37,16 +39,12 @@ from pyecharts.options import ComponentTitleOpts
 class Report:
     color_up = up_color()
     color_down = down_color()
-
-    arrow_up = 'path://M752.64 376.32 546.56 202.88c-19.2-16-50.56-16-69.76 0L270.72 376.32C240 402.56 261.76 447.36 ' \
-               '305.28 447.36L384 447.36C384 447.36 384 448 384 448l0 320c0 35.2 28.8 64 64 64l128 0c35.2 0 64-28.8 ' \
-               '64-64L640 448c0 0 0-0.64 0-0.64l78.08 0C761.6 447.36 783.36 402.56 752.64 376.32z'
-    arrow_down = 'path://M719.36 575.36l-77.44 0c0-0.64 0-0.64 0-1.28L641.92 256c0-35.2-28.8-64-64-64L448 192C412.8 ' \
-                 '192 384 220.8 384 256l0 318.08c0 0.64 0 0.64 0 1.28L305.92 575.36c-44.16 0-65.92 44.8-35.2 ' \
-                 '70.4l206.72 173.44c19.2 16 50.56 16 69.76 0l206.72-173.44C785.28 620.16 763.52 575.36 719.36 ' \
-                 '575.36z'
+    color_mix = mix_color()
 
     pos_top = 75
+
+    scale_down = 0.995
+    scale_up = 1.005
 
     def __init__(self, account):
         self.account = account
@@ -95,11 +93,10 @@ class Report:
         if not is_end:
             self.is_ready = False
             return False
-
-        start_time = datetime(year=self.account.start_time.year, month=self.account.start_time.month,
-                              day=self.account.start_time.day)
-        end_time = datetime(year=self.account.end_time.year, month=self.account.end_time.month,
-                            day=self.account.end_time.day)
+        t_time = self.account.start_time
+        start_time = datetime(year=t_time.year, month=t_time.month, day=t_time.day)
+        t_time = self.account.end_time
+        end_time = datetime(year=t_time.year, month=t_time.month, day=t_time.day)
 
         self.trade_date = self._to_x_data(list(pd.date_range(start_time, end_time)), 'datetime')
 
@@ -109,7 +106,7 @@ class Report:
                                                                  sort=[('end_time', 1)])
 
         acct_his_df = pd.DataFrame(self.acct_his)
-        if not acct_his_df.empty:
+        if acct_his_df is not None and not acct_his_df.empty:
             acct_his_df['start_time'] = acct_his_df['start_time'].apply(self._convert_time)
             acct_his_df['end_time'] = acct_his_df['end_time'].apply(self._convert_time)
             acct_his_df.index = acct_his_df['end_time']
@@ -151,7 +148,7 @@ class Report:
             if len(data) == 0:
                 return f'0元, 0元, 0%'
             up = round((data[-1] - data[0]) / data[0] * 100, 2)
-            return f'{data[0]}元, {data[-1]}元, {up}%'
+            return f'{round(data[0], 2)}元, {round(data[-1], 2)}元, {up}%'
 
         x_data = self.trade_date
 
@@ -159,6 +156,9 @@ class Report:
 
         # line cash
         y_data = list(self.acct_his['cash_available'])
+        max_y, min_y = max(y_data), min(y_data)
+        max_x_coord = self.trade_date[y_data.index(max_y)]
+        min_x_coord = self.trade_date[y_data.index(min_y)]
         line_cash = Line()
         line_cash.add_xaxis(xaxis_data=x_data)
         line_cash.add_yaxis(
@@ -166,14 +166,37 @@ class Report:
             label_opts=opts.LabelOpts(is_show=False),
             is_smooth=True, symbol='none',
         )
+        scatter_min = plot_chart(chart_cls=Scatter,
+                                 x_index=[min_x_coord], y_data=[min_y],
+                                 symbol=SymbolType.ARROW, symbol_size=10,
+                                 itemstyle_opts=opts.ItemStyleOpts(color=self.color_down),
+                                 tooltip_opts=opts.TooltipOpts(formatter=JsCode(
+                                     """function (param){
+                                        var obj=param['data'];
+                                        return '最低资金: (' + obj[0] + ', ' + obj[1].toFixed(2) + ')';
+                                    }"""
+                                 )))
+        scatter_max = plot_chart(chart_cls=Scatter,
+                                 x_index=[max_x_coord], y_data=[max_y],
+                                 symbol=SymbolType.ARROW, symbol_size=10, symbol_rotate=180,
+                                 itemstyle_opts=opts.ItemStyleOpts(color=self.color_up),
+                                 tooltip_opts=opts.TooltipOpts(formatter=JsCode(
+                                     """function (param){
+                                        var obj=param['data'];
+                                        return '最高资金: (' + obj[0] + ', ' + obj[1].toFixed(2) + ')';
+                                    }"""
+                                 )))
+        line_cash = plot_overlap(line_cash, scatter_min, scatter_max)
 
+        coord_max, coord_min = max_y, min_y
+        color = self.color_up if y_data[-1] > self.account.cash_init else self.color_down
         graphic_text.append(
             opts.GraphicText(
                 graphic_item=opts.GraphicItem(left='left', top=f'{self.pos_top}px', z=-100, ),
                 graphic_textstyle_opts=opts.GraphicTextStyleOpts(
                     text=f'  -- 资金({_text(y_data)})',
-                    font=self.color_down,
-                    graphic_basicstyle_opts=opts.GraphicBasicStyleOpts(fill=self.color_up)
+                    font=color,
+                    graphic_basicstyle_opts=opts.GraphicBasicStyleOpts(fill=color)
                 )
             )
         )
@@ -181,7 +204,7 @@ class Report:
         # line net
         y_data = list(self.acct_his['total_net_value'])
         max_y, min_y = max(y_data), min(y_data)
-        max_rate = round((max_y - self.account.cash_init) / self.account.cash_init * 100, 2),
+        max_rate = round((max_y - self.account.cash_init) / self.account.cash_init * 100, 2)
         min_rate = round((min_y - self.account.cash_init) / self.account.cash_init * 100, 2)
         max_back = round((max_y - min_y) / max_y * 100, 2)
         max_x_coord = self.trade_date[y_data.index(max_y)]
@@ -192,28 +215,41 @@ class Report:
             series_name='净值', y_axis=y_data,
             label_opts=opts.LabelOpts(is_show=False),
             is_smooth=True, symbol='none',
-            markpoint_opts=opts.MarkPointOpts(
-                data=[
-                    opts.MarkPointItem(
-                        name=f'MAX({max_x_coord}, {max_y})',
-                        symbol=self.arrow_down, symbol_size=10, coord=[max_x_coord, max_y * 1.0005],
-                        itemstyle_opts=opts.ItemStyleOpts(color=self.color_up)
-                    ),
-                    opts.MarkPointItem(
-                        name=f'MIN({min_x_coord}, {min_y})',
-                        symbol=self.arrow_up, symbol_size=10, coord=[min_x_coord, min_y * 0.9995],
-                        itemstyle_opts=opts.ItemStyleOpts(color=self.color_up)
-                    ),
-                ]
-            ),
         )
+        scatter_min = plot_chart(chart_cls=Scatter,
+                                 x_index=[min_x_coord], y_data=[min_y],
+                                 symbol=SymbolType.ARROW, symbol_size=10,
+                                 itemstyle_opts=opts.ItemStyleOpts(color=self.color_down),
+                                 tooltip_opts=opts.TooltipOpts(formatter=JsCode(
+                                     """function (param){
+                                        var obj=param['data'];
+                                        return '最低净值: (' + obj[0] + ', ' + obj[1].toFixed(2) + ')';
+                                    }"""
+                                 )))
+        scatter_max = plot_chart(chart_cls=Scatter,
+                                 x_index=[max_x_coord], y_data=[max_y],
+                                 symbol=SymbolType.ARROW, symbol_size=10, symbol_rotate=180,
+                                 itemstyle_opts=opts.ItemStyleOpts(color=self.color_up),
+                                 tooltip_opts=opts.TooltipOpts(formatter=JsCode(
+                                     """function (param){
+                                        var obj=param['data'];
+                                        return '最高净值: (' + obj[0] + ', ' + obj[1].toFixed(2) + ')';
+                                    }"""
+                                 )))
+        line_net = plot_overlap(line_net, scatter_min, scatter_max)
+
+        # if coord_max < max_y:
+        #     coord_max = max_y
+        # if coord_min > min_y:
+        #     coord_max = min_y
+        color = self.color_up if y_data[-1] > self.account.cash_init else self.color_down
         graphic_text.append(
             opts.GraphicText(
                 graphic_item=opts.GraphicItem(left='left', top=f'{self.pos_top + 20}px', z=-100, ),
                 graphic_textstyle_opts=opts.GraphicTextStyleOpts(
                     text=f'  -- 净值({_text(y_data)})',
-                    font=self.color_up,
-                    graphic_basicstyle_opts=opts.GraphicBasicStyleOpts(fill=self.color_up)
+                    font=color,
+                    graphic_basicstyle_opts=opts.GraphicBasicStyleOpts(fill=color)
                 )
             )
         )
@@ -227,23 +263,25 @@ class Report:
                 )
             )
         )
+        color = self.color_up if max_rate > 0 else self.color_down
         graphic_text.append(
             opts.GraphicText(
                 graphic_item=opts.GraphicItem(left='left', top=f'{self.pos_top + 60}px', z=-100, ),
                 graphic_textstyle_opts=opts.GraphicTextStyleOpts(
                     text=f'  -- 最大盈亏: {round(max_y - self.account.cash_init, 4)}({max_rate}%)',
-                    font=self.color_up,
-                    graphic_basicstyle_opts=opts.GraphicBasicStyleOpts(fill=self.color_up)
+                    font=color,
+                    graphic_basicstyle_opts=opts.GraphicBasicStyleOpts(fill=color)
                 )
             )
         )
+        color = self.color_up if min_rate > 0 else self.color_down
         graphic_text.append(
             opts.GraphicText(
                 graphic_item=opts.GraphicItem(left='left', top=f'{self.pos_top + 80}px', z=-100, ),
                 graphic_textstyle_opts=opts.GraphicTextStyleOpts(
                     text=f'  -- 最小盈亏: {round(min_y - self.account.cash_init, 4)}({min_rate}%)',
-                    font=self.color_up,
-                    graphic_basicstyle_opts=opts.GraphicBasicStyleOpts(fill=self.color_up)
+                    font=color,
+                    graphic_basicstyle_opts=opts.GraphicBasicStyleOpts(fill=color)
                 )
             )
         )
@@ -256,12 +294,14 @@ class Report:
                 splitarea_opts=opts.SplitAreaOpts(
                     is_show=True, areastyle_opts=opts.AreaStyleOpts(opacity=1)
                 ),
+                # max_=int(coord_max * self.scale_up),
+                # min_=int(coord_min * self.scale_down),
             ),
             graphic_opts=opts.GraphicGroup(
                 graphic_item=opts.GraphicItem(left='10%'),
                 children=graphic_text,
             ),
-            datazoom_opts=[opts.DataZoomOpts(pos_bottom="-2%", filter_mode='none')],
+            legend_opts=opts.LegendOpts(type_='scroll'),
             title_opts=opts.TitleOpts(title='资金变动')
         )
 
@@ -276,6 +316,7 @@ class Report:
         deal_his = deal_his[['trade_date', 'profit']] if not deal_his.empty else pd.DataFrame()
         win_text = f'  -- 盈利(0元, 0%, 0次, 0%)'
         lost_text = f'  -- 亏损(0元, 0%, 0次, 0%)'
+        max_y, min_y = 1, 0
         if not deal_his.empty:
             times = deal_his.shape[0]
 
@@ -304,6 +345,7 @@ class Report:
                 scatter_up.add_xaxis(x_data)
                 scatter_up.add_yaxis('盈利', y_data, itemstyle_opts=opts.ItemStyleOpts(color=self.color_up))
                 line = plot_overlap(line, scatter_up)
+                max_y = max(y_data)
 
             df = deal_his_group[deal_his_group['profit'] < 0]
             if not df.empty:
@@ -313,6 +355,7 @@ class Report:
                 scatter_down.add_xaxis(x_data)
                 scatter_down.add_yaxis('亏损', y_data, itemstyle_opts=opts.ItemStyleOpts(color=self.color_down))
                 line = plot_overlap(line, scatter_down)
+                min_y = min(y_data)
 
         line.set_global_opts(
             xaxis_opts=opts.AxisOpts(is_show=True, is_scale=True),
@@ -321,6 +364,8 @@ class Report:
                 splitarea_opts=opts.SplitAreaOpts(
                     is_show=True, areastyle_opts=opts.AreaStyleOpts(opacity=1)
                 ),
+                max_=int(max_y * self.scale_up * 1.5 if max_y < 100 else 1),
+                min_=int(min_y * self.scale_down * 1.5 if max_y < 100 else 1)
             ),
             graphic_opts=opts.GraphicGroup(
                 graphic_item=opts.GraphicItem(left='10%'),
@@ -341,17 +386,16 @@ class Report:
                     )
                 ],
             ),
-            datazoom_opts=[opts.DataZoomOpts(pos_bottom="-2%", filter_mode='none')],
             title_opts=opts.TitleOpts(title='盈亏')
         )
 
         return line
 
     def _plot_kline(self, code, code_sell, code_buy) -> Optional[Chart]:
-        def get_markpoints(color, typ, symbol, factor, data):
-            mark_points = {}
+        def _get_marks(color, symbol, typ, data):
+            points = []
+            trade_dates = []
             for item in data.to_dict('records'):
-                index = self._to_x_data(item['trade_date'])
                 tm = item['time']
                 if isinstance(tm, str):
                     if '/' in tm:
@@ -359,50 +403,67 @@ class Report:
                     else:
                         tm = datetime.strptime(tm, '%Y-%m-%d %H:%M:%S')
                 t = tm.strftime('%H:%M')
-                index = self.trade_date.index(index)
-                close = daily_close[index]
-                if index not in mark_points:
-                    mark_points[index] = dict(name=f'{typ}:{item["price"]},{item["volume"]},{t}',
-                                              symbol=symbol,
-                                              color=color,
-                                              coord=[index, close * factor])
-                else:
-                    mark_points[index]['name'] = mark_points[index]['name'] + f'{item["price"]},{item["volume"]},{t}'
-            return mark_points.values()
+                tip = f'{typ}:{item["price"]}元,{item["volume"]}股,{t}'
+                points.append({'trade_date': item['trade_date'], 'tip': tip})
+                trade_dates.append(item['trade_date'].strftime('%Y-%m-%d'))
+            return trade_dates, dict(color=color, symbol=symbol, data=points)
+
+        sell_date, sell_data, buy_date, buy_data, mix_date, mix_data = [], {}, [], {}, [], {}
+        if code_sell is not None and not code_sell.empty:
+            sell_date, sell_data = _get_marks(color=self.color_down, symbol='pin', typ='卖出', data=code_sell)
+        if code_buy is not None and not code_buy.empty:
+            buy_date, buy_data = _get_marks(color=self.color_up, symbol='pin', typ='买入', data=code_buy)
+
+        if len(sell_date) > 0 and len(buy_date) > 0:
+            mix_date = set(sell_date).intersection(set(buy_date))
+            sell_date = set(sell_date).difference(mix_date)
+            buy_date = set(buy_date).difference(mix_date)
+            sell_data_t = [item for item in sell_data['data'] if item['trade_date'].strftime('%Y-%m-%d') in sell_date]
+            buy_data_t = [item for item in buy_data['data'] if item['trade_date'].strftime('%Y-%m-%d') in buy_date]
+
+            m1_data = [item for item in sell_data['data'] if item['trade_date'].strftime('%Y-%m-%d') not in sell_date]
+            m2_data = [item for item in buy_data['data'] if item['trade_date'].strftime('%Y-%m-%d') not in buy_date]
+
+            mix_data = {
+                'color': mix_color(),
+                'symbol': 'pin',
+                'data': [{'trade_date': buy['trade_date'], 'tip': '\n'.join([buy['tip'], sell['tip']])} for buy, sell in
+                         zip(m2_data, m1_data)]
+            }
+            sell_data = {
+                'color': up_color(),
+                'symbol': 'pin',
+                'data': sell_data_t
+            }
+            buy_data = {
+                'color': up_color(),
+                'symbol': 'pin',
+                'data': buy_data_t
+            }
+
+        marks = []
+        if len(buy_data) > 0:
+            marks.append(buy_data)
+        if len(sell_data) > 0:
+            marks.append(sell_data)
+        if len(mix_data) > 0:
+            marks.append(mix_data)
 
         daily = self.daily[self.daily['code'] == code]
-        daily_close = list(daily['close'])
-        line = Line()
-        line.add_xaxis(xaxis_data=self.trade_date)
-        points = []
-        if not code_sell.empty:
-            p = get_markpoints(color=self.color_down, typ='S', symbol=self.arrow_down, factor=1.002, data=code_sell)
-            points = points + list(p)
-        if not code_buy.empty:
-            p = get_markpoints(color=self.color_up, typ='B', symbol=self.arrow_up, factor=0.998, data=code_buy)
-            points = points + list(p)
 
-        data = []
-        for point in points:
-            opt = opts.MarkPointItem(name=point['name'], symbol=point['symbol'],
-                                     symbol_size=10, coord=point['coord'],
-                                     itemstyle_opts=opts.ItemStyleOpts(color=point['color']))
-            data.append(opt)
-
-        line.add_yaxis(series_name='收盘价',
-                       label_opts=opts.LabelOpts(is_show=False),
-                       is_smooth=True, symbol='none',
-                       y_axis=daily_close, markpoint_opts=opts.MarkPointOpts(data=data))
-        kline = plot_kline(data=daily, overlap=('MA5', 'MA10', 'MA20', line))
+        kline = my_plot(data=daily, marks=marks)
         return kline
 
-    def plot_kline(self) -> Optional[Sequence[Chart]]:
+    def plot_kline(self, codes=None) -> Optional[Sequence[Chart]]:
         charts = []
         if len(self.codes) > 0 and self.daily is not None:
             deal_his = self.deal_his if not self.deal_his.empty else pd.DataFrame()
             deal_his_sell = deal_his[deal_his['type'] == 'sell']
             deal_his_buy = deal_his[deal_his['type'] == 'buy']
             for code in self.codes:
+                if codes is not None and code not in codes:
+                    continue
+
                 code_sell = deal_his_sell[deal_his_sell['code'] == code] if not deal_his_sell.empty else pd.DataFrame()
                 code_buy = deal_his_buy[deal_his_buy['code'] == code] if not deal_his_buy.empty else pd.DataFrame()
                 chart = self._plot_kline(code, code_sell, code_buy)
@@ -412,15 +473,14 @@ class Report:
     def plot_static(self):
         table = Table()
 
-        headers = ["策略", " ", "  ", "   "]
+        headers = ['策略', self.account.strategy.name(), ' ', '  ']
         rows = [
-            ['账户', '', '', ''],
-            ['期初', '', '期末', '', ],
-            ["Darwin", 112, 120900, 1714.7],
-            ["Hobart", 1357, 205556, 619.5],
-            ["Sydney", 2058, 4336374, 1214.8],
-            ["Melbourne", 1566, 3806092, 646.9],
-            ["Perth", 5386, 1554769, 869.4],
+            ['账户', self.account.account_id, '', ''],
+            ['期初', '{}元'.format(self.account.cash_init), '期末', '{}'.format(self.account.cash_available)],
+            ['盈利', '{}元'.format(self.account.cash_init), '收益率', '{}'.format(self.account.cash_available)],
+            ['买入次数', '{}次'.format(10), '卖出次数', '{}次'.format(10)],
+            ['盈利次数', '{}次'.format(10), '亏损次数', '{}次'.format(10)],
+            ['胜率', '{}次'.format(10), '最大回撤', '{}次'.format(10)],
         ]
         table.add(headers, rows)
         table.set_global_opts(
@@ -438,7 +498,7 @@ class Report:
         klines = self.plot_kline()
         for kline in klines:
             page.add(kline)
-        # page.add(self.plot_static())
+        page.add(self.plot_static())
         return page
 
 

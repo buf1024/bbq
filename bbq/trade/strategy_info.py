@@ -1,6 +1,5 @@
 from bbq.trade.account import Account
 from bbq.trade.base_obj import BaseObj
-from typing import Dict
 
 
 class StrategyInfo(BaseObj):

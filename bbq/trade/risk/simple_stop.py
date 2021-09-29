@@ -1,7 +1,7 @@
 from .risk import Risk
 from ..account import Account
 from ..trade_signal import TradeSignal
-from bbq.trade.enum import event
+import bbq.trade.consts as consts
 
 
 class SimpleStop(Risk):
@@ -65,4 +65,4 @@ class SimpleStop(Risk):
                 sig.price = sell_price
                 sig.volume = position.volume
                 sig.time = position.time
-                await self.emit('signal', event.evt_sig_sell, sig)
+                await self.emit('signal', consts.evt_sig_sell, sig)

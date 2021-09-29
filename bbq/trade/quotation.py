@@ -1,14 +1,14 @@
 from abc import ABC
 from collections import OrderedDict
 from datetime import datetime, timedelta, date
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Sequence
 import bbq.fetch as fetch
 import bbq.log as log
 from bbq.data.mongodb import MongoDB
 import traceback
 from bbq.data.stockdb import StockDB
 from bbq.data.funddb import FundDB
-from bbq.trade.enum import event
+import bbq.trade.consts as consts
 import pandas as pd
 
 """
@@ -90,19 +90,19 @@ class Quotation(ABC):
         self.db_data = db
         self.opt = None
 
-        self.frequency = 0
-        self.start_date = None
-        self.end_date = None
-        self.codes = []
+        self.frequency = 0  # sec为单位
+        self.start_date = None  # 开始日期
+        self.end_date = None  # 结束日期
+        self.codes = []  # 订阅行情的代码
 
-        self.trade_date = None
+        self.trade_date = None  # 当前交易日
         self.quot_date = {}
 
-        self.code_info = {}
+        self.code_info = {}  # 订阅行情代码信息, code: name 字典
 
-        self.index = []
+        self.index = []  # 订阅的指数代码
 
-        self.day_frequency = 0
+        self.day_frequency = 0  # 日频标志
 
         self.is_start = False
         self.is_end = False
@@ -110,7 +110,19 @@ class Quotation(ABC):
     def is_index(self, code: str) -> bool:
         return code in self.index
 
-    async def init(self, opt) -> bool:
+    async def init(self, opt: Dict) -> bool:
+        """
+            初始化
+        :param opt: 字段，可能值:
+                必须：
+                frequency: 1m/1min/1s/1sec/5d/5day  (频率可选)
+                codes: ['sh0000001']
+                可选：
+                start_date: date/datetime/str
+                end_date: date/datetime/str
+
+        :return:
+        """
         self.opt = opt
         try:
             frequency, codes = self.opt['frequency'].lower(), self.opt['codes']
@@ -144,19 +156,23 @@ class Quotation(ABC):
                 self.frequency = value * 60 * 60 * 24
                 self.day_frequency = value
 
-            if 'start_date' in self.opt and self.opt['start_date'] is not None:
-                self.start_date = self.opt['start_date']
-                if isinstance(self.start_date, date):
+            if 'start-date' in self.opt and self.opt['start-date'] is not None:
+                self.start_date = self.opt['start-date']
+                if isinstance(self.start_date, date) or isinstance(self.start_date, datetime):
                     self.start_date = datetime(year=self.start_date.year,
                                                month=self.start_date.month,
                                                day=self.start_date.day)
+                if isinstance(self.start_date, str):
+                    self.start_date = datetime.strptime(self.start_date, '%Y-%m-%d')
 
-            if 'end_date' in self.opt and self.opt['end_date'] is not None:
-                self.end_date = self.opt['end_date']
-                if isinstance(self.end_date, date):
+            if 'end-date' in self.opt and self.opt['end-date'] is not None:
+                self.end_date = self.opt['end-date']
+                if isinstance(self.end_date, date) or isinstance(self.end_date, datetime):
                     self.end_date = datetime(year=self.end_date.year,
                                              month=self.end_date.month,
                                              day=self.end_date.day)
+                if isinstance(self.end_date, str):
+                    self.end_date = datetime.strptime(self.end_date, '%Y-%m-%d')
 
             if not await self.add_code(codes):
                 self.log.error('获取股票信息失败')
@@ -169,9 +185,13 @@ class Quotation(ABC):
             return False
 
     async def get_quot(self) -> Optional[Tuple[Optional[str], Optional[Dict]]]:
+        """
+
+        :return: event, event_data
+        """
         return None, None
 
-    async def add_code(self, codes) -> bool:
+    async def add_code(self, codes: Sequence) -> bool:
         new_codes = []
         for code in codes:
             if code not in self.codes:
@@ -182,26 +202,25 @@ class Quotation(ABC):
         df = None
         if isinstance(self.db_data, StockDB):
             df1 = await self.db_data.load_index_info(filter={'code': {'$in': self.codes}}, projection=['code', 'name'])
-            if df1 is not None or not df1.empty:
+            if df1 is not None and not df1.empty:
                 df = df1
-                for data in df.to_dict('records'):
-                    self.index.append(data['code'])
+                self.index = df['code'].to_list()
 
             df2 = await self.db_data.load_stock_info(filter={'code': {'$in': self.codes}}, projection=['code', 'name'])
-            if df2 is not None or not df2.empty:
+            if df2 is not None and not df2.empty:
                 if df is None:
                     df = df2
                 else:
                     df = pd.concat((df, df2))
         elif isinstance(self.db_data, FundDB):
             df = await self.db_data.load_fund_info(filter={'code': {'$in': self.codes}}, projection=['code', 'name'])
+
         if df is None:
             self.log.error('db stock/fund info failed')
             return False
 
-        self.code_info.clear()
-        for data in df.to_dict('records'):
-            self.code_info[data['code']] = data['name']
+        self.code_info = dict(zip(df['code'].to_list(), df['name'].to_list()))
+
         return True
 
     def is_trading(self) -> bool:
@@ -210,8 +229,8 @@ class Quotation(ABC):
 
         status_dict = self.quot_date[self.trade_date]
 
-        if (status_dict[event.evt_morning_start] and not status_dict[event.evt_morning_end]) or \
-                (status_dict[event.evt_noon_start] and not status_dict[event.evt_noon_end]):
+        if (status_dict[consts.evt_morning_start] and not status_dict[consts.evt_morning_end]) or \
+                (status_dict[consts.evt_noon_start] and not status_dict[consts.evt_noon_end]):
             return True
 
         return False
@@ -252,39 +271,39 @@ class Quotation(ABC):
             return None, None
 
         if morning_start_date <= now < morning_end_date:
-            evt, playload = _base_event_emit(event.evt_morning_start)
+            evt, payload = _base_event_emit(consts.evt_morning_start)
             if evt is not None:
-                return evt, playload
+                return evt, payload
         elif morning_end_date <= now < noon_start_date:
-            evt, playload = _base_event_emit(event.evt_morning_start)
+            evt, payload = _base_event_emit(consts.evt_morning_start)
             if evt is not None:
-                return evt, playload
-            evt, playload = _base_event_emit(event.evt_morning_end)
+                return evt, payload
+            evt, payload = _base_event_emit(consts.evt_morning_end)
             if evt is not None:
-                return evt, playload
+                return evt, payload
         elif noon_start_date <= now < noon_end_date:
-            evt, playload = _base_event_emit(event.evt_morning_start)
+            evt, payload = _base_event_emit(consts.evt_morning_start)
             if evt is not None:
-                return evt, playload
-            evt, playload = _base_event_emit(event.evt_morning_end)
+                return evt, payload
+            evt, payload = _base_event_emit(consts.evt_morning_end)
             if evt is not None:
-                return evt, playload
-            evt, playload = _base_event_emit(event.evt_noon_start)
+                return evt, payload
+            evt, payload = _base_event_emit(consts.evt_noon_start)
             if evt is not None:
-                return evt, playload
+                return evt, payload
         elif now >= noon_end_date:
-            evt, playload = _base_event_emit(event.evt_morning_start)
+            evt, payload = _base_event_emit(consts.evt_morning_start)
             if evt is not None:
-                return evt, playload
-            evt, playload = _base_event_emit(event.evt_morning_end)
+                return evt, payload
+            evt, payload = _base_event_emit(consts.evt_morning_end)
             if evt is not None:
-                return evt, playload
-            evt, playload = _base_event_emit(event.evt_noon_start)
+                return evt, payload
+            evt, payload = _base_event_emit(consts.evt_noon_start)
             if evt is not None:
-                return evt, playload
-            evt, playload = _base_event_emit(event.evt_noon_end)
+                return evt, payload
+            evt, payload = _base_event_emit(consts.evt_noon_end)
             if evt is not None:
-                return evt, playload
+                return evt, payload
 
         return None, None
 
@@ -293,11 +312,11 @@ class BacktestQuotation(Quotation):
     def __init__(self, db: MongoDB):
         super().__init__(db=db)
 
-        self.bar = OrderedDict()
+        self.bar = OrderedDict()  # 日线数据 -> Dict -> Dict
 
-        self.iter = None
+        self.iter = None  # 预先加载的迭代数据
 
-        self.iter_tag = True
+        self.iter_tag = True  # 迭代标志
         self.day_time = None
 
         self.end_quot_tag = False
@@ -365,6 +384,7 @@ class BacktestQuotation(Quotation):
 
         if self.day_time is None:
             self.iter = iter(self.bar)
+
         return True
 
     async def init_daily_bar(self, codes) -> bool:
@@ -398,6 +418,7 @@ class BacktestQuotation(Quotation):
 
         if self.day_time is None:
             self.iter = iter(self.bar)
+
         return True
 
     async def get_quot(self) -> Optional[Tuple[Optional[str], Optional[Dict]]]:
@@ -406,8 +427,8 @@ class BacktestQuotation(Quotation):
         try:
             if not self.is_start:
                 self.is_start = True
-                return event.evt_start, dict(frequency=self.opt['frequency'],
-                                             start=start)
+                return consts.evt_start, dict(frequency=self.opt['frequency'],
+                                              start=start)
 
             if self.is_start and not self.is_end:
                 if self.iter_tag:
@@ -423,17 +444,17 @@ class BacktestQuotation(Quotation):
                 if status_dict['evt_morning_start'] and self.day_time == morning_end_date and not self.end_quot_tag:
                     self.iter_tag = False
                     self.end_quot_tag = True
-                    return event.evt_quotation, dict(frequency=self.opt['frequency'],
-                                                     trade_date=self.trade_date,
-                                                     day_time=self.day_time,
-                                                     list=quot)
+                    return consts.evt_quotation, dict(frequency=self.opt['frequency'],
+                                                      trade_date=self.trade_date,
+                                                      day_time=self.day_time,
+                                                      list=quot)
                 if status_dict['evt_noon_start'] and self.day_time == noon_end_date and not self.end_quot_tag:
                     self.iter_tag = False
                     self.end_quot_tag = True
-                    return event.evt_quotation, dict(frequency=self.opt['frequency'],
-                                                     trade_date=self.trade_date,
-                                                     day_time=self.day_time,
-                                                     list=quot)
+                    return consts.evt_quotation, dict(frequency=self.opt['frequency'],
+                                                      trade_date=self.trade_date,
+                                                      day_time=self.day_time,
+                                                      list=quot)
                 evt, payload = await self.get_base_event(now=self.day_time)
                 if evt is not None:
                     self.iter_tag = False
@@ -444,18 +465,18 @@ class BacktestQuotation(Quotation):
 
                 self.iter_tag = True
                 self.end_quot_tag = False
-                return event.evt_quotation, dict(frequency=self.opt['frequency'],
-                                                 trade_date=self.trade_date,
-                                                 day_time=self.day_time,
-                                                 list=quot)
+                return consts.evt_quotation, dict(frequency=self.opt['frequency'],
+                                                  trade_date=self.trade_date,
+                                                  day_time=self.day_time,
+                                                  list=quot)
 
         except StopIteration:
             if not self.is_end:
                 self.is_end = True
             end = datetime.now()
-            return event.evt_end, dict(frequency=self.opt['frequency'],
-                                       start=start,
-                                       end=end)
+            return consts.evt_end, dict(frequency=self.opt['frequency'],
+                                        start=start,
+                                        end=end)
         except Exception as e:
             self.log.error('BacktestQuotation get_quot 异常, ex={}, call={}'.format(e, traceback.format_exc()))
 
@@ -466,8 +487,8 @@ class RealtimeQuotation(Quotation):
     def __init__(self, db: MongoDB):
         super().__init__(db=db)
 
-        self.pre_bar = None
-        self.bar = None
+        self.pre_bar = None  # 前一个bar
+        self.bar = None  # 合成的k线
         self.bar_time = None
 
         self.last_pub = None
@@ -487,14 +508,31 @@ class RealtimeQuotation(Quotation):
         self.bar = None
         self.last_pub = now
 
-    def update_bar(self, now, quots):
-        def _get_quot(pre_bar, q, c, field):
-            if pre_bar is None:
-                return q[field]
-            if c not in pre_bar:
-                return q[field]
-            return pre_bar[c][field]
+    @staticmethod
+    def _get_quot(pre_bar, q, c, field):
+        if pre_bar is None:
+            return q[field]
+        if c not in pre_bar:
+            return q[field]
+        return pre_bar[c][field]
 
+    def init_first_bar(self, code, quot):
+        self.bar[code] = dict(code=code,
+                              name=self.code_info[code],
+                              day_time=quot['day_time'],
+                              day_open=quot['open'],
+                              day_high=quot['high'],
+                              day_low=quot['low'],
+                              last_close=quot['last_close'],
+                              open=self._get_quot(self.pre_bar, quot, code, 'close'),
+                              high=self._get_quot(self.pre_bar, quot, code, 'close'),
+                              low=self._get_quot(self.pre_bar, quot, code, 'close'),
+                              close=quot['close'],
+                              volume=self._get_quot(self.pre_bar, quot, code, 'volume'),
+                              amount=self._get_quot(self.pre_bar, quot, code, 'amount'),
+                              turnover=self._get_quot(self.pre_bar, quot, code, 'turnover'), )
+
+    def update_bar(self, now, quots):
         if self.bar is None:
             self.bar = self.pre_bar
             if self.bar is None:
@@ -503,21 +541,14 @@ class RealtimeQuotation(Quotation):
                 code = quot['code']
                 if code not in self.codes:
                     continue
-                self.bar[code] = dict(code=code,
-                                      name=self.code_info[code],
-                                      day_time=quot['day_time'],
-                                      day_open=quot['open'], day_high=quot['high'], day_low=quot['low'],
-                                      last_close=quot['last_close'],
-                                      open=_get_quot(self.pre_bar, quot, code, 'close'),
-                                      high=_get_quot(self.pre_bar, quot, code, 'close'),
-                                      low=_get_quot(self.pre_bar, quot, code, 'close'),
-                                      close=quot['close'],
-                                      volume=_get_quot(self.pre_bar, quot, code, 'volume'),
-                                      amount=_get_quot(self.pre_bar, quot, code, 'amount'),
-                                      turnover=_get_quot(self.pre_bar, quot, code, 'turnover'), )
+                self.init_first_bar(code, quot)
+
             self.bar_time = dict(start=now, end=None)
         else:
             for quot in quots.to_dict('records'):
+                if quot['code'] not in self.bar:
+                    self.init_first_bar(quot['code'], quot)
+                    continue
                 bar = self.bar[quot['code']]
                 now_price = quot['close']
                 bar['close'] = now_price
@@ -525,6 +556,7 @@ class RealtimeQuotation(Quotation):
                     bar['high'] = now_price
                 if now_price < bar['low']:
                     bar['low'] = now_price
+
                 bar['day_high'] = quot['high']
                 bar['day_low'] = quot['low']
                 bar['day_time'] = quot['day_time']
@@ -534,8 +566,8 @@ class RealtimeQuotation(Quotation):
             now = datetime.now()
             if not self.is_start:
                 self.is_start = True
-                return event.evt_start, dict(frequency=self.opt['frequency'],
-                                             start=now)
+                return consts.evt_start, dict(frequency=self.opt['frequency'],
+                                              start=now)
             evt, payload = await self.get_base_event(now=now)
             if evt is not None:
                 return evt, payload
@@ -549,10 +581,10 @@ class RealtimeQuotation(Quotation):
             if quot is not None:
                 self.reset_bar(now)
                 day_time = now
-                return event.evt_quotation, dict(frequency=self.opt['frequency'],
-                                                 trade_date=self.trade_date,
-                                                 day_time=day_time,
-                                                 list=quot)
+                return consts.evt_quotation, dict(frequency=self.opt['frequency'],
+                                                  trade_date=self.trade_date,
+                                                  day_time=day_time,
+                                                  list=quot)
         except Exception as e:
             self.log.error('get_quot 异常, ex={}, call={}'.format(e, traceback.format_exc()))
 
@@ -571,7 +603,7 @@ if __name__ == '__main__':
 
 
     async def test_rt():
-        if not await rt.init(opt=dict(frequency='10s', codes=['sh601099', 'sz000001'])):
+        if not await rt.init(opt=dict(frequency='10s', codes=['sh601179'])):
             print('初始化失败')
             return
         i = 0
@@ -585,9 +617,9 @@ if __name__ == '__main__':
 
 
     async def test_bt():
-        if not await bt.init(opt=dict(frequency='60min', codes=['sz000001', 'sh601099'],
-                                      start_date=datetime.strptime('2020-12-01', '%Y-%m-%d'),
-                                      end_date=datetime.strptime('2020-12-04', '%Y-%m-%d'))):
+        if not await bt.init(opt=dict(frequency='1day', codes=['sz000001', 'sz000725'],
+                                      start_date=datetime.strptime('2021-08-01', '%Y-%m-%d'),
+                                      end_date=datetime.strptime('2021-09-26', '%Y-%m-%d'))):
             print('初始化失败')
             return
         i = 0

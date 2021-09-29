@@ -108,12 +108,3 @@ class TopCode(Strategy):
             df = pd.DataFrame(select)
 
         return df
-
-
-if __name__ == '__main__':
-    from bbq import default, run_until_complete
-
-    fdb, sdb = default()
-    s = TopCode(db=fdb)
-    res = run_until_complete(s.run())
-    print(res)

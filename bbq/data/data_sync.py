@@ -67,6 +67,8 @@ class CommSync(ABC):
             diff_set = set(data[cmp_key].values).difference(set(data_db[cmp_key].values))
             if len(diff_set) > 0:
                 diff_set = list(diff_set)
+
+                # datetime64 转换
                 if isinstance(diff_set[0], np.datetime64):
                     diff_set = [datetime.utcfromtimestamp(
                         (x - np.datetime64('1970-01-01T00:00:00Z')) / np.timedelta64(1, 's')).strftime('%Y-%m-%d')

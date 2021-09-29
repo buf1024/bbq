@@ -1,17 +1,13 @@
+## 公共配置
 log:
-  level: info
-  path: /Users/luoguochun/.config/bbq/logs
+  level: debug
+  path: /Users/luoguochun/.config/bbq/logs/
+  file: trade.log
 mongo:
   uri: mongodb://localhost:27017/
   pool: 5
-strategy:
-  broker:
-    - /Users/luoguochun/.config/bbq/strategy/broker
-  trade:
-    - /Users/luoguochun/.config/bbq/strategy/trade
-  risk:
-    - /Users/luoguochun/.config/bbq/strategy/risk
-    - /Users/luoguochun/.config/bbq/strategy/risk
+mysql:
+  uri: mysql+pymysql://bbq:bbq@localhost/bbq
 message:
   email:
     host: smtp.126.com
@@ -19,8 +15,25 @@ message:
     email: barbarianquant@126.com
     secret: DAZXJPKTVXRVOESQ
   wechat:
-    token: SCU65265Tc40310137ed88be0281163cbc854ff925db79a6189f4d
+    token: SCT79912TBBpSAKVv98IdQ3RWqCoQQNW2
+monitor:
+  strategy-path:
+    - /Users/luoguochun/.config/bbq/strategy/monitor
+  strategy:
+    - id: builtin:Dummy
+      option: null
 trade:
+  strategy-path:
+    broker:
+      - /Users/luoguochun/.config/bbq/strategy/broker
+    trade:
+      - /Users/luoguochun/.config/bbq/strategy/trade
+    risk:
+      - /Users/luoguochun/.config/bbq/strategy/risk
+  strategy:
+    # 策略名称
+    id: builtin:Dummy
+    option: null
   # 账户id
   account-id: my-debug-account
   # 初始资金
@@ -38,12 +51,8 @@ trade:
       - sh000001
       - sh601618
     # 回测时用 yyyy-mm-dd HH:MM:SS
-    start_date: 2020-12-01
-    end_date: 2020-12-31
-  strategy:
-    # 策略名称
-    id: builtin:Dummy
-    option: null
+    start-date: 2020-12-01
+    end-date: 2020-12-31
   risk:
     id: builtin:Dummy
     option: null

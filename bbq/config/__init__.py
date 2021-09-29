@@ -25,6 +25,7 @@ def init_def_config() -> Tuple:
     conf_dict = dict(
         log=dict(level='debug', path=log_path),
         mongo=dict(uri='mongodb://localhost:27017/', pool=10),
+        mysql=dict(uri='mysql+pymysql://bbq:bbq@localhost/bbq'),
         strategy=dict(select=[strategy_select_path],
                       trade=[strategy_trade_path],
                       risk=[strategy_risk_path])

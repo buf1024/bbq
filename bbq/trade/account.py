@@ -1,16 +1,16 @@
 from bbq.data.mongodb import MongoDB
 from bbq.trade.tradedb import TradeDB
 from bbq.trade.base_obj import BaseObj
-from bbq.trade.util_fac import get_broker
-from bbq.trade.util_fac import get_risk
+from bbq.trade.broker import get_broker
+from bbq.trade.risk import get_risk
+from bbq.trade.strategy import get_strategy
 from bbq.trade.entrust import Entrust
-from bbq.trade.util_fac import get_strategy
 from typing import Dict, Optional, Tuple, List
 from bbq.trade.position import Position
 from bbq.trade.deal import Deal
 from datetime import datetime
 import copy
-from bbq.trade.enum import event, action
+import bbq.trade.consts as consts
 
 
 class Account(BaseObj):
@@ -199,12 +199,12 @@ class Account(BaseObj):
         # evt_noon_start evt_quotation evt_noon_end
         # evt_end(backtest)
         self.log.info(f'account on quot, event={evt}, payload={payload}')
-        if evt == event.evt_morning_start or evt == event.evt_noon_start:
+        if evt == consts.evt_morning_start or evt == consts.evt_noon_start:
             self.is_trading = True
-        if evt == event.evt_morning_end or evt == event.evt_noon_end:
+        if evt == consts.evt_morning_end or evt == consts.evt_noon_end:
             self.is_trading = False
 
-        if evt == event.evt_noon_end:
+        if evt == consts.evt_noon_end:
             self.end_time = payload['day_time']
 
             for position in self.position.values():
@@ -227,10 +227,10 @@ class Account(BaseObj):
 
             await self.trader.daily_report()
 
-        if evt == event.evt_end:
+        if evt == consts.evt_end:
             await self.trader.trade_report()
 
-        if evt == event.evt_quotation:
+        if evt == consts.evt_quotation:
             await self.update_account(payload=payload)
 
     def get_position_volume(self, code) -> Tuple[int, int]:
@@ -253,10 +253,10 @@ class Account(BaseObj):
         if broker_fee < 5:
             broker_fee = 5
         tax_fee = 0
-        if typ == action.act_buy:
+        if typ == consts.act_buy:
             if code.startswith('sh6'):
                 tax_fee = total * self.transfer_fee
-        elif typ == action.act_sell:
+        elif typ == consts.act_sell:
             if code.startswith('sz') or code.startswith('sh'):
                 tax_fee = total * self.tax_fee
         return round(broker_fee + tax_fee, 4)
@@ -302,13 +302,13 @@ class Account(BaseObj):
         if self.trader.is_backtest():
             self.signal.append(sig.to_dict())
 
-        if evt == event.evt_sig_buy or evt == event.evt_sig_sell:
+        if evt == consts.evt_sig_buy or evt == consts.evt_sig_sell:
             if sig.volume <= 0:
                 self.log.warn('invalid signal volume, volume={}, '.format(sig.volume))
 
             cost = 0
-            if evt == event.evt_sig_buy:
-                cost = self.get_cost(typ=action.act_buy,
+            if evt == consts.evt_sig_buy:
+                cost = self.get_cost(typ=consts.act_buy,
                                      code=sig.code, price=sig.price, volume=sig.volume)
                 if cost > self.cash_available:
                     self.log.warn('not enough money to buy, cost={}, available={}'.format(cost, self.cash_available))
@@ -316,7 +316,7 @@ class Account(BaseObj):
                 if sig.signal != sig.sig_buy:
                     self.log.error('signal not right, evt={}, signal={}'.format(evt, sig.signal))
                     return
-            if evt == event.evt_sig_sell:
+            if evt == consts.evt_sig_sell:
                 volume, volume_available = self.get_position_volume(sig.code)
                 if volume_available < sig.volume:
                     self.log.warn('not volume to sell, entrust={}, available={}'.format(sig.volume, volume_available))
@@ -343,14 +343,14 @@ class Account(BaseObj):
             await entrust.sync_to_db()
 
             evt_broker = None
-            if evt == event.evt_sig_buy:
-                evt_broker = event.evt_entrust_buy
+            if evt == consts.evt_sig_buy:
+                evt_broker = consts.evt_entrust_buy
                 self.cash_frozen += cost
                 self.cash_available -= cost
 
                 await self.sync_to_db()
-            elif evt == event.evt_sig_sell:
-                evt_broker = event.evt_entrust_sell
+            elif evt == consts.evt_sig_sell:
+                evt_broker = consts.evt_entrust_sell
                 position = self.position[sig.code]
                 position.volume_available -= sig.volume
                 position.volume_frozen += sig.volume
@@ -359,9 +359,9 @@ class Account(BaseObj):
             if evt_broker is not None:
                 await self.emit('broker', evt_broker, entrust)
 
-        if evt == event.evt_entrust_cancel:
+        if evt == consts.evt_entrust_cancel:
             entrust = self.entrust[sig]
-            await self.emit('broker', event.evt_entrust_cancel, entrust)
+            await self.emit('broker', consts.evt_entrust_cancel, entrust)
 
     @staticmethod
     def update_position(position):
@@ -413,7 +413,7 @@ class Account(BaseObj):
 
             await position.sync_to_db()
 
-        self.cash_frozen = round(self.cash_frozen - self.get_cost(action.act_buy, position.code, deal.price, deal.volume), 2)
+        self.cash_frozen = round(self.cash_frozen - self.get_cost(consts.act_buy, position.code, deal.price, deal.volume), 2)
         await self.update_account(None)
 
     async def deduct_position(self, deal):
@@ -450,7 +450,7 @@ class Account(BaseObj):
         :return:
         """
         self.log.info('account on_broker: evt={}, signal={}'.format(evt, payload))
-        if evt == event.evt_broker_deal:
+        if evt == consts.evt_broker_deal:
             entrust = copy.copy(payload)
             self.entrust[entrust.entrust_id] = entrust
             await entrust.sync_to_db()
@@ -483,7 +483,7 @@ class Account(BaseObj):
                 if not self.trader.is_backtest():
                     del self.entrust[entrust.entrust_id]
 
-        if evt == event.evt_entrust_cancel:
+        if evt == consts.evt_entrust_cancel:
             entrust = self.entrust[payload.entrust_id]
             entrust.volume_cancel = payload.volume_cancel
             if entrust.volume_deal != 0:
@@ -494,7 +494,7 @@ class Account(BaseObj):
             if not self.trader.is_backtest():
                 del self.entrust[entrust.entrust_id]
 
-        if evt == event.evt_broker_committed:
+        if evt == consts.evt_broker_committed:
             entrust = self.entrust[payload.entrust_id]
             entrust.status = payload.status
             entrust.broker_entrust_id = payload.broker_entrust_id

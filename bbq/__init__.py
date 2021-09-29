@@ -14,6 +14,8 @@ from bbq.data import *
 from bbq.fetch import *
 import bbq.analyse as analyse
 import bbq.selector.strategy as strategy
+import bbq.trade as trader
+from hisql import *
 
 
 def default(log_level='debug'):
@@ -22,11 +24,14 @@ def default(log_level='debug'):
     setup_log(conf_dict, 'bbq.log')
     fund_db = setup_db(conf_dict, FundDB)
     stock_db = setup_db(conf_dict, StockDB)
+    mysql_db = hisql()
+    mysql_db.connect(conf_dict['mysql']['uri'])
+    return fund_db, stock_db, mysql_db
 
-    return fund_db, stock_db
 
-
-__all__ = ['default',
+__all__ = ['__version__', '__author__', 'default',
+           # hisql
+           'hisql', 'One', 'Many', 'Affected', 'Scalar', 'Insert', 'Raw', 'DataFrame',
            # log.py
            'setup_logger', 'get_logger',
            # common.py
@@ -60,4 +65,7 @@ __all__.extend(analyse.__all__)
 
 globals().update({name: getattr(strategy, name) for name in strategy.__all__})
 __all__.extend(strategy.__all__)
+
+globals().update({name: getattr(trader, name) for name in trader.__all__})
+__all__.extend(trader.__all__)
 

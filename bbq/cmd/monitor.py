@@ -4,8 +4,7 @@ from bbq.data.funddb import FundDB
 from bbq.config import *
 import signal
 import click
-from bbq.trade.trader import Trader
-from bbq.trade.tradedb import TradeDB
+from bbq.monitor.monitor import Monitor
 
 
 @click.command()
@@ -15,17 +14,10 @@ def main(conf: str):
     if conf_file is None or conf_dict is None:
         print('config file: {} not exists / load yaml config failed'.format(conf))
         return
-    cat, typ = conf_dict['trade']['category'], conf_dict['trade']['type']
-    log_file = conf_dict['log']['file'] if 'file' in conf_dict['log'] else 'trade.log'
-    setup_log(conf_dict, log_file)
-    db_data = setup_db(conf_dict, StockDB if cat == 'stock' else FundDB)
-    db_trade = setup_db(conf_dict, TradeDB) if typ != 'backtest' else None
-
-    if db_data is None or (db_trade is None and typ != 'backtest'):
-        print('data_db / trade_db init failed')
-        return
-
-    trader = Trader(db_trade=db_trade, db_data=db_data, config=conf_dict)
+    setup_log(conf_dict, 'monitor.log')
+    db_stock = setup_db(conf_dict, StockDB)
+    db_fund = setup_db(conf_dict, FundDB)
+    trader = Monitor(db_stock=db_stock, db_fund=db_fund, config=conf_dict)
     signal.signal(signal.SIGTERM, trader.signal_handler)
     signal.signal(signal.SIGINT, trader.signal_handler)
     run_until_complete(trader.start())

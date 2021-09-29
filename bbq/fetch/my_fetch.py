@@ -622,8 +622,8 @@ class MyFetch(BaseFetch):
         df.drop(columns=['change', 'percent', 'market_capital', 'float_market_capital', 'is_trading'], inplace=True)
         df['open'] = df['open'].astype(float)
         df['close'] = df['close'].astype(float)
-        df['high'] = df['close'].astype(float)
-        df['low'] = df['close'].astype(float)
+        df['high'] = df['high'].astype(float)
+        df['low'] = df['low'].astype(float)
         df['last_close'] = df['last_close'].astype(float)
         df['volume'] = df['volume'].astype(int)
         df['amount'] = df['amount'].astype(float)
@@ -777,11 +777,11 @@ class MyFetch(BaseFetch):
 if __name__ == '__main__':
     aks = MyFetch()
 
-    tdf = aks.fetch_stock_info()
-    print(tdf)
-
-    # tdf = aks.fetch_stock_rt_quote(codes=['sh601099', 'sz000001'])
+    # tdf = aks.fetch_stock_info()
     # print(tdf)
+
+    tdf = aks.fetch_stock_rt_quote(codes=['sh601099', 'sz000001'])
+    print(tdf)
 
     # day_time open high low close volume code
     # tdf = aks.fetch_stock_minute(code='sh601099', period='5')

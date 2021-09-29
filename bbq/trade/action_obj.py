@@ -1,8 +1,7 @@
 from .base_obj import BaseObj
 from bbq.trade.tradedb import TradeDB
 from bbq.data import *
-from bbq.trade.enum import action
-from .enum import event
+import bbq.trade.consts as consts
 
 
 class BaseActionObj(BaseObj):
@@ -12,7 +11,7 @@ class BaseActionObj(BaseObj):
     def can_buy(self, code: str, price: float, volume: int) -> bool:
         if volume <= 0:
             return False
-        cost = self.trader.account.get_cost(typ=action.act_buy, code=code, price=price, volume=volume)
+        cost = self.trader.account.get_cost(typ=consts.act_buy, code=code, price=price, volume=volume)
         return self.trader.account.cash_available >= cost
 
     def can_sell_volume(self, code: str) -> int:
@@ -28,10 +27,10 @@ class BaseActionObj(BaseObj):
         return entrusts
 
     async def buy(self, sig):
-        await self.emit('signal', event.evt_sig_buy, sig)
+        await self.emit('signal', consts.evt_sig_buy, sig)
 
     async def sell(self, sig):
-        await self.emit('signal', event.evt_sig_sell, sig)
+        await self.emit('signal', consts.evt_sig_sell, sig)
 
     async def cancel(self, sig):
-        await self.emit('signal', event.evt_sig_cancel, sig)
+        await self.emit('signal', consts.evt_sig_cancel, sig)
