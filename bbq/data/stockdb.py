@@ -34,6 +34,15 @@ class StockDB(MongoDB):
                              'divend_avg': '年均股息', 'divend_count': '分红次数', 'financed_total': '融资总额',
                              'financed_count': '融资次数', 'sync_date': '最近同步时间(避免全量同步程序使用)'},
 
+        # 融资融券明细数据
+        'stock_margin': {'code': '代码', 'name': '名称', 'trade_date': '交易日',
+                         'spj': '收盘价(元)', 'zdf': '涨跌幅(%)',
+                         'rzye': '融资余额(元)(RZYE)', 'rzyezb': '融资余额占流通市值比(%)(RZYEZB)', 'rzmre': '融资买入额(元)',
+                         'rzche': '融资偿还额(元)', 'rzjme': '融资净买入(元)',
+                         'rqye': '融券余额(元)', 'rqyl': '融券余量(股)', 'rqmcl': '融券卖出量(股)', 'rqchl': '融券偿还量(股)',
+                         'rqjmg': '净卖出(股)',
+                         'rzrqye': '融资融券余额(元)', 'rzrqyecz': '融资融券余额差值(元)'},
+
         # 申万行业数据
         'sw_index_info': {'index_code': '行业代码', 'index_name': '行业名称', 'stock_code': '股票代码', 'stock_name': '股票名称',
                           'start_date': '开始日期', 'weight': '权重'}
@@ -75,6 +84,10 @@ class StockDB(MongoDB):
     @property
     def stock_his_divend(self):
         return self.get_coll(self._db, 'stock_his_divend')
+
+    @property
+    def stock_margin(self):
+        return self.get_coll(self._db, 'stock_margin')
 
     @property
     def sw_index_info(self):
@@ -331,16 +344,41 @@ class StockDB(MongoDB):
         self.log.debug('保存申万一级行业信息成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
+    async def load_stock_margin(self, **kwargs) -> Optional[pd.DataFrame]:
+        """
+        :param kwargs:  filter=None, projection=None, skip=0, limit=0, sort=None, to_frame=True
+        :return: DataFrame
+        """
+        self.log.debug('加载股票融资融券数据, kwargs={}'.format(kwargs))
+        df = await self.do_load(self.stock_margin, **kwargs)
+        self.log.debug('加载股票融资融券数据成功 size={}'.format(df.shape[0] if df is not None else 0))
+        return df
+
+    async def save_stock_margin(self, data: pd.DataFrame) -> List[str]:
+        """
+        :param data: DataFrame()
+        :return: None/list[_id]
+        """
+        count = data.shape[0] if data is not None else 0
+        inserted_ids = []
+        self.log.debug('融资融券数据, count = {} ...'.format(count))
+        if count > 0:
+            inserted_ids = await self.do_insert(coll=self.stock_margin, data=data)
+        self.log.debug('保存融资融券数据成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
+        return inserted_ids
+
 
 if __name__ == '__main__':
     from bbq.common import run_until_complete
 
-    async def test_count(db):
+
+    async def my_count(db):
         count = await db.stock_info.count_documents({})
         print('count={}'.format(count))
+
 
     db = StockDB(uri='mongodb://localhost:27017/')
     db.init()
     run_until_complete(
-        test_count(db)
+        my_count(db)
     )

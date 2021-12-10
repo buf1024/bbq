@@ -35,6 +35,13 @@ select trade_date from stock_daily where code = :code  order by trade_date desc 
 insert into stock_daily(code, trade_date, close, open, high, low, volume, turnover, hfq_factor)
 values(:code, :trade_date, :close, :open, :high, :low, :volume, :turnover, :hfq_factor)
 
+-- :name select_stock_margin :one
+select trade_date from stock_margin where code = :code  order by trade_date desc limit 1
+
+-- :name insert_stock_margin :insert
+insert into stock_margin(code, name, trade_date, spj, zdf, rzye, rzyezb, rzmre, rzche, rzjme, rqye, rqyl, rqmcl, rqchl, rqjmg, rzrqye, rzrqyecz)
+values(:code, :name, :trade_date, :spj, :zdf, :rzye, :rzyezb, :rzmre, :rzche, :rzjme, :rqye, :rqyl, :rqmcl, :rqchl, :rqjmg, :rzrqye, :rzrqyecz)
+
 -- :name select_stock_index :one
 select trade_date from stock_index where code = :code  order by trade_date desc limit 1
 

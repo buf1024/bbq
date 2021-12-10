@@ -16,7 +16,7 @@ class Mongo2Sql:
         self.sql_db = None
 
         self.tables = ['fund_info', 'fund_net', 'fund_daily',
-                       'stock_info', 'stock_daily', 'stock_index',
+                       'stock_info', 'stock_daily', 'stock_index', 'stock_margin',
                        'stock_fq_factor', 'stock_index_info', 'stock_index_daily',
                        'stock_ns_flow', 'stock_his_divend', 'stock_sw_index_info']
 
@@ -98,7 +98,7 @@ class Mongo2Sql:
                 if 'fund_net' in sync_tables:
                     self.log.info('开始同步基金{}净值'.format(code))
                     await self.sync_one(sql_check_func=partial(self.sql_db.select_fund_net, code=code),
-                                        mongo_query_func=self.fund_db.load_fund_net,
+                                        mongo_query_func=partial(self.fund_db.load_fund_net, sort=[('trade_date', 1)]),
                                         sql_save_func=self.sql_db.insert_fund_net,
                                         build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
                                                                       'code': code},
@@ -108,7 +108,8 @@ class Mongo2Sql:
                 if 'fund_daily' in sync_tables:
                     self.log.info('开始同步基金{}日线'.format(code))
                     await self.sync_one(sql_check_func=partial(self.sql_db.select_fund_daily, code=code),
-                                        mongo_query_func=self.fund_db.load_fund_daily,
+                                        mongo_query_func=partial(self.fund_db.load_fund_daily,
+                                                                 sort=[('trade_date', 1)]),
                                         sql_save_func=self.sql_db.insert_fund_daily,
                                         build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
                                                                       'code': code},
@@ -135,7 +136,8 @@ class Mongo2Sql:
                 if 'stock_daily' in sync_tables:
                     self.log.info('开始同步股票{}日线'.format(code))
                     await self.sync_one(sql_check_func=partial(self.sql_db.select_stock_daily, code=code),
-                                        mongo_query_func=self.stock_db.load_stock_daily,
+                                        mongo_query_func=partial(self.stock_db.load_stock_daily,
+                                                                 sort=[('trade_date', 1)]),
                                         sql_save_func=self.sql_db.insert_stock_daily,
                                         build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
                                                                       'code': code},
@@ -145,7 +147,8 @@ class Mongo2Sql:
                 if 'stock_index' in sync_tables:
                     self.log.info('开始同步股票{}指标'.format(code))
                     await self.sync_one(sql_check_func=partial(self.sql_db.select_stock_index, code=code),
-                                        mongo_query_func=self.stock_db.load_stock_index,
+                                        mongo_query_func=partial(self.stock_db.load_stock_index,
+                                                                 sort=[('trade_date', 1)]),
                                         sql_save_func=self.sql_db.insert_stock_index,
                                         build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
                                                                       'code': code},
@@ -155,13 +158,29 @@ class Mongo2Sql:
                 if 'stock_fq_factor' in sync_tables:
                     self.log.info('开始同步股票{}复权因子'.format(code))
                     await self.sync_one(sql_check_func=partial(self.sql_db.select_stock_fq_factor, code=code),
-                                        mongo_query_func=self.stock_db.load_stock_fq_factor,
+                                        mongo_query_func=partial(self.stock_db.load_stock_fq_factor,
+                                                                 sort=[('trade_date', 1)]),
                                         before_sql_save_func=partial(self.sql_db.delete_stock_fq_factor, code=code),
                                         sql_save_func=self.sql_db.insert_stock_fq_factor,
                                         build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
                                                                       'code': code},
                                         build_none_cond_func=lambda: {'code': code})
                     self.log.info('同步股票{}复权因子完成')
+
+        if 'stock_margin' in sync_tables:
+            self.log.info('开始同步融资融券数据')
+            codes = await self.stock_db.stock_margin.distinct('code')
+            for code in codes:
+                self.log.info('开始同步股票{}融资融券数据'.format(code))
+                await self.sync_one(sql_check_func=partial(self.sql_db.select_stock_margin, code=code),
+                                    mongo_query_func=partial(self.stock_db.load_stock_margin, sort=[('trade_date', 1)]),
+                                    sql_save_func=self.sql_db.insert_stock_margin,
+                                    build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
+                                                                  'code': code},
+                                    build_none_cond_func=lambda: {'code': code})
+                self.log.info('同步股票{}融资融券数据完成')
+
+            self.log.info('同步融资融券数据完成')
 
         if 'stock_index_info' in sync_tables:
             self.log.info('开始同步股票指数代码')
@@ -178,7 +197,8 @@ class Mongo2Sql:
                 if 'stock_index_daily' in sync_tables:
                     self.log.info('开始同步股票指数{}日线'.format(code))
                     await self.sync_one(sql_check_func=partial(self.sql_db.select_stock_index_daily, code=code),
-                                        mongo_query_func=self.stock_db.load_index_daily,
+                                        mongo_query_func=partial(self.stock_db.load_index_daily,
+                                                                 sort=[('trade_date', 1)]),
                                         sql_save_func=self.sql_db.insert_stock_index_daily,
                                         build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
                                                                       'code': code},
@@ -188,7 +208,8 @@ class Mongo2Sql:
         if 'stock_ns_flow' in sync_tables:
             self.log.info('开始同步股票南北资金流')
             await self.sync_one(sql_check_func=self.sql_db.select_stock_ns_flow,
-                                mongo_query_func=self.stock_db.load_stock_north_south_flow,
+                                mongo_query_func=partial(self.stock_db.load_stock_north_south_flow,
+                                                         sort=[('trade_date', 1)]),
                                 sql_save_func=self.sql_db.insert_stock_ns_flow,
                                 build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']}})
             self.log.info('同步股票南北资金流完成')
@@ -196,7 +217,7 @@ class Mongo2Sql:
         if 'stock_his_divend' in sync_tables:
             self.log.info('开始历史分红数据')
             await self.sync_one(sql_check_func=self.sql_db.select_stock_his_divend,
-                                mongo_query_func=self.stock_db.load_stock_his_divend,
+                                mongo_query_func=partial(self.stock_db.load_stock_his_divend, sort=[('trade_date', 1)]),
                                 before_sql_save_func=self.sql_db.delete_stock_his_divend,
                                 sql_save_func=self.sql_db.insert_stock_his_divend,
                                 build_cond_func=lambda data: {'sync_date': {'$gt': data['sync_date']}})
@@ -219,4 +240,4 @@ if __name__ == '__main__':
 
     a = Mongo2Sql()
     a.init()
-    run_until_complete(a.sync(tables='stock_info'))
+    run_until_complete(a.sync(tables='stock_margin'))

@@ -24,7 +24,7 @@ setup(
     install_requires=[
         'numpy',
         'pandas',
-        'akshare==0.9.92',
+        'akshare',
         'opendatatools==1.0.0',
         'aiohttp==3.7.2',
         'motor',
@@ -41,6 +41,7 @@ setup(
         'tqdm',
         'hisql',
         'pymysql',
+        'requests',
         'protobuf',
     ],
     entry_points={

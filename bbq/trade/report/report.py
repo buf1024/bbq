@@ -335,7 +335,7 @@ class Report:
             lost_text = f'  -- 亏损({lost_total}元, {lost_rate}%, {lost_times}次, {lost_times_rate}%)'
 
             deal_his_group = deal_his.groupby('trade_date').sum()
-            deal_his_group.reset_index(inplace=True)
+            deal_his_group.reset_index(drop=True, inplace=True)
             df = deal_his_group[deal_his_group['profit'] >= 0]
 
             if not df.empty:

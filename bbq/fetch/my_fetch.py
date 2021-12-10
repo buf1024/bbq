@@ -1,14 +1,14 @@
 from datetime import datetime, timedelta
 from typing import Optional, List
 
-import akshare as ak
-from opendatatools import stock
 import pandas as pd
-
-from bbq.fetch.base_fetch import BaseFetch
-from bbq.retry import retry
-
 import xlrd
+from opendatatools import stock
+
+import bbq.fetch.hiakshare as hiak
+from bbq.fetch.base_fetch import BaseFetch
+from bbq.fetch.stock_eastmoney import StockEastmoney
+from bbq.retry import retry
 
 # 参考： https://stackoverflow.com/questions/64264563/attributeerror-elementtree-object-has-no-attribute-getiterator-when-trying
 # python3.9
@@ -23,6 +23,7 @@ xlrd.xlsx.Element_has_iter = True
 class MyFetch(BaseFetch):
     def __init__(self):
         super().__init__()
+        self.eastmoney = StockEastmoney()
 
     @retry(name='MyFetch')
     def fetch_stock_listing_date(self, code: str) -> Optional[datetime]:
@@ -33,18 +34,20 @@ class MyFetch(BaseFetch):
         """
         self.log.debug('获取股票上市日期, code={}...'.format(code))
         if code.lower()[:2] == 'sh':
-            df = ak.stock_info_sh_name_code(indicator="主板A股")
+            df = hiak.stock_info_sh_name_code(indicator="主板A股")
             if df is not None and not df.empty:
-                df = df[df['SECURITY_CODE_A'] == code.lower()[2:]]
+                df = df[df['公司代码'] == code.lower()[2:]]
                 if len(df) == 0:
                     self.log.info('股票代码错误/已退市, code={}...'.format(code))
                     return None
-                list_date = datetime.strptime(df.iloc[0]['LISTING_DATE'], '%Y-%m-%d')
+                list_date = df.iloc[0]['上市日期']
+                list_date = datetime(year=list_date.year, month=list_date.month, day=list_date.day)
+
                 self.log.info('股票{}上市日期{}'.format(code, list_date))
                 return list_date
 
         if code.lower()[:2] == 'sz':
-            df = ak.stock_info_sz_name_code(indicator="A股列表")
+            df = hiak.stock_info_sz_name_code(indicator="A股列表")
             if df is not None and not df.empty:
                 df = df[df['A股代码'] == code.lower()[2:]]
                 if len(df) == 0:
@@ -62,60 +65,70 @@ class MyFetch(BaseFetch):
         :param codes: 需要获取股票代码, None为全部
         :return: code(股票代码)  name(股票名称) listing_date(股票上市日期) block(板块)
         """
-        self.log.debug('获取上证股票...')
-        df = ak.stock_info_sh_name_code(indicator="主板A股")
-        if df is None:
-            self.log.debug('上证 主板A股 失败')
-            return None
-        df['block'] = '主板'
+        data, market = None, 'shsz'
+        if codes is not None:
+            market = ''
+            if any(filter(lambda x: x[:2] == 'sh', codes)):
+                market = market + 'sh'
+            if any(filter(lambda x: x[:2] == 'sz', codes)):
+                market = market + 'sz'
+        if 'sh' in market:
+            self.log.debug('获取上证股票...')
+            df = hiak.stock_info_sh_name_code(indicator="主板A股")
+            if df is None:
+                self.log.debug('上证 主板A股 失败')
+                return None
+            df['block'] = '主板'
 
-        df2 = ak.stock_info_sh_name_code(indicator="科创板")
-        if df2 is None:
-            self.log.error('上证 科创板 失败')
-            return None
-        df2['block'] = '科创板'
-        df = df.append(df2)
+            df2 = hiak.stock_info_sh_name_code(indicator="科创板")
+            if df2 is None:
+                self.log.error('上证 科创板 失败')
+                return None
+            df2['block'] = '科创板'
+            df = df.append(df2)
 
-        df['code'] = df['SECURITY_CODE_A'].apply(lambda x: 'sh' + x)
-        df['listing_date'] = pd.to_datetime(df['LISTING_DATE'], format='%Y-%m-%d')
-        data = df.rename(columns={'SECURITY_ABBR_A': 'name'})[['code', 'name', 'listing_date', 'block']]
+            df['code'] = df['公司代码'].apply(lambda x: 'sh' + x)
+            df['listing_date'] = pd.to_datetime(df['上市日期'], format='%Y-%m-%d')
+            data = df.rename(columns={'公司简称': 'name'})[['code', 'name', 'listing_date', 'block']]
 
-        self.log.debug('获取深证股票...')
-        df = ak.stock_info_sz_name_code(indicator="主板")
-        if df is None:
-            self.log.error('深证 主板 失败')
-            return None
-        df['block'] = '主板'
-        df.dropna(subset=['A股代码'], inplace=True)
-        df.dropna(subset=['A股简称'], inplace=True)
-        df = df[df['A股代码'] != '000nan']
-        df['A股代码'] = df['公司代码'].astype(str).str.zfill(6)
+        if 'sz' in market:
+            self.log.debug('获取深证股票...')
+            df = hiak.stock_info_sz_name_code(indicator="主板")
+            if df is None:
+                self.log.error('深证 主板 失败')
+                return None
+            df['block'] = '主板'
+            df.dropna(subset=['A股代码'], inplace=True)
+            df.dropna(subset=['A股简称'], inplace=True)
+            df = df[df['A股代码'] != '000nan']
+            df['A股代码'] = df['公司代码'].astype(str).str.zfill(6)
 
-        df2 = ak.stock_info_sz_name_code(indicator="中小企业板")
-        if df2 is None:
-            self.log.error('深证 中小企业板 失败')
-            return None
-        df2['block'] = '中小板'
+            df2 = hiak.stock_info_sz_name_code(indicator="中小企业板")
+            if df2 is None:
+                self.log.error('深证 中小企业板 失败')
+                return None
+            df2['block'] = '中小板'
 
-        df = df.append(df2)
+            df = df.append(df2)
 
-        df2 = ak.stock_info_sz_name_code(indicator="创业板")
-        if df2 is None:
-            self.log.error('深证 创业板 失败')
-            return None
-        df2['block'] = '创业板'
-        df = df.append(df2)
+            df2 = hiak.stock_info_sz_name_code(indicator="创业板")
+            if df2 is None:
+                self.log.error('深证 创业板 失败')
+                return None
+            df2['block'] = '创业板'
+            df = df.append(df2)
 
-        df['code'] = df['A股代码'].apply(lambda x: 'sz' + x)
-        df['listing_date'] = pd.to_datetime(df['A股上市日期'], format='%Y-%m-%d')
-        data2 = df.rename(columns={'公司简称': 'name'})[['code', 'name', 'listing_date', 'block']]
-        data = data.append(data2)
-        data.drop_duplicates(['code'], inplace=True)
+            df['code'] = df['A股代码'].apply(lambda x: 'sz' + x)
+            df['listing_date'] = pd.to_datetime(df['A股上市日期'], format='%Y-%m-%d')
+            data2 = df.rename(columns={'公司简称': 'name'})[['code', 'name', 'listing_date', 'block']]
+            data = data.append(data2) if data is not None else data2
+            data.drop_duplicates(['code'], inplace=True)
+
         if codes is not None and data is not None:
             cond = 'code in ["{}"]'.format("\",\"".join(codes))
             data = data.query(cond)
 
-        data = data.reindex()
+        data = data.reset_index(drop=True)
         self.log.debug('获取股票成功, count={}'.format(self.df_size(data)))
         return data
 
@@ -131,20 +144,20 @@ class MyFetch(BaseFetch):
         """
         try:
             self.log.debug('获取股票{}后复权因子...'.format(code))
-            df_hfq_factor = ak.stock_zh_a_daily(symbol=code, adjust='hfq-factor')
+            df_hfq_factor = hiak.stock_zh_a_daily(symbol=code, adjust='hfq-factor')
             if df_hfq_factor is None:
                 self.log.error('获取股票{}后复权因子失败'.format(code))
                 return None
             df_hfq_factor.dropna(inplace=True)
 
             self.log.debug('获取股票{}前复权因子...'.format(code))
-            df_qfq_factor = ak.stock_zh_a_daily(symbol=code, adjust='qfq-factor')
+            df_qfq_factor = hiak.stock_zh_a_daily(symbol=code, adjust='qfq-factor')
             if df_qfq_factor is None:
                 self.log.error('获取股票{}前复权因子失败'.format(code))
                 return None
             df_qfq_factor.dropna(inplace=True)
             df = df_hfq_factor.merge(df_qfq_factor, how='left', left_on=['date'], right_on=['date'])
-            df = df.reset_index()
+            df = df.reset_index(drop=True)
             df['code'] = code
             df.rename(columns={'date': 'trade_date'}, inplace=True)
             if not df.empty:
@@ -161,7 +174,7 @@ class MyFetch(BaseFetch):
                 cond = 'trade_date <= "{}"'.format(date_str)
                 df = df.query(cond)
             df.drop(columns=['index'], inplace=True)
-            df = df.reindex()
+            df = df.reset_index(drop=True)
             self.log.debug('获取股票{}复权数据成功, count={}'.format(code, self.df_size(df)))
             return df
         except Exception as e:
@@ -178,7 +191,7 @@ class MyFetch(BaseFetch):
         :param code: 股票代码
         :param start: 开始时间
         :param end: 结束时间
-        :return:  volume     open     high      low    close  turnover(换算率)       date
+        :return:  volume     open     high      low    close  turnover(换手率)       date
         """
         if not self.is_trade(start, end):
             self.log.info('code={}, start={}, end={}, 非交易日不同步...'.format(code, start, end))
@@ -229,7 +242,7 @@ class MyFetch(BaseFetch):
         if adjust:
             try:
                 self.log.debug('获取股票{}后复权因子...'.format(code))
-                df_hfq_factor = ak.stock_zh_a_daily(symbol=code, adjust='hfq-factor')
+                df_hfq_factor = hiak.stock_zh_a_daily(symbol=code, adjust='hfq-factor')
                 if df_hfq_factor is None:
                     self.log.error('获取股票{}后复权因子失败'.format(code))
                     return None
@@ -250,12 +263,12 @@ class MyFetch(BaseFetch):
 
         if df is None:
             try:
-                df = ak.stock_zh_a_daily(symbol=code)
+                df = hiak.stock_zh_a_daily(symbol=code)
                 if df is not None and not df.empty:
                     df.dropna(inplace=True)
                     df.drop(columns=['outstanding_share'], inplace=True)
                     df['turnover'] = df['turnover'].apply(lambda x: round(x * 100, 2))
-                    df.reset_index(inplace=True)
+                    df.reset_index(drop=True, inplace=True)
             except Exception as e:
                 self.log.error('新浪获取日线失败, 尝试雪球')
                 df = self.fetch_stock_daily_xueqiu(code, start=start, end=end)
@@ -298,7 +311,7 @@ class MyFetch(BaseFetch):
             cond = 'date <= "{}"'.format(date_str)
             df = df.query(cond)
 
-        df = df.reindex()
+        df = df.reset_index(drop=True)
         df.rename(columns={'date': 'trade_date'}, inplace=True)
         self.log.debug('获取股票{}日线数据, count={}'.format(code, self.df_size(df)))
 
@@ -322,7 +335,7 @@ class MyFetch(BaseFetch):
         code_ak = code
         if code.startswith('sh') or code.startswith('sz'):
             code_ak = code[2:]
-        df = ak.stock_a_lg_indicator(stock=code_ak)
+        df = hiak.stock_a_lg_indicator(stock=code_ak)
         if df is None:
             self.log.error('获取股票{}指标数据失败'.format(code))
             return None
@@ -337,7 +350,7 @@ class MyFetch(BaseFetch):
             cond = 'trade_date <= "{}"'.format(date_str)
             df = df.query(cond)
 
-        df = df.reindex()
+        df = df.reset_index(drop=True)
 
         self.log.debug('获取股票{}指标数据, count={}'.format(code, self.df_size(df)))
         return df
@@ -372,7 +385,7 @@ class MyFetch(BaseFetch):
                 else:
                     self.log.error('获取指数{}日线数据失败: {}'.format(code, msg))
         if df is None:
-            df = ak.stock_zh_index_daily(symbol=code)
+            df = hiak.stock_zh_index_daily(symbol=code)
             if df is not None and not df.empty:
                 df.reset_index(inplace=True)
 
@@ -410,7 +423,7 @@ class MyFetch(BaseFetch):
             self.log.info('code={}, start={}, end={}, 非交易日不同步...'.format(code, start, end))
             return None
         self.log.debug('获取股票{} {}分钟数据...'.format(code, period))
-        df = ak.stock_zh_a_minute(symbol=code, period=period, adjust=adjust)
+        df = hiak.stock_zh_a_minute(symbol=code, period=period, adjust=adjust)
         if df is None:
             self.log.error('获取股票{} {}分钟数据失败'.format(code, period))
             return None
@@ -434,7 +447,7 @@ class MyFetch(BaseFetch):
         df['low'] = df['low'].astype(float)
         df['volume'] = df['volume'].astype(int)
         df.drop(columns=['day'], inplace=True)
-        df = df.reindex()
+        df = df.reset_index(drop=True)
         self.log.debug('获取股票{} {}分钟数据, count={}'.format(code, period, self.df_size(df)))
 
         return df
@@ -455,7 +468,7 @@ class MyFetch(BaseFetch):
             return None
 
         self.log.debug('获取股票北向资金 沪股通...')
-        df = ak.stock_em_hsgt_north_net_flow_in(indicator='沪股通')
+        df = hiak.stock_em_hsgt_north_net_flow_in(indicator='沪股通')
         if df is None:
             self.log.error('获取股票北向资金 沪股通失败')
             return None
@@ -463,7 +476,7 @@ class MyFetch(BaseFetch):
         df.rename(columns={'value': 'sh_north_value'}, inplace=True)
 
         self.log.debug('获取股票北向资金 深股通...')
-        df2 = ak.stock_em_hsgt_north_net_flow_in(indicator='深股通')
+        df2 = hiak.stock_em_hsgt_north_net_flow_in(indicator='深股通')
         if df2 is None:
             self.log.error('获取股票北向资金 深股通失败')
             return None
@@ -473,7 +486,7 @@ class MyFetch(BaseFetch):
         df = df.merge(df2, how='left', left_on=['date'], right_on=['date'])
 
         self.log.debug('获取股票南向资金 沪股通...')
-        df2 = ak.stock_em_hsgt_south_net_flow_in(indicator='沪股通')
+        df2 = hiak.stock_em_hsgt_south_net_flow_in(indicator='沪股通')
         if df2 is None:
             self.log.error('获取股票北向资金 沪股通失败')
             return None
@@ -483,7 +496,7 @@ class MyFetch(BaseFetch):
         df = df.merge(df2, how='left', left_on=['date'], right_on=['date'])
 
         self.log.debug('获取股票南向资金 深股通...')
-        df2 = ak.stock_em_hsgt_south_net_flow_in(indicator='深股通')
+        df2 = hiak.stock_em_hsgt_south_net_flow_in(indicator='深股通')
         if df2 is None:
             self.log.error('获取股票南向资金 深股通失败')
             return None
@@ -509,7 +522,7 @@ class MyFetch(BaseFetch):
             df = df.query(cond)
         df['trade_date'] = pd.to_datetime(df['date'], format='%Y-%m-%d')
         df.drop(columns=['date'], inplace=True)
-        df = df.reindex()
+        df = df.reset_index(drop=True)
         self.log.debug('获取股票北向资金, count={}'.format(self.df_size(df)))
 
         return df
@@ -523,7 +536,7 @@ class MyFetch(BaseFetch):
                 divend_count(分红次数), financed_total(融资总额(亿)), financed_count(融资次数)
         """
         self.log.debug('获取股票历史分红数据...')
-        df = ak.stock_history_dividend()
+        df = hiak.stock_history_dividend()
         if df is None:
             self.log.error('获取股票历史分红数据失败')
             return None
@@ -543,7 +556,7 @@ class MyFetch(BaseFetch):
         if codes is not None:
             cond = 'code in ["{}"]'.format("\",\"".join(codes))
             df = df.query(cond)
-        df = df.reindex()
+        df = df.reset_index(drop=True)
         self.log.debug('获取股票历史分红数据, count={}'.format(self.df_size(df)))
 
         return df
@@ -557,7 +570,7 @@ class MyFetch(BaseFetch):
         :return: stock_code(股票代码) stock_name start_date(开始日期)  weight(权重) index_code(行业代码) index_name(行业名称)
         """
         self.log.debug('获取申万一级行业名称...')
-        df = ak.sw_index_spot()
+        df = hiak.sw_index_spot()
         if df is None:
             self.log.error('获取申万一级行业名称失败')
             return None
@@ -577,7 +590,7 @@ class MyFetch(BaseFetch):
             df2['index_name'] = name
             data = df2 if data is None else data.append(df2)
 
-        data = data.reindex()
+        data = data.reset_index(drop=True)
         self.log.debug('获取申万一级行业数据, count={}'.format(self.df_size(data)))
         return data
 
@@ -589,7 +602,7 @@ class MyFetch(BaseFetch):
         :return: stock_code stock_name start_date  weight
         """
         self.log.debug('获取申万一级行业{}成分...'.format(code))
-        df = ak.sw_index_cons(index_code=code)
+        df = hiak.sw_index_cons(index_code=code)
         if df is None:
             self.log.error('获取申万一级行业{}成分...'.format(code))
             return None
@@ -638,7 +651,7 @@ class MyFetch(BaseFetch):
         :return: code, name, open, high, low, volume, amount, turnover
         """
         self.log.debug('获取次新股行情...')
-        df = ak.stock_zh_a_new()
+        df = hiak.stock_zh_a_new()
         if df is None:
             self.log.error('获取次新股行情 失败')
             return None
@@ -649,7 +662,7 @@ class MyFetch(BaseFetch):
             cond = 'code in ["{}"]'.format("\",\"".join(codes))
             df = df.query(cond)
 
-        df = df.reindex()
+        df = df.reset_index(drop=True)
         self.log.debug('获取股票成功, count={}'.format(self.df_size(df)))
         return df
 
@@ -694,6 +707,23 @@ class MyFetch(BaseFetch):
         return df
 
     @retry(name='MyFetch')
+    def fetch_stock_margin(self, code: str, start: datetime = None, end: datetime = None) -> Optional[pd.DataFrame]:
+        """
+        获取股票融资融券信息
+
+        :return
+        股票代码(CODE) 股票名称(NAME)
+        交易日期(DATE)	收盘价(元)(SPJ) 涨跌幅(%)(ZDF)
+        融资: 余额(元)(RZYE)	余额占流通市值比(%)(RZYEZB)	买入额(元)(RZMRE)	偿还额(元)(RZCHE)	净买入(元)(RZJME)
+        融券: 余额(元)(RQYE)	余量(股)(RQYL)	卖出量(股)(RQMCL)	偿还量(股)(RQCHL)	净卖出(股)(RQJMG)
+        融资融券余额(元)(RZRQYE)	融资融券余额差值(元)(RZRQYECZ)
+        """
+        self.log.debug('获取东方财富{}融资融券数据, start={}, end={}...'.format(code, start, end))
+        df = self.eastmoney.get_stock_margin(code=code, start=start, end=end)
+        self.log.debug('获取东方财富{}融资融券数据, count={}'.format(code, self.df_size(df)))
+        return df
+
+    @retry(name='MyFetch')
     def fetch_fund_info(self, codes: List[str] = None, types: List[str] = None) -> Optional[pd.DataFrame]:
         """
         获取天天基金基本信息
@@ -705,7 +735,7 @@ class MyFetch(BaseFetch):
         :return: code  name  type
         """
         self.log.debug('获取天天基金基本信息, codes={}, types={}...'.format(codes, types))
-        df = ak.fund_em_fund_name()
+        df = hiak.fund_em_fund_name()
         if df is not None and not df.empty:
             df.dropna(inplace=True)
             df.drop(columns=['拼音缩写', '拼音全称'], inplace=True)
@@ -731,8 +761,7 @@ class MyFetch(BaseFetch):
             else:
                 df1.append(df2)
 
-
-        df = df.reindex()
+        df = df.reset_index(drop=True)
         self.log.debug('获取天天基金基本信息, count={}'.format(self.df_size(df)))
         return df
 
@@ -749,9 +778,9 @@ class MyFetch(BaseFetch):
             申购状态(apply_status) 赎回状态(redeem_status)
         """
         self.log.debug('获取天天基金基本信息, code={}, start={} end={}...'.format(code, start, end))
-        start_date = start.strftime('%Y-%m-%d') if start is not None else None
-        end_date = end.strftime('%Y-%m-%d') if end is not None else None
-        df = ak.fund_em_etf_fund_info(code, start_date, end_date)
+        start_date = start.strftime('%Y%m%d') if start is not None else None
+        end_date = end.strftime('%Y%m%d') if end is not None else None
+        df = hiak.fund_em_etf_fund_info(code, start_date, end_date)
         if df is not None and not df.empty:
             df.dropna(inplace=True)
             df.rename(columns={'净值日期': 'trade_date', '单位净值': 'net',
@@ -759,7 +788,7 @@ class MyFetch(BaseFetch):
                                '申购状态': 'apply_status', '赎回状态': 'redeem_status'}, inplace=True)
             df['code'] = code
             df['trade_date'] = pd.to_datetime(df['trade_date'], format='%Y-%m-%d')
-            df['rise'] = df['rise'].apply(lambda x: 0.0 if len(x) == 0 else float(x))
+            # df['rise'] = df['rise'].apply(lambda x: 0.0 if len(x) == 0 else float(x))
             try:
                 df.astype({'net': 'float', 'net_acc': 'float'})
             except:
@@ -768,8 +797,9 @@ class MyFetch(BaseFetch):
                     if len(s['net_acc']) == 0:
                         s['net_acc'] = s['net']
                     return s
+
                 df = df.apply(func=_cvt, axis=1)
-            df = df.reindex()
+            df = df.reset_index(drop=True)
         self.log.debug('获取天天基金净值信息, count={}'.format(self.df_size(df)))
         return df
 
@@ -777,21 +807,31 @@ class MyFetch(BaseFetch):
 if __name__ == '__main__':
     aks = MyFetch()
 
-    # tdf = aks.fetch_stock_info()
+    # tdf = aks.fetch_stock_listing_date(code='sz000001')
     # print(tdf)
 
-    tdf = aks.fetch_stock_rt_quote(codes=['sh601099', 'sz000001'])
-    print(tdf)
+    # tdf = aks.fetch_stock_info(codes=['sz000001'])
+    # print(tdf)
+
+    # tdf = aks.fetch_stock_adj_factor(code='sz000001')
+    # print(tdf)
+
+    # tdf = aks.fetch_stock_daily_xueqiu(code='sh600063', start=None, end=datetime(year=2021, month=6, day=2))
+    # print(tdf)
+
+    # tdf = aks.fetch_stock_margin(code='sz000001',
+    #                              start=datetime.strptime('2021-11-01', '%Y-%m-%d'),
+    #                              end=datetime.strptime('2021-12-03', '%Y-%m-%d'))
+    #
+    # print(tdf)
+
+    # tdf = aks.fetch_stock_rt_quote(codes=['sh601099', 'sz000001'])
+    # print(tdf)
 
     # day_time open high low close volume code
     # tdf = aks.fetch_stock_minute(code='sh601099', period='5')
     # print(tdf)
 
-    # dt = aks.fetch_stock_listing_date(code='sz000001')
-    # print(dt)
-
-    # tdf = aks.fetch_stock_daily_xueqiu(code='sz002450', start=None, end=datetime(year=2021, month=6, day=2))
-    # print(tdf)
     #
     # tdf = aks.fetch_stock_daily(code='sh600350', start=datetime(year=2020, month=11, day=23), end=datetime.now())
     # print(tdf)
@@ -799,7 +839,7 @@ if __name__ == '__main__':
     # tdf = aks.fetch_stock_index(code='sh600105', start=None, end=datetime(year=2021, month=6, day=2))
     # print(tdf)
 
-    # tdf = ak.stock_zh_a_daily(symbol='sz000001')
+    # tdf = hiak.stock_zh_a_daily(symbol='sz000001')
     # print(tdf)
 
     # tdf = aks.fetch_stock_index_daily(code='sh000001',
@@ -837,47 +877,44 @@ if __name__ == '__main__':
     # tdf = aks.fetch_stock_minute(code='sh688008', period='15')
     # print(tdf)
 
-    # stock_zh_a_spot_df = ak.stock_zh_a_spot()
+    # stock_zh_a_spot_df = hiak.stock_zh_a_spot()
     # print(stock_zh_a_spot_df)
     #
-    # stock_zh_a_daily_hfq_df = ak.stock_zh_kcb_daily(symbol="sh688160")
+    # stock_zh_a_daily_hfq_df = hiak.stock_zh_kcb_daily(symbol="sh688160")
     # print(stock_zh_a_daily_hfq_df)
     #
-    # stock_zh_a_minute_df = ak.stock_zh_a_minute(symbol='sh600751', period='1', adjust="qfq")
+    # stock_zh_a_minute_df = hiak.stock_zh_a_minute(symbol='sh600751', period='1', adjust="qfq")
     # print(stock_zh_a_minute_df)
     #
-    # stock_zh_a_new_df = ak.stock_zh_a_new()
+    # stock_zh_a_new_df = hiak.stock_zh_a_new()
     # print(stock_zh_a_new_df)
     #
-    # stock_df = ak.stock_zh_index_spot()
+    # stock_df = hiak.stock_zh_index_spot()
     # print(stock_df)
     #
-    # stock_zh_index_daily_df = ak.stock_zh_index_daily(symbol="sz399552")
+    # stock_zh_index_daily_df = hiak.stock_zh_index_daily(symbol="sz399552")
     # print(stock_zh_index_daily_df)
     #
-    # stock_zh_index_daily_tx_df = ak.stock_zh_index_daily_tx(symbol="sh000919")
+    # stock_zh_index_daily_tx_df = hiak.stock_zh_index_daily_tx(symbol="sh000919")
     # print(stock_zh_index_daily_tx_df)
     #
-    # stock_zh_kcb_spot_df = ak.stock_zh_kcb_spot()
+    # stock_zh_kcb_spot_df = hiak.stock_zh_kcb_spot()
     # print(stock_zh_kcb_spot_df)
     #
-    # stock_zh_kcb_daily_df = ak.stock_zh_kcb_daily(symbol="sh688399", adjust="hfq")
+    # stock_zh_kcb_daily_df = hiak.stock_zh_kcb_daily(symbol="sh688399", adjust="hfq")
     # print(stock_zh_kcb_daily_df)
     #
-    # stock_em_account_df = ak.stock_em_account()
+    # stock_em_account_df = hiak.stock_em_account()
     # print(stock_em_account_df)
     #
-    # stock_history_dividend_df = ak.stock_history_dividend()
+    # stock_history_dividend_df = hiak.stock_history_dividend()
     # print(stock_history_dividend_df)
     #
-    # stock_info_a_code_name_df = ak.stock_info_a_code_name()
+    # stock_info_a_code_name_df = hiak.stock_info_a_code_name()
     # print(stock_info_a_code_name_df)
 
     # tdf = aks.fetch_fund_info(types=['ETF-场内'])
     # print(tdf)
-
-    tdf = aks.fetch_stock_adj_factor(code='sz000001')
-    print(tdf)
 
     # tdf = aks.fetch_fund_daily_xueqiu(code='159949',
     #                                  start=datetime(year=1900, month=11, day=23),
@@ -885,7 +922,7 @@ if __name__ == '__main__':
     #
     # print(tdf)
 
-    # tdf = aks.fetch_fund_net(code='516160',
-    #                          start=datetime.strptime('1990-01-01', '%Y-%m-%d'),
-    #                          end=datetime.strptime('2021-05-24', '%Y-%m-%d'))
-    # print(tdf)
+    tdf = aks.fetch_fund_net(code='159729',
+                             start=datetime.strptime('2021-09-25', '%Y-%m-%d'),
+                             end=datetime.strptime('2021-12-10', '%Y-%m-%d'))
+    print(tdf)

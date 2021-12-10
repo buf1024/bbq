@@ -140,6 +140,9 @@ class DataSync(CommSync):
     async def prepare_tasks(self) -> bool:
         return True
 
+    async def post_tasks(self) -> bool:
+        return True
+
     async def db_task(self, save_func):
         try:
             await self.queue_db.get()
@@ -166,6 +169,8 @@ class DataSync(CommSync):
             if len(self.tasks) > 0:
                 await self.queue.join()
                 await self.queue_db.join()
+
+            await self.post_tasks()
             self.log.info('同步完成')
 
         except Exception as e:

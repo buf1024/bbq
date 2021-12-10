@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from functools import partial
 from typing import Dict
+import pandas as pd
 
 import click
 
@@ -161,6 +162,26 @@ class SWIndexInfoTask(Task):
         self.log.info('获取获取申万一级行业数据完成')
 
 
+class StockMarginTask(Task):
+    def __init__(self, data_sync, name: str, code: str):
+        super().__init__(data_sync, name)
+        self.code = code
+
+    async def task(self):
+        self.log.info('开始融资融券数据, code={}'.format(self.code))
+
+        query_func = partial(self.db.load_stock_margin, filter={'code': self.code}, projection=['trade_date'],
+                             sort=[('trade_date', -1)], limit=1)
+        fetch_func = partial(self.to_async, func=partial(fetch.fetch_stock_margin, code=self.code))
+        save_func = self.db.save_stock_margin
+        await self.incr_sync_on_trade_date(query_func=query_func,
+                                           fetch_func=fetch_func,
+                                           save_func=save_func,
+                                           sync_start_time_func=lambda now: datetime(year=now.year, month=now.month,
+                                                                                     day=now.day, hour=15, minute=30))
+        self.log.info('股票融资融券数据task完成, code={}'.format(self.code))
+
+
 class StockSync(DataSync):
     def __init__(self, db: StockDB, config: Dict):
         super().__init__(db=db,
@@ -168,6 +189,12 @@ class StockSync(DataSync):
                          concurrent_save_count=config['con_save_num'])
         self.config = config
         self.funcs = self.config['function'].split(',') if self.config['function'] is not None else None
+
+    async def post_tasks(self) -> bool:
+        """
+        融资融券要容易封IP，和查询日K数据，特殊处理
+        """
+        return True
 
     async def prepare_tasks(self) -> bool:
         codes = None
@@ -191,7 +218,8 @@ class StockSync(DataSync):
         self.log.info('开始准备task...')
         if self.funcs is None or 'stock_daily' in self.funcs:
             for _, item in codes.iterrows():
-                self.add_task(StockDailyTask(data_sync=self, name='stack_daily_{}'.format(item['code']), code=item['code']))
+                self.add_task(
+                    StockDailyTask(data_sync=self, name='stack_daily_{}'.format(item['code']), code=item['code']))
 
         if self.funcs is None or 'stock_index' in self.funcs:
             for _, item in codes.iterrows():
@@ -211,6 +239,11 @@ class StockSync(DataSync):
         if self.funcs is None or 'stock_his_divend' in self.funcs:
             self.add_task(StockHisDivEndTask(self))
 
+        if self.funcs is None or 'stock_margin' in self.funcs:
+            for _, item in codes.iterrows():
+                self.add_task(
+                    StockMarginTask(self, name='stock_margin_{}'.format(item['code']), code=item['code']))
+
         # 没有用
         if self.funcs is not None and 'sw_index_info' in self.funcs:
             self.add_task(SWIndexInfoTask(self))
@@ -228,7 +261,7 @@ class StockSync(DataSync):
 @click.option('--con-save-num', default=100, type=int, help='concurrent db save number')
 @click.option('--function', type=str,
               help='sync one, split by ",", available: stock_daily,stock_index,index_daily,stock_fq_factor,'
-                   'stock_north_flow,stock_his_divend,sw_index_info')
+                   'stock_north_flow,stock_his_divend,sw_index_info,stock_margin')
 @click.option('--debug/--no-debug', default=True, type=bool, help='show debug log')
 def main(uri: str = 'mongodb://localhost:27017/', pool: int = 5,
          skip_basic: bool = False,

@@ -68,6 +68,37 @@ create table stock_daily
 create
 index stock_daily_idx on stock_daily(code, trade_date);
 
+--  'code': '代码', 'name': '名称', 'trade_date': '交易日',
+--  'spj': '收盘价(元)', 'zdf': '涨跌幅(%)',
+--  'rzye': '融资余额(元)(RZYE)', 'rzyezb': '融资余额占流通市值比(%)(RZYEZB)', 'rzmre': '融资买入额(元)',
+--  'rzche': '融资偿还额(元)', 'rzjme': '融资净买入(元)',
+--  'rqye': '融券余额(元)', 'rqyl': '融券余量(股)', 'rqmcl': '融券卖出量(股)', 'rqchl': '融券偿还量(股)',
+--  'rqjmg': '净卖出(股)',
+--  'rzrqye': '融资融券余额(元)', 'rzrqyecz': '融资融券余额差值(元)'
+create table stock_margin
+(
+    id          integer        not null primary key auto_increment,
+    code        char(8)        not null,
+    name        varchar(32)    null,
+    trade_date  datetime       not null,
+    spj         decimal(16, 4) not null,
+    zdf         decimal(16, 4) not null,
+    rzye        decimal(16, 4) not null,
+    rzyezb      decimal(16, 4) not null,
+    rzmre       decimal(16, 4) not null,
+    rzche       decimal(16, 4) not null,
+    rzjme       decimal(16, 4) not null,
+    rqye        decimal(16, 4) not null,
+    rqyl        decimal(16, 4) not null,
+    rqmcl       decimal(16, 4) not null,
+    rqchl       decimal(16, 4) not null,
+    rqjmg       decimal(16, 4) not null,
+    rzrqye      decimal(16, 4) not null,
+    rzrqyecz    decimal(16, 4) not null
+);
+create
+index stock_margin_idx on stock_margin(code, trade_date);
+
 -- 'code': '代码', 'trade_date': '交易日', 'pe': '市盈率', 'pe_ttm': '市盈率TTM',
 -- 'pb': '市净率', 'ps': '市销率', 'ps_ttm': '市销率TTM', 'dv_ratio': '股息率', 'dv_ttm': '股息率TTM',
 -- 'total_mv': '总市值'
