@@ -40,12 +40,14 @@ class CommSync(ABC):
 
     async def incr_sync_on_trade_date(self, query_func, fetch_func, save_func,
                                       cmp_key='trade_date',
-                                      filter_data_func=None, sync_start_time_func=None):
+                                      filter_data_func=None, sync_start_time_func=None) -> bool:
         trade_date = await query_func()
         start = None
         end = datetime.now()
         if trade_date is not None:
             start = trade_date[cmp_key].iloc[0] + timedelta(days=1)
+            while not is_trade_date(start):
+                start = start + timedelta(days=1)
 
         is_synced = self.is_synced(start, end, sync_start_time_func)
 
@@ -59,6 +61,8 @@ class CommSync(ABC):
             if data is not None and not data.empty:
                 save_func = partial(save_func, data=data)
                 await self.data_sync.submit_db(save_func)
+                return True
+        return False
 
     @staticmethod
     def gen_incr_data(cmp_key, data_db, data):

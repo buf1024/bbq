@@ -55,6 +55,43 @@ class StockEastmoney(BaseRequest):
     def __init__(self):
         super().__init__()
 
+    def get_stock_margin_code(self) -> Optional[pd.DataFrame]:
+        def get_url(p, ps):
+            url = r'https://push2.eastmoney.com/api/qt/clist/get?cb=jQuery1123017621166317571624_1639204790874&fid=f62&po=1&pz={page_size}&pn={page}&np=1&fltt=2&invt=2&ut=b2884a393a59ad64002292a3e90d46a5&fs=b%3ABK0596&fields=f12'
+            return url.format(page=p, page_size=ps)
+
+        pre_url = r'https://data.eastmoney.com/bkzj/596.html'
+        cookies = self.prepare_cookies(pre_url)
+
+        df = pd.DataFrame()
+        page_size = 2000
+        page = 1
+        while True:
+            req_url = get_url(p=page, ps=page_size)
+            data = self.do_request(url=req_url, cookies=cookies)
+            if data is None:
+                break
+            data = data[data.index("{"):-2]
+            data = json.loads(data)
+            if data['rc'] != 0:
+                break
+
+            df_tmp = pd.DataFrame(data['data']['diff'])
+            if not df_tmp.empty:
+                df = pd.concat((df, df_tmp))
+
+            total = data['data']['total']
+            if df.shape[0] >= total:
+                break
+            page = page + 1
+
+        if not df.empty:
+            df.rename(columns={'f12': 'code'}, inplace=True)
+            df['code'] = df['code'].apply(lambda x: 'sh' + x if x[0] == '6' else 'sz' + x)
+            df['is_margin'] = int(1)
+
+        return df.reset_index(drop=True)
+
     def get_stock_margin(self, code: str, start: datetime = None, end: datetime = None) -> Optional[pd.DataFrame]:
         """
         股票代码(CODE) 股票名称(NAME)
@@ -80,7 +117,7 @@ class StockEastmoney(BaseRequest):
         cookies = self.prepare_cookies(pre_url)
 
         df = pd.DataFrame()
-        page_size = 50
+        page_size = 800
         page = 1
         while True:
             req_url, tab = get_url(p=page, ps=page_size)
@@ -131,5 +168,10 @@ class StockEastmoney(BaseRequest):
 
 if __name__ == '__main__':
     s = StockEastmoney()
-    tdf = s.get_stock_margin('sh600099', start=datetime(year=2021, month=12, day=1))
+    # tdf = s.get_stock_margin('sh600063',
+    #                          # start=datetime(year=2021, month=12, day=1)
+    #                          )
+    # print(tdf.columns)
+
+    tdf = s.get_stock_margin_code()
     print(tdf.columns)

@@ -25,12 +25,11 @@ values(:code, :trade_date, :net, :net_acc, :rise, :apply_status, :redeem_status)
 -- stock
 -- :name select_stock_codes :many
 select code from stock_info
-
 -- :name insert_stock_info :insert
-insert into stock_info(code, name, listing_date, block) values(:code, :name, :listing_date, :block)
+insert into stock_info(code, name, listing_date, block, is_margin) values(:code, :name, :listing_date, :block, :is_margin)
+
 -- :name select_stock_daily :one
 select trade_date from stock_daily where code = :code  order by trade_date desc limit 1
-
 -- :name insert_stock_daily :insert
 insert into stock_daily(code, trade_date, close, open, high, low, volume, turnover, hfq_factor)
 values(:code, :trade_date, :close, :open, :high, :low, :volume, :turnover, :hfq_factor)

@@ -6,7 +6,7 @@ import pandas as pd
 class StockDB(MongoDB):
     _meta = {
         # 股票信息
-        'stock_info': {'code': '代码', 'name': '名称', 'listing_date': '上市日期', 'block': '板块'},
+        'stock_info': {'code': '代码', 'name': '名称', 'listing_date': '上市日期', 'block': '板块', 'is_margin': '是否融资融券标的'},
         # 股票日线数据
         'stock_daily': {'code': '代码', 'trade_date': '交易日', 'close': '收盘价', 'open': '开盘价', 'high': '最高价', 'low': '最低价',
                         'volume': '成交量(股)', 'turnover': '换手率', 'hfq_factor': '后复权因子'},
@@ -370,11 +370,16 @@ class StockDB(MongoDB):
 
 if __name__ == '__main__':
     from bbq.common import run_until_complete
+    from datetime import datetime
 
 
     async def my_count(db):
-        count = await db.stock_info.count_documents({})
-        print('count={}'.format(count))
+        # count = await db.stock_info.count_documents({})
+        # print('count={}'.format(count))
+        # await db.do_update_many(coll=db.stock_fq_factor,
+        #                         filter={'code': 'sh600027'},
+        #                         update={'sync_date': datetime.now()}, upsert=False)
+        pass
 
 
     db = StockDB(uri='mongodb://localhost:27017/')

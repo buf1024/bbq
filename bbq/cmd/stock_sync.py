@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 from functools import partial
 from typing import Dict
-import pandas as pd
 
 import click
 
@@ -11,6 +10,7 @@ from bbq.config import init_def_config
 from bbq.data.data_sync import DataSync
 from bbq.data.data_sync import Task
 from bbq.data.stockdb import StockDB
+from bbq.fetch.my_trade_date import is_trade_date
 
 
 class StockDailyTask(Task):
@@ -78,8 +78,17 @@ class StockFactorTask(Task):
 
         save_func = partial(_save_func, code=self.code)
 
-        await self.incr_sync_on_trade_date(cmp_key='sync_date', query_func=query_func, fetch_func=fetch_func,
-                                           save_func=save_func)
+        is_synced = await self.incr_sync_on_trade_date(cmp_key='sync_date',
+                                                       query_func=query_func,
+                                                       fetch_func=fetch_func,
+                                                       save_func=save_func)
+
+        if not is_synced:
+            now = datetime.now()
+            now = datetime(year=now.year, month=now.month, day=now.day)
+            await self.db.do_update_many(coll=self.db.stock_fq_factor,
+                                         filter={'code': self.code},
+                                         update={'sync_date': now}, upsert=False)
 
         self.log.info('获取复权因子数据完成')
 
@@ -144,7 +153,9 @@ class StockHisDivEndTask(Task):
 
         save_func = _save_func
 
-        await self.incr_sync_on_trade_date(cmp_key='sync_date', query_func=query_func, fetch_func=fetch_func,
+        await self.incr_sync_on_trade_date(cmp_key='sync_date',
+                                           query_func=query_func,
+                                           fetch_func=fetch_func,
                                            save_func=save_func)
 
         self.log.info('获取历史分红数据完成')
@@ -169,9 +180,38 @@ class StockMarginTask(Task):
 
     async def task(self):
         self.log.info('开始融资融券数据, code={}'.format(self.code))
+        # 深圳市场是隔开一个交易日
 
-        query_func = partial(self.db.load_stock_margin, filter={'code': self.code}, projection=['trade_date'],
-                             sort=[('trade_date', -1)], limit=1)
+        trade_date = await self.db.load_stock_margin(filter={'code': self.code}, projection=['trade_date'],
+                                                     sort=[('trade_date', -1)], limit=1)
+        need_sync = True
+        if trade_date is not None:
+            need_sync = False
+            now = datetime.now()
+            now = datetime(year=now.year, month=now.month, day=now.day)
+
+            last_trade_date = now
+            while not is_trade_date(last_trade_date):
+                last_trade_date = last_trade_date + timedelta(days=-1)
+
+            sync_start_date = trade_date['trade_date'].iloc[0] + timedelta(days=1)
+            while not is_trade_date(sync_start_date):
+                sync_start_date = sync_start_date + timedelta(days=1)
+
+            if self.code[:2] == 'sh':
+                delta = last_trade_date - sync_start_date
+                if delta.days >= 0:
+                    need_sync = True
+            if self.code[:2] == 'sz':
+                delta = last_trade_date - sync_start_date
+                if delta.days >= 1:
+                    need_sync = True
+        if not need_sync:
+            return
+
+        async def query_func():
+            return trade_date
+
         fetch_func = partial(self.to_async, func=partial(fetch.fetch_stock_margin, code=self.code))
         save_func = self.db.save_stock_margin
         await self.incr_sync_on_trade_date(query_func=query_func,
@@ -240,7 +280,8 @@ class StockSync(DataSync):
             self.add_task(StockHisDivEndTask(self))
 
         if self.funcs is None or 'stock_margin' in self.funcs:
-            for _, item in codes.iterrows():
+            margin_codes = await self.db.load_stock_info(filter={'is_margin': 1}, projection=['code'])
+            for _, item in margin_codes.iterrows():
                 self.add_task(
                     StockMarginTask(self, name='stock_margin_{}'.format(item['code']), code=item['code']))
 

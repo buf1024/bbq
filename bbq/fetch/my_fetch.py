@@ -128,6 +128,11 @@ class MyFetch(BaseFetch):
             cond = 'code in ["{}"]'.format("\",\"".join(codes))
             data = data.query(cond)
 
+        self.log.info('获取东方财富融资融券标的')
+        margin_info = self.eastmoney.get_stock_margin_code()
+        data = data.merge(margin_info, how='left', on='code')
+        data['is_margin'].fillna(value=0, inplace=True)
+
         data = data.reset_index(drop=True)
         self.log.debug('获取股票成功, count={}'.format(self.df_size(data)))
         return data
@@ -173,7 +178,6 @@ class MyFetch(BaseFetch):
                 date_str = end.strftime('%Y-%m-%d')
                 cond = 'trade_date <= "{}"'.format(date_str)
                 df = df.query(cond)
-            df.drop(columns=['index'], inplace=True)
             df = df.reset_index(drop=True)
             self.log.debug('获取股票{}复权数据成功, count={}'.format(code, self.df_size(df)))
             return df
@@ -720,6 +724,8 @@ class MyFetch(BaseFetch):
         """
         self.log.debug('获取东方财富{}融资融券数据, start={}, end={}...'.format(code, start, end))
         df = self.eastmoney.get_stock_margin(code=code, start=start, end=end)
+        if not df.empty:
+            df['sync_date'] = datetime.now()
         self.log.debug('获取东方财富{}融资融券数据, count={}'.format(code, self.df_size(df)))
         return df
 
@@ -778,8 +784,8 @@ class MyFetch(BaseFetch):
             申购状态(apply_status) 赎回状态(redeem_status)
         """
         self.log.debug('获取天天基金基本信息, code={}, start={} end={}...'.format(code, start, end))
-        start_date = start.strftime('%Y%m%d') if start is not None else None
-        end_date = end.strftime('%Y%m%d') if end is not None else None
+        start_date = start.strftime('%Y%m%d') if start is not None else '19900101'
+        end_date = end.strftime('%Y%m%d') if end is not None else datetime.now().strftime('%Y%m%d')
         df = hiak.fund_em_etf_fund_info(code, start_date, end_date)
         if df is not None and not df.empty:
             df.dropna(inplace=True)
@@ -810,11 +816,11 @@ if __name__ == '__main__':
     # tdf = aks.fetch_stock_listing_date(code='sz000001')
     # print(tdf)
 
-    # tdf = aks.fetch_stock_info(codes=['sz000001'])
+    # tdf = aks.fetch_stock_info()
     # print(tdf)
 
-    # tdf = aks.fetch_stock_adj_factor(code='sz000001')
-    # print(tdf)
+    tdf = aks.fetch_stock_adj_factor(code='sh600027')
+    print(tdf)
 
     # tdf = aks.fetch_stock_daily_xueqiu(code='sh600063', start=None, end=datetime(year=2021, month=6, day=2))
     # print(tdf)
@@ -916,13 +922,13 @@ if __name__ == '__main__':
     # tdf = aks.fetch_fund_info(types=['ETF-场内'])
     # print(tdf)
 
-    # tdf = aks.fetch_fund_daily_xueqiu(code='159949',
-    #                                  start=datetime(year=1900, month=11, day=23),
-    #                                  end=datetime(year=2020, month=11, day=27))
+    # tdf = aks.fetch_fund_daily_xueqiu(code='513200',
+    #                                   # start=datetime(year=1900, month=11, day=23),
+    #                                   end=datetime(year=2021, month=12, day=10))
     #
     # print(tdf)
 
-    tdf = aks.fetch_fund_net(code='159729',
-                             start=datetime.strptime('2021-09-25', '%Y-%m-%d'),
-                             end=datetime.strptime('2021-12-10', '%Y-%m-%d'))
-    print(tdf)
+    # tdf = aks.fetch_fund_net(code='159608',
+    #                          start=datetime.strptime('1990-01-01', '%Y-%m-%d'),
+    #                          end=datetime.strptime('2021-12-11', '%Y-%m-%d'))
+    # print(tdf)

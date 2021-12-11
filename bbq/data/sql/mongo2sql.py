@@ -6,10 +6,13 @@ from functools import partial
 from inspect import isgeneratorfunction
 from os.path import dirname
 import os
+import asyncio
+import traceback
+from functools import wraps
 
 
 class Mongo2Sql:
-    def __init__(self):
+    def __init__(self, loop=None):
         self.log = log.get_logger(self.__class__.__name__)
         self.fund_db = None
         self.stock_db = None
@@ -19,10 +22,13 @@ class Mongo2Sql:
                        'stock_info', 'stock_daily', 'stock_index', 'stock_margin',
                        'stock_fq_factor', 'stock_index_info', 'stock_index_daily',
                        'stock_ns_flow', 'stock_his_divend', 'stock_sw_index_info']
+        self.queue = None
+        self.loop = asyncio.get_event_loop() if loop is None else loop
 
     def init(self,
              mongo_uri='mongodb://localhost:27017/',
-             mysql_uri='mysql+pymysql://bbq:bbq@localhost/bbq'):
+             mysql_uri='mysql+pymysql://bbq:bbq@localhost/bbq',
+             concurrent_count=250):
         try:
             sql_dir = dirname(__file__) + os.sep + 'sync'
             self.sql_db = pugsql.module(sql_dir)
@@ -30,6 +36,7 @@ class Mongo2Sql:
             self.sql_db.test_connection()
             self.fund_db = FundDB(mongo_uri)
             self.stock_db = StockDB(mongo_uri)
+            self.queue = asyncio.Queue(concurrent_count)
             if self.fund_db.init() and self.stock_db.init():
                 return True
         except Exception as e:
@@ -72,6 +79,163 @@ class Mongo2Sql:
                 #         progress = p + 0.1
             self.log.info('已保存{}条记录到数据库'.format(size))
 
+    def sync_wrap(func):
+        @wraps(func)
+        async def wrapper(self, *args, **kwargs):
+            try:
+                await self.queue.get()
+                return await func(self, *args, **kwargs)
+            except Exception as e:
+                self.log.error('运行task异常: ex={} stack={}'.format(e, traceback.format_exc()))
+            finally:
+                self.queue.task_done()
+
+        return wrapper
+
+    @sync_wrap
+    async def sync_fund_info(self):
+        self.log.info('开始同步基金代码')
+        await self.sync_one(sql_check_func=self.sql_db.select_fund_codes,
+                            mongo_query_func=self.fund_db.load_fund_info,
+                            sql_save_func=self.sql_db.insert_fund_info,
+                            build_cond_func=lambda data: {'code': {'$not': {'$in': [it['code'] for it in data]}}})
+        self.log.info('同步基金代码完成')
+
+    @sync_wrap
+    async def sync_fund_net(self, code):
+        self.log.info('开始同步基金{}净值'.format(code))
+        await self.sync_one(sql_check_func=partial(self.sql_db.select_fund_net, code=code),
+                            mongo_query_func=partial(self.fund_db.load_fund_net, sort=[('trade_date', 1)]),
+                            sql_save_func=self.sql_db.insert_fund_net,
+                            build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
+                                                          'code': code},
+                            build_none_cond_func=lambda: {'code': code})
+        self.log.info('同步基金{}净值完成'.format(code))
+
+    @sync_wrap
+    async def sync_fund_daily(self, code):
+        self.log.info('开始同步基金{}日线'.format(code))
+        await self.sync_one(sql_check_func=partial(self.sql_db.select_fund_daily, code=code),
+                            mongo_query_func=partial(self.fund_db.load_fund_daily,
+                                                     sort=[('trade_date', 1)]),
+                            sql_save_func=self.sql_db.insert_fund_daily,
+                            build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
+                                                          'code': code},
+                            build_none_cond_func=lambda: {'code': code})
+        self.log.info('同步基金{}日线完成'.format(code))
+
+    @sync_wrap
+    async def sync_stock_info(self):
+        self.log.info('开始同步股票代码')
+        await self.sync_one(sql_check_func=self.sql_db.select_stock_codes,
+                            mongo_query_func=self.stock_db.load_stock_info,
+                            sql_save_func=self.sql_db.insert_stock_info,
+                            build_cond_func=lambda data: {'code': {'$not': {'$in': [it['code'] for it in data]}}})
+        self.log.info('同步股票代码完成')
+
+    @sync_wrap
+    async def sync_stock_daily(self, code):
+        self.log.info('开始同步股票{}日线'.format(code))
+        await self.sync_one(sql_check_func=partial(self.sql_db.select_stock_daily, code=code),
+                            mongo_query_func=partial(self.stock_db.load_stock_daily,
+                                                     sort=[('trade_date', 1)]),
+                            sql_save_func=self.sql_db.insert_stock_daily,
+                            build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
+                                                          'code': code},
+                            build_none_cond_func=lambda: {'code': code})
+        self.log.info('同步股票{}日线完成'.format(code))
+
+    @sync_wrap
+    async def sync_stock_index(self, code):
+        self.log.info('开始同步股票{}指标'.format(code))
+        await self.sync_one(sql_check_func=partial(self.sql_db.select_stock_index, code=code),
+                            mongo_query_func=partial(self.stock_db.load_stock_index,
+                                                     sort=[('trade_date', 1)]),
+                            sql_save_func=self.sql_db.insert_stock_index,
+                            build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
+                                                          'code': code},
+                            build_none_cond_func=lambda: {'code': code})
+        self.log.info('同步股票{}指标完成'.format(code))
+
+    @sync_wrap
+    async def sync_stock_fq_factor(self, code):
+        self.log.info('开始同步股票{}复权因子'.format(code))
+        await self.sync_one(sql_check_func=partial(self.sql_db.select_stock_fq_factor, code=code),
+                            mongo_query_func=partial(self.stock_db.load_stock_fq_factor,
+                                                     sort=[('trade_date', 1)]),
+                            before_sql_save_func=partial(self.sql_db.delete_stock_fq_factor, code=code),
+                            sql_save_func=self.sql_db.insert_stock_fq_factor,
+                            build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
+                                                          'code': code},
+                            build_none_cond_func=lambda: {'code': code})
+        self.log.info('同步股票{}复权因子完成'.format(code))
+
+    @sync_wrap
+    async def sync_stock_margin(self, code):
+        self.log.info('开始同步股票{}融资融券数据'.format(code))
+        await self.sync_one(sql_check_func=partial(self.sql_db.select_stock_margin, code=code),
+                            mongo_query_func=partial(self.stock_db.load_stock_margin, sort=[('trade_date', 1)]),
+                            sql_save_func=self.sql_db.insert_stock_margin,
+                            build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
+                                                          'code': code},
+                            build_none_cond_func=lambda: {'code': code})
+        self.log.info('同步股票{}融资融券数据完成'.format(code))
+
+    @sync_wrap
+    async def sync_stock_index_info(self):
+        self.log.info('开始同步股票指数代码')
+        await self.sync_one(sql_check_func=self.sql_db.select_index_info_codes,
+                            mongo_query_func=self.stock_db.load_index_info,
+                            sql_save_func=self.sql_db.insert_stock_index_info,
+                            build_cond_func=lambda data: {'code': {'$not': {'$in': [it['code'] for it in data]}}})
+        self.log.info('同步股票指数代码完成')
+
+    @sync_wrap
+    async def sync_stock_index_daily(self, code):
+        self.log.info('开始同步股票指数{}日线'.format(code))
+        await self.sync_one(sql_check_func=partial(self.sql_db.select_stock_index_daily, code=code),
+                            mongo_query_func=partial(self.stock_db.load_index_daily,
+                                                     sort=[('trade_date', 1)]),
+                            sql_save_func=self.sql_db.insert_stock_index_daily,
+                            build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
+                                                          'code': code},
+                            build_none_cond_func=lambda: {'code': code})
+        self.log.info('同步股票指数{}日线完成'.format(code))
+
+    @sync_wrap
+    async def sync_stock_ns_flow(self):
+        self.log.info('开始同步股票南北资金流')
+        await self.sync_one(sql_check_func=self.sql_db.select_stock_ns_flow,
+                            mongo_query_func=partial(self.stock_db.load_stock_north_south_flow,
+                                                     sort=[('trade_date', 1)]),
+                            sql_save_func=self.sql_db.insert_stock_ns_flow,
+                            build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']}})
+        self.log.info('同步股票南北资金流完成')
+
+    @sync_wrap
+    async def sync_stock_his_divend(self):
+        self.log.info('开始历史分红数据')
+        await self.sync_one(sql_check_func=self.sql_db.select_stock_his_divend,
+                            mongo_query_func=partial(self.stock_db.load_stock_his_divend, sort=[('trade_date', 1)]),
+                            before_sql_save_func=self.sql_db.delete_stock_his_divend,
+                            sql_save_func=self.sql_db.insert_stock_his_divend,
+                            build_cond_func=lambda data: {'sync_date': {'$gt': data['sync_date']}})
+        self.log.info('历史分红数据完成')
+
+    @sync_wrap
+    async def sync_sw_index_info(self):
+        self.log.info('开始同步申万行业数据')
+        await self.sync_one(sql_check_func=self.sql_db.select_stock_sw_index_info_codes,
+                            mongo_query_func=self.stock_db.load_sw_index_info,
+                            sql_save_func=self.sql_db.insert_stock_sw_index_info,
+                            build_cond_func=lambda data: {
+                                'index_code': {'$not': {'$in': [it['index_code'] for it in data]}}})
+        self.log.info('同步申万行业数据完成')
+
+    async def add_task(self, name, coro):
+        await self.queue.put(name)
+        self.loop.create_task(coro)
+
     async def sync(self, tables=None):
         sync_tables = self.tables
         if tables is not None:
@@ -82,50 +246,21 @@ class Mongo2Sql:
                     self.log.error('同步表{}不存在'.format(table))
                     return None
                 sync_tables.append(table)
-        self.log.info('开始同步基金数据')
         if 'fund_info' in sync_tables:
-            self.log.info('开始同步基金代码')
-            await self.sync_one(sql_check_func=self.sql_db.select_fund_codes,
-                                mongo_query_func=self.fund_db.load_fund_info,
-                                sql_save_func=self.sql_db.insert_fund_info,
-                                build_cond_func=lambda data: {'code': {'$not': {'$in': [it['code'] for it in data]}}})
-            self.log.info('同步基金代码完成')
+            await self.add_task('fund_info', self.sync_fund_info())
 
         if 'fund_daily' in sync_tables or 'fund_net' in sync_tables:
             codes = await self.fund_db.load_fund_info(projection=['code'])
             for code in codes.to_dict('records'):
                 code = code['code']
                 if 'fund_net' in sync_tables:
-                    self.log.info('开始同步基金{}净值'.format(code))
-                    await self.sync_one(sql_check_func=partial(self.sql_db.select_fund_net, code=code),
-                                        mongo_query_func=partial(self.fund_db.load_fund_net, sort=[('trade_date', 1)]),
-                                        sql_save_func=self.sql_db.insert_fund_net,
-                                        build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
-                                                                      'code': code},
-                                        build_none_cond_func=lambda: {'code': code})
-                    self.log.info('同步基金{}净值完成'.format(code))
+                    await self.add_task('fund_net_{}'.format(code), self.sync_fund_net(code=code))
 
                 if 'fund_daily' in sync_tables:
-                    self.log.info('开始同步基金{}日线'.format(code))
-                    await self.sync_one(sql_check_func=partial(self.sql_db.select_fund_daily, code=code),
-                                        mongo_query_func=partial(self.fund_db.load_fund_daily,
-                                                                 sort=[('trade_date', 1)]),
-                                        sql_save_func=self.sql_db.insert_fund_daily,
-                                        build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
-                                                                      'code': code},
-                                        build_none_cond_func=lambda: {'code': code})
-                    self.log.info('同步基金{}日线完成'.format(code))
+                    await self.add_task('fund_daily_{}'.format(code), self.sync_fund_daily(code=code))
 
-        self.log.info('基金数据同步完成')
-
-        self.log.info('开始同步股票数据')
         if 'stock_info' in sync_tables:
-            self.log.info('开始同步股票代码')
-            await self.sync_one(sql_check_func=self.sql_db.select_stock_codes,
-                                mongo_query_func=self.stock_db.load_stock_info,
-                                sql_save_func=self.sql_db.insert_stock_info,
-                                build_cond_func=lambda data: {'code': {'$not': {'$in': [it['code'] for it in data]}}})
-            self.log.info('同步股票代码完成')
+            await self.add_task('stock_info', self.sync_stock_info())
 
         if 'stock_daily' in sync_tables or \
                 'stock_index' in sync_tables or \
@@ -134,105 +269,43 @@ class Mongo2Sql:
             for code in codes.to_dict('records'):
                 code = code['code']
                 if 'stock_daily' in sync_tables:
-                    self.log.info('开始同步股票{}日线'.format(code))
-                    await self.sync_one(sql_check_func=partial(self.sql_db.select_stock_daily, code=code),
-                                        mongo_query_func=partial(self.stock_db.load_stock_daily,
-                                                                 sort=[('trade_date', 1)]),
-                                        sql_save_func=self.sql_db.insert_stock_daily,
-                                        build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
-                                                                      'code': code},
-                                        build_none_cond_func=lambda: {'code': code})
-                    self.log.info('同步股票{}日线完成')
+                    await self.add_task('stock_daily_{}'.format(code), self.sync_stock_daily(code=code))
 
                 if 'stock_index' in sync_tables:
-                    self.log.info('开始同步股票{}指标'.format(code))
-                    await self.sync_one(sql_check_func=partial(self.sql_db.select_stock_index, code=code),
-                                        mongo_query_func=partial(self.stock_db.load_stock_index,
-                                                                 sort=[('trade_date', 1)]),
-                                        sql_save_func=self.sql_db.insert_stock_index,
-                                        build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
-                                                                      'code': code},
-                                        build_none_cond_func=lambda: {'code': code})
-                    self.log.info('同步股票{}指标完成')
+                    await self.add_task('stock_index_{}'.format(code), self.sync_stock_index(code=code))
 
                 if 'stock_fq_factor' in sync_tables:
-                    self.log.info('开始同步股票{}复权因子'.format(code))
-                    await self.sync_one(sql_check_func=partial(self.sql_db.select_stock_fq_factor, code=code),
-                                        mongo_query_func=partial(self.stock_db.load_stock_fq_factor,
-                                                                 sort=[('trade_date', 1)]),
-                                        before_sql_save_func=partial(self.sql_db.delete_stock_fq_factor, code=code),
-                                        sql_save_func=self.sql_db.insert_stock_fq_factor,
-                                        build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
-                                                                      'code': code},
-                                        build_none_cond_func=lambda: {'code': code})
-                    self.log.info('同步股票{}复权因子完成')
+                    await self.add_task('stock_fq_factor_{}'.format(code), self.sync_stock_fq_factor(code=code))
 
         if 'stock_margin' in sync_tables:
             self.log.info('开始同步融资融券数据')
             codes = await self.stock_db.stock_margin.distinct('code')
             for code in codes:
-                self.log.info('开始同步股票{}融资融券数据'.format(code))
-                await self.sync_one(sql_check_func=partial(self.sql_db.select_stock_margin, code=code),
-                                    mongo_query_func=partial(self.stock_db.load_stock_margin, sort=[('trade_date', 1)]),
-                                    sql_save_func=self.sql_db.insert_stock_margin,
-                                    build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
-                                                                  'code': code},
-                                    build_none_cond_func=lambda: {'code': code})
-                self.log.info('同步股票{}融资融券数据完成')
+                await self.add_task('stock_margin_{}'.format(code), self.sync_stock_margin(code=code))
 
             self.log.info('同步融资融券数据完成')
 
         if 'stock_index_info' in sync_tables:
-            self.log.info('开始同步股票指数代码')
-            await self.sync_one(sql_check_func=self.sql_db.select_index_info_codes,
-                                mongo_query_func=self.stock_db.load_index_info,
-                                sql_save_func=self.sql_db.insert_stock_index_info,
-                                build_cond_func=lambda data: {'code': {'$not': {'$in': [it['code'] for it in data]}}})
-            self.log.info('同步股票指数代码完成')
+            await self.add_task('stock_index_info', self.sync_stock_index_info())
 
         if 'stock_index_daily' in sync_tables:
             codes = await self.stock_db.load_index_info(projection=['code'])
             for code in codes.to_dict('records'):
                 code = code['code']
                 if 'stock_index_daily' in sync_tables:
-                    self.log.info('开始同步股票指数{}日线'.format(code))
-                    await self.sync_one(sql_check_func=partial(self.sql_db.select_stock_index_daily, code=code),
-                                        mongo_query_func=partial(self.stock_db.load_index_daily,
-                                                                 sort=[('trade_date', 1)]),
-                                        sql_save_func=self.sql_db.insert_stock_index_daily,
-                                        build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']},
-                                                                      'code': code},
-                                        build_none_cond_func=lambda: {'code': code})
-                    self.log.info('同步股票指数{}日线完成')
+                    await self.add_task('stock_index_daily_{}'.format(code), self.sync_stock_index_daily(code=code))
 
         if 'stock_ns_flow' in sync_tables:
-            self.log.info('开始同步股票南北资金流')
-            await self.sync_one(sql_check_func=self.sql_db.select_stock_ns_flow,
-                                mongo_query_func=partial(self.stock_db.load_stock_north_south_flow,
-                                                         sort=[('trade_date', 1)]),
-                                sql_save_func=self.sql_db.insert_stock_ns_flow,
-                                build_cond_func=lambda data: {'trade_date': {'$gt': data['trade_date']}})
-            self.log.info('同步股票南北资金流完成')
+            await self.add_task('stock_ns_flow', self.sync_stock_ns_flow())
 
         if 'stock_his_divend' in sync_tables:
-            self.log.info('开始历史分红数据')
-            await self.sync_one(sql_check_func=self.sql_db.select_stock_his_divend,
-                                mongo_query_func=partial(self.stock_db.load_stock_his_divend, sort=[('trade_date', 1)]),
-                                before_sql_save_func=self.sql_db.delete_stock_his_divend,
-                                sql_save_func=self.sql_db.insert_stock_his_divend,
-                                build_cond_func=lambda data: {'sync_date': {'$gt': data['sync_date']}})
-            self.log.info('历史分红数据完成')
+            await self.add_task('stock_ns_flow', self.sync_stock_his_divend())
 
         if 'stock_sw_index_info' in sync_tables:
-            self.log.info('开始同步申万行业数据')
-            await self.sync_one(sql_check_func=self.sql_db.select_stock_sw_index_info_codes,
-                                mongo_query_func=self.stock_db.load_sw_index_info,
-                                sql_save_func=self.sql_db.insert_stock_sw_index_info,
-                                build_cond_func=lambda data: {
-                                    'index_code': {'$not': {'$in': [it['index_code'] for it in data]}}})
-            self.log.info('同步申万行业数据完成')
+            await self.add_task('stock_ns_flow', self.sync_sw_index_info())
 
-        self.log.info('同步股票数据完成')
+        await self.queue.join()
+        self.log.info('同步数据完成')
 
 
 if __name__ == '__main__':
@@ -240,4 +313,4 @@ if __name__ == '__main__':
 
     a = Mongo2Sql()
     a.init()
-    run_until_complete(a.sync(tables='stock_margin'))
+    run_until_complete(a.sync(tables='fund_info'))

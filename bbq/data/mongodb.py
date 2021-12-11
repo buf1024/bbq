@@ -113,6 +113,23 @@ class MongoDB(ABC):
                 self.init()
         return 0
 
+    async def do_update_many(self, coll, filter=None, update=None, upsert=True):
+        for i in range(5):
+            try:
+                if update is None:
+                    return None
+                res = await coll.update_many(filter, {'$set': update}, upsert=upsert)
+                # return res.upserted_id
+                return res.matched_count if res.matched_count > 0 else (
+                    res.upserted_id if res.upserted_id is not None else 0)
+            except (ServerSelectionTimeoutError, AutoReconnect) as e:
+                self.log.error('mongodb 调用 {}, 连接异常: ex={}, call {}, {}s后重试'.format(self.do_update.__name__,
+                                                                                    e, traceback.format_exc(),
+                                                                                    (i + 1) * 5))
+                await asyncio.sleep((i + 1) * 5)
+                self.init()
+        return 0
+
     async def do_batch_update(self, data, func):
         upsert_list = []
         for item in data.to_dict('records'):

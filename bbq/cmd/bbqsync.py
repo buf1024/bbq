@@ -15,7 +15,7 @@ def main(sec=5):
                 stockp.wait(sec)
         except sub.TimeoutExpired:
             continue
-    m2sqlp = sub.Popen(['m2sql'])
+    m2sqlp = sub.Popen(['bbqm2sql'])
     while m2sqlp.returncode is None:
         try:
             m2sqlp.wait(sec)

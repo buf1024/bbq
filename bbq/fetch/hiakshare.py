@@ -172,3 +172,60 @@ def stock_margin_detail_szse(date: str = "20210728") -> pd.DataFrame:
         big_df["融资融券余额"] = pd.to_numeric(big_df["融资融券余额"])
     return big_df
 
+def fund_em_etf_fund_info(
+        fund: str = "511280", start_date: str = "20000101", end_date: str = "20500101"
+) -> pd.DataFrame:
+    """
+    东方财富网站-天天基金网-基金数据-场内交易基金-历史净值明细
+    http://fundf10.eastmoney.com/jjjz_511280.html
+    :param fund: 场内交易基金代码, 可以通过 fund_em_etf_fund_daily 来获取
+    :type fund: str
+    :param start_date: 开始统计时间
+    :type start_date: str
+    :param end_date: 结束统计时间
+    :type end_date: str
+    :return: 东方财富网站-天天基金网-基金数据-场内交易基金-历史净值明细
+    :rtype: pandas.DataFrame
+    """
+    url = "http://api.fund.eastmoney.com/f10/lsjz"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36",
+        "Referer": f"http://fundf10.eastmoney.com/jjjz_{fund}.html",
+    }
+    params = {
+        "callback": "jQuery183023608994033331676_1588250653363",
+        "fundCode": fund,
+        "pageIndex": "1",
+        "pageSize": "10000",
+        "startDate": "-".join([start_date[:4], start_date[4:6], start_date[6:]]),
+        "endDate": "-".join([end_date[:4], end_date[4:6], end_date[6:]]),
+        "_": round(time.time() * 1000),
+    }
+    r = requests.get(url, params=params, headers=headers)
+    text_data = r.text
+    data_json = demjson.decode(text_data[text_data.find("{") : -1])
+    temp_df = pd.DataFrame(data_json["Data"]["LSJZList"])
+    if not temp_df.empty:
+        temp_df.columns = [
+            "净值日期",
+            "单位净值",
+            "累计净值",
+            "_",
+            "_",
+            "_",
+            "日增长率",
+            "申购状态",
+            "赎回状态",
+            "_",
+            "_",
+            "_",
+            "_",
+        ]
+        temp_df = temp_df[["净值日期", "单位净值", "累计净值", "日增长率", "申购状态", "赎回状态"]]
+        temp_df["净值日期"] = pd.to_datetime(temp_df["净值日期"]).dt.date
+        temp_df["单位净值"] = pd.to_numeric(temp_df["单位净值"])
+        temp_df["累计净值"] = pd.to_numeric(temp_df["累计净值"])
+        temp_df["日增长率"] = pd.to_numeric(temp_df["日增长率"])
+    return temp_df
+
+

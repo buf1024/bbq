@@ -41,13 +41,14 @@ create
 index fund_daily_idx on fund_daily(code, trade_date);
 
 -- stock
--- 'code': '代码', 'name': '名称', 'listing_date': '上市日期', 'block': '板块'
+-- 'code': '代码', 'name': '名称', 'listing_date': '上市日期', 'block': '板块', 'is_margin': '是否融资融券标的'
 create table stock_info
 (
-    code char(8)     not null primary key,
-    name varchar(32) not null,
-    listing_date datetime not null,
-    block varchar(16) not null
+    code         char(8)     not null primary key,
+    name         varchar(32) not null,
+    listing_date datetime    not null,
+    block        varchar(16) not null,
+    is_margin    integer
 );
 
 -- 'code': '代码', 'trade_date': '交易日', 'close': '收盘价', 'open': '开盘价', 'high': '最高价', 'low': '最低价',
@@ -77,24 +78,24 @@ index stock_daily_idx on stock_daily(code, trade_date);
 --  'rzrqye': '融资融券余额(元)', 'rzrqyecz': '融资融券余额差值(元)'
 create table stock_margin
 (
-    id          integer        not null primary key auto_increment,
-    code        char(8)        not null,
-    name        varchar(32)    null,
-    trade_date  datetime       not null,
-    spj         decimal(16, 4) not null,
-    zdf         decimal(16, 4) not null,
-    rzye        decimal(16, 4) not null,
-    rzyezb      decimal(16, 4) not null,
-    rzmre       decimal(16, 4) not null,
-    rzche       decimal(16, 4) not null,
-    rzjme       decimal(16, 4) not null,
-    rqye        decimal(16, 4) not null,
-    rqyl        decimal(16, 4) not null,
-    rqmcl       decimal(16, 4) not null,
-    rqchl       decimal(16, 4) not null,
-    rqjmg       decimal(16, 4) not null,
-    rzrqye      decimal(16, 4) not null,
-    rzrqyecz    decimal(16, 4) not null
+    id         integer        not null primary key auto_increment,
+    code       char(8)        not null,
+    name       varchar(32) null,
+    trade_date datetime       not null,
+    spj        decimal(16, 4) not null,
+    zdf        decimal(16, 4) not null,
+    rzye       decimal(16, 4) not null,
+    rzyezb     decimal(16, 4) not null,
+    rzmre      decimal(16, 4) not null,
+    rzche      decimal(16, 4) not null,
+    rzjme      decimal(16, 4) not null,
+    rqye       decimal(16, 4) not null,
+    rqyl       decimal(16, 4) not null,
+    rqmcl      decimal(16, 4) not null,
+    rqchl      decimal(16, 4) not null,
+    rqjmg      decimal(16, 4) not null,
+    rzrqye     decimal(16, 4) not null,
+    rzrqyecz   decimal(16, 4) not null
 );
 create
 index stock_margin_idx on stock_margin(code, trade_date);
