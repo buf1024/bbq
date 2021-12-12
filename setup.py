@@ -24,7 +24,7 @@ setup(
     install_requires=[
         'numpy',
         'pandas',
-        'akshare',
+        'akshare==1.2.57',
         'opendatatools==1.0.0',
         'aiohttp==3.7.2',
         'motor',

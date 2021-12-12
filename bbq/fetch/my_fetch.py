@@ -819,8 +819,8 @@ if __name__ == '__main__':
     # tdf = aks.fetch_stock_info()
     # print(tdf)
 
-    tdf = aks.fetch_stock_adj_factor(code='sh600027')
-    print(tdf)
+    # tdf = aks.fetch_stock_adj_factor(code='sh600027')
+    # print(tdf)
 
     # tdf = aks.fetch_stock_daily_xueqiu(code='sh600063', start=None, end=datetime(year=2021, month=6, day=2))
     # print(tdf)
@@ -922,9 +922,9 @@ if __name__ == '__main__':
     # tdf = aks.fetch_fund_info(types=['ETF-场内'])
     # print(tdf)
 
-    # tdf = aks.fetch_fund_daily_xueqiu(code='513200',
+    # tdf = aks.fetch_fund_daily_xueqiu(code='159793',
     #                                   # start=datetime(year=1900, month=11, day=23),
-    #                                   end=datetime(year=2021, month=12, day=10))
+    #                                   end=datetime(year=2021, month=12, day=12))
     #
     # print(tdf)
 
