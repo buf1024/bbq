@@ -8,7 +8,7 @@ from os.path import dirname
 import os
 import asyncio
 import traceback
-from functools import wraps
+from functools import wraps, partial
 
 
 class Mongo2Sql:
@@ -28,7 +28,7 @@ class Mongo2Sql:
     def init(self,
              mongo_uri='mongodb://localhost:27017/',
              mysql_uri='mysql+pymysql://bbq:bbq@localhost/bbq',
-             concurrent_count=250):
+             concurrent_count=50):
         try:
             sql_dir = dirname(__file__) + os.sep + 'sync'
             self.sql_db = pugsql.module(sql_dir)
@@ -83,8 +83,9 @@ class Mongo2Sql:
         @wraps(func)
         async def wrapper(self, *args, **kwargs):
             try:
+                res = await func(self, *args, **kwargs)
                 await self.queue.get()
-                return await func(self, *args, **kwargs)
+                return res
             except Exception as e:
                 self.log.error('运行task异常: ex={} stack={}'.format(e, traceback.format_exc()))
             finally:
@@ -278,12 +279,10 @@ class Mongo2Sql:
                     await self.add_task('stock_fq_factor_{}'.format(code), self.sync_stock_fq_factor(code=code))
 
         if 'stock_margin' in sync_tables:
-            self.log.info('开始同步融资融券数据')
             codes = await self.stock_db.stock_margin.distinct('code')
             for code in codes:
-                await self.add_task('stock_margin_{}'.format(code), self.sync_stock_margin(code=code))
-
-            self.log.info('同步融资融券数据完成')
+                await self.add_task('stock_margin_{}'.format(code),
+                                    self.sync_stock_margin(code=code))
 
         if 'stock_index_info' in sync_tables:
             await self.add_task('stock_index_info', self.sync_stock_index_info())

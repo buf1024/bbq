@@ -61,4 +61,45 @@ select模块
 以上独立docker部署。
           
 
+```js
+// mongodb 查询慢，需要建索引
+db.fund_daily.createIndex({'trade_date': 1})
+db.fund_daily.createIndex({'code': 1})
+db.fund_daily.createIndex({'trade_date': -1, 'code': 1})
+
+db.fund_net.createIndex({'trade_date': 1})
+db.fund_net.createIndex({'code': 1})
+db.fund_net.createIndex({'trade_date': -1, 'code': 1})
+
+db.fund_info.createIndex({'code': 1})
+
+db.stock_info.createIndex({'code': 1})
+
+db.stock_margin.createIndex({'code': 1})
+db.stock_margin.createIndex({'trade_date': 1})
+db.stock_margin.createIndex({'trade_date': -1, 'code': 1})
+
+db.stock_daily.createIndex({'trade_date': 1})
+db.stock_daily.createIndex({'code': 1})
+db.stock_daily.createIndex({'trade_date': -1, 'code': 1})
+
+db.stock_index.createIndex({'trade_date': 1})
+db.stock_index.createIndex({'code': 1})
+db.stock_index.createIndex({'trade_date': -1, 'code': 1})
+
+db.stock_fq_factor.createIndex({'trade_date': 1})
+db.stock_fq_factor.createIndex({'code': 1})
+db.stock_fq_factor.createIndex({'trade_date': -1, 'code': 1})
+
+db.stock_fq_factor.createIndex({'trade_date': 1})
+db.stock_fq_factor.createIndex({'code': 1})
+db.stock_fq_factor.createIndex({'trade_date': -1, 'code': 1})
+
+db.stock_index.createIndex({'code': 1})
+
+db.stock_index_daily.createIndex({'trade_date': 1})
+db.stock_index_daily.createIndex({'code': 1})
+db.stock_index_daily.createIndex({'trade_date': -1, 'code': 1})
+// 后续根据需要再添加
+```
 

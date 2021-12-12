@@ -114,8 +114,9 @@ class Task(CommSync):
     async def run(self):
         try:
             self.log.info('开始运行task: {}'.format(self.name))
-            await self.data_sync.queue.get()
+            # await self.data_sync.queue.get()
             await self.task()
+            await self.data_sync.queue.get()
         except Exception as e:
             self.log.error('运行task异常: ex={} stack={}'.format(e, traceback.format_exc()))
         finally:
