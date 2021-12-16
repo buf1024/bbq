@@ -17,7 +17,7 @@ class AntClimbTree(Strategy):
         self.right_max_up = 0.02  # 右侧最大上涨
         self.right_max_down = 0.1  # 右侧最大下跌
 
-    async def init(self, **kwargs):
+    async def prepare(self, **kwargs):
         self.end_time = kwargs['end_time'] if kwargs is not None and 'end_time' in kwargs else self.end_time
         self.test_days = kwargs['test_days'] if kwargs is not None and 'test_days' in kwargs else self.test_days
         self.left_up = kwargs['left_up'] if kwargs is not None and 'left_up' in kwargs else self.left_up

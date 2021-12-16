@@ -16,7 +16,7 @@ class FundTopCode(Strategy):
         self.sort_by = None
 
     def desc(self):
-        return '  名称: 龙头选基金策略\n' + \
+        return '  名称: 龙头选基金策略(基于净值)\n' + \
                '  说明: 选择上涨趋势的选股\n' + \
                '  参数: days -- 最近交易天数(默认: 30)\n' + \
                '        min_days -- 最小净值天数(默认: 10)\n' + \
@@ -24,7 +24,7 @@ class FundTopCode(Strategy):
                '        score -- 线性拟合度(默认: None)\n' + \
                '        sort_by -- 结果排序字段(默认: None, 即: score)'
 
-    async def init(self, **kwargs):
+    async def prepare(self, **kwargs):
         """
         初始化接口
         :param kwargs:
@@ -70,7 +70,7 @@ class FundTopCode(Strategy):
     async def select(self):
         """
         根据策略，选择基金
-        :return: [{code, ctx...}, {code, ctx}, ...]/None
+        :return: code, name, coef(系数), score(分数), rise(累计涨幅)
         """
 
         data = await self.db.load_fund_net(limit=1, sort=[('trade_date', -1)])
@@ -113,9 +113,9 @@ class FundTopCode(Strategy):
                     got_data = dict(code=code, name=name, coef=a, score=score, rise=rise / 100)
                     self.log.info('got data: {}'.format(got_data))
                     select.append(got_data)
-            # else:
-            #     got_data = dict(code=code, name=name, coef=a, score=score, rise=rise / 100)
-            #     select.append(got_data)
+            else:
+                got_data = dict(code=code, name=name, coef=a, score=score, rise=rise / 100)
+                select.append(got_data)
 
         proc_bar.close()
 

@@ -38,29 +38,29 @@ def retry(func=None, *, attempts=3, sleep=5, name=None, prefix=None):
         return wrapper_cls
     return wrapper_func
 
-
-if __name__ == '__main__':
-    class TestMe:
-        @retry
-        def retry_ok(self, a):
-            print('a')
-
-        @retry
-        def retry_ex(self, a):
-            raise Exception('error')
-
-
-    t = TestMe()
-    t.retry_ok(1)
-
-    # t.retry_ex(2)
-
-    @retry(attempts=2, sleep=10)
-    def retry_x():
-        print('retry x')
-        raise Exception('ex')
-
-
-    retry_x()
-
-    print('ok')
+#
+# if __name__ == '__main__':
+#     class TestMe:
+#         @retry
+#         def retry_ok(self, a):
+#             print('a')
+#
+#         @retry
+#         def retry_ex(self, a):
+#             raise Exception('error')
+#
+#
+#     t = TestMe()
+#     t.retry_ok(1)
+#
+#     # t.retry_ex(2)
+#
+#     @retry(attempts=2, sleep=10)
+#     def retry_x():
+#         print('retry x')
+#         raise Exception('ex')
+#
+#
+#     retry_x()
+#
+#     print('ok')

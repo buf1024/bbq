@@ -141,8 +141,10 @@ class _MyLogger:
 _g_ctx = _LogContext()
 
 
-def setup_logger(file=None, level='debug', color=False):
+def setup_logger(file=None, level='debug', color=False, reset=False):
     global _g_ctx
+    if reset:
+        _g_ctx = _LogContext()
     _g_ctx.setup_logger(file=file, level=logging.getLevelName(level.upper()), color=color)
 
 

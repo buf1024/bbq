@@ -11,7 +11,7 @@ class StockNewFresh(Strategy):
         self.low_max_date = 10
         self.first_up = 2
 
-    async def init(self, **kwargs):
+    async def prepare(self, **kwargs):
         self.trade_date = kwargs['trade_date'] if kwargs is not None and 'trade_date' in kwargs else 60
         self.ratio_up = kwargs['ratio_up'] if kwargs is not None and 'ratio_up' in kwargs else 0.5
         self.low_max_date = kwargs['low_max_date'] if kwargs is not None and 'low_max_date' in kwargs else 10
@@ -105,6 +105,7 @@ class StockNewFresh(Strategy):
                 # self.log.debug(msg)
                 if chg > self.ratio_up and total <= self.low_max_date:
                     select_codes.append({'code': code,
+                                         'name': quotes[quotes['code'] == code].iloc[0]['name'],
                                          '上市上涨天数': first_up,
                                          '首高': daily.iloc[idxmax]['close'],
                                          '首高日期': daily.iloc[idxmax]['trade_date'],

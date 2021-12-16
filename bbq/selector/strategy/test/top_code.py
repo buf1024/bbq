@@ -15,20 +15,22 @@ class TopCode(Strategy):
         self.sort_by = None
 
     def desc(self):
-        return '  名称: 龙头选股策略\n' + \
+        return '  名称: 龙头选股策略(基于日线)\n' + \
                '  说明: 选择上涨趋势的选股\n' + \
-               '  参数: days -- 最近交易天数(默认: 30)\n' + \
+               '  参数: select_count  -- 选择个数(默认20)\n' + \
+               '        days -- 最近交易天数(默认: 30)\n' + \
                '        min_days -- 最小上市天数(默认: 10)\n' + \
                '        coef -- 线性拟合系数(默认: None)\n' + \
                '        score -- 线性拟合度(默认: None)\n' + \
                '        sort_by -- 结果排序字段(默认: None, 即: score)'
 
-    async def init(self, **kwargs):
+    async def prepare(self, **kwargs):
         """
         初始化接口
         :param kwargs:
         :return: True/False
         """
+        await super(TopCode, self).prepare()
         self.days = kwargs['days'] if kwargs is not None and 'days' in kwargs else 30
         self.min_days = kwargs['min_days'] if kwargs is not None and 'min_days' in kwargs else 10
         self.coef = kwargs['coef'] if kwargs is not None and 'coef' in kwargs else None
@@ -65,7 +67,7 @@ class TopCode(Strategy):
     async def select(self):
         """
         根据策略，选择股票
-        :return: [{code, ctx...}, {code, ctx}, ...]/None
+        :return: code, name, coef(系数), score(分数), rise(累计涨幅)
         """
         codes = None
         if isinstance(self.db, StockDB):
@@ -98,9 +100,9 @@ class TopCode(Strategy):
                     got_data = dict(code=item['code'], name=item['name'], coef=a, score=score, rise=rise / 100)
                     self.log.info('got you: {}'.format(got_data))
                     select.append(got_data)
-            # else:
-            #     select.append(dict(code=item['code'], name=item['name'], coef=a, score=score, rise=rise / 100))
-            #
+            else:
+                select.append(dict(code=item['code'], name=item['name'], coef=a, score=score, rise=rise / 100))
+
         proc_bar.close()
         df = None
         if len(select) > 0:

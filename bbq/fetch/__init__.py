@@ -7,7 +7,7 @@ from .sina import Sina
 from typing import List
 
 my_fetch = MyFetch()
-eastmoney_fetch = FundEastmoney()
+eastmoney_fund_fetch = FundEastmoney()
 sina_fetch = Sina()
 
 fetch_stock_listing_date = my_fetch.fetch_stock_listing_date
@@ -44,22 +44,3 @@ def fetch_index_info(codes: List[str] = None) -> pd.DataFrame:
 
 is_trade_date = is_trade_date
 
-__all__ = [
-    'fetch_stock_listing_date',
-    'fetch_stock_info',
-    'fetch_stock_daily',
-    'fetch_stock_index',
-    'fetch_stock_index_daily',
-    'fetch_stock_north_south_flow',
-    'fetch_stock_his_divend',
-    'fetch_stock_sw_index_info',
-    'fetch_stock_rt_quote',
-    'fetch_stock_new_quote',
-    'fetch_stock_adj_factor',
-    'fetch_stock_minute',
-    'fetch_fund_net',
-    'fetch_fund_info',
-    'fetch_fund_daily',
-    'fetch_index_info',
-    'is_trade_date'
-]

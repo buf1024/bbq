@@ -78,8 +78,10 @@ def run_until_complete(*coro):
             loop.close()
 
 
-def setup_log(conf_dict, file_name):
-    log.setup_logger(file=conf_dict['log']['path'] + os.sep + file_name, level=conf_dict['log']['level'])
+def setup_log(conf_dict, file_name, reset=False):
+    log.setup_logger(file=conf_dict['log']['path'] + os.sep + file_name,
+                     level=conf_dict['log']['level'],
+                     reset=reset)
     logger = log.get_logger()
     logger.debug('初始化数日志')
 
@@ -137,19 +139,19 @@ def get_facility(data_dict, name):
     return d[name_pair[1]]
 
 
-if __name__ == '__main__':
-
-    sys.path.append('~/tmp/hellome')
-
-
-    @singleton
-    class B:
-        def __init__(self, js=None):
-            print('class a')
-
-
-    print('cls b1={}, b2={}'.format(id(B()), id(B())))
-
-    st = load_strategy('~/tmp/hellome', '')
-
-    print(st)
+# if __name__ == '__main__':
+#
+#     sys.path.append('~/tmp/hellome')
+#
+#
+#     @singleton
+#     class B:
+#         def __init__(self, js=None):
+#             print('class a')
+#
+#
+#     print('cls b1={}, b2={}'.format(id(B()), id(B())))
+#
+#     st = load_strategy('~/tmp/hellome', '')
+#
+#     print(st)

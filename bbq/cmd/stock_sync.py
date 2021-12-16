@@ -200,11 +200,11 @@ class StockMarginTask(Task):
 
             if self.code[:2] == 'sh':
                 delta = last_trade_date - sync_start_date
-                if delta.days >= 0:
+                if delta.days >= 1:
                     need_sync = True
             if self.code[:2] == 'sz':
                 delta = last_trade_date - sync_start_date
-                if delta.days >= 1:
+                if delta.days >= 2:
                     need_sync = True
         if not need_sync:
             return

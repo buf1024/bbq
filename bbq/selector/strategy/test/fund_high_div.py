@@ -21,7 +21,7 @@ class FundHighDiv(Strategy):
                '        min_count -- 分红次数(默认: 2)\n' + \
                '        sort_by -- 结果排序字段(默认: None, 即: rate, rate/count)'
 
-    async def init(self, **kwargs):
+    async def prepare(self, **kwargs):
         """
         初始化接口
         :param kwargs:

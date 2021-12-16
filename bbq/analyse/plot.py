@@ -310,20 +310,24 @@ def my_plot(data: pd.DataFrame, marks=None):
                     continue
                 index = item['trade_date'].strftime('%Y/%m/%d')[2:]
                 x_index.append(index)
-                y_index.append(data[data['trade_date'] == item['trade_date']].iloc[0]['high'])
+                y_tmp_data = data[data['trade_date'] == item['trade_date']]
+                if y_tmp_data.shape[0] <= 0:
+                    continue
+                y_index.append(y_tmp_data.iloc[0]['high'])
                 tips[index] = item['tip'].replace('\n', '<br>')
 
-            scatter = plot_chart(chart_cls=Scatter,
-                                 x_index=x_index, y_data=y_index,
-                                 symbol=symbol, symbol_size=15,
-                                 itemstyle_opts=opts.ItemStyleOpts(color=color),
-                                 tooltip_opts=opts.TooltipOpts(formatter=JsCode(
-                                     """function (param){
-                                        var obj=param['data'];
-                                        return '(' + obj[0] + ', ' + obj[1].toFixed(2) + ')<br>' + tips[obj[0]];
-                                    }"""
-                                 )))
-            scatters.append(scatter)
+            if 0 < len(x_index) == len(y_index):
+                scatter = plot_chart(chart_cls=Scatter,
+                                     x_index=x_index, y_data=y_index,
+                                     symbol=symbol, symbol_size=15,
+                                     itemstyle_opts=opts.ItemStyleOpts(color=color),
+                                     tooltip_opts=opts.TooltipOpts(formatter=JsCode(
+                                         """function (param){
+                                            var obj=param['data'];
+                                            return '(' + obj[0] + ', ' + obj[1].toFixed(2) + ')<br>' + tips[obj[0]];
+                                        }"""
+                                     )))
+                scatters.append(scatter)
 
     overlap = ['ma5', 'ma10', 'ma20', 'ma30']
     if tips is not None and scatters is not None:
@@ -331,7 +335,7 @@ def my_plot(data: pd.DataFrame, marks=None):
 
     return plot_grid(data=data, title='日线', overlap=overlap,
                      chart1=plot_volume(data, is_grid=True),
-                     jscode='var tips = {}'.format(tips))
+                     jscode='var tips = {}'.format(tips if tips is not None else {}))
 
 
 def plot_grid(data: pd.DataFrame, title=None, overlap=None, chart1=None, jscode=None):
@@ -373,7 +377,7 @@ if __name__ == '__main__':
     from decimal import Decimal
 
 
-    async def test():
+    async def _test1():
         fund, stock, mysql = default(log_level='error')
         df = mysql.execute("select a.name, b.* from stock_info a left join stock_daily b on a.code = b.code "
                            "where a.code = 'sh601179' order by b.trade_date desc limit 60",
@@ -395,7 +399,21 @@ if __name__ == '__main__':
         line = my_plot(df, marks=[
             {'color': up_color(), 'data': [{'trade_date': datetime(year=2021, month=9, day=1), 'tip': '测试\n测试'},
                                            {'trade_date': datetime(year=2021, month=8, day=26), 'tip': '测试2\n测试2'}]}])
+
         line.render('/Users/luoguochun/Downloads/a.html')
 
 
-    run_until_complete(test())
+    async def _test2():
+        fund, stock, mysql = default(log_level='error')
+        df = mysql.execute(
+            "select a.name, b.code, b.trade_date, b.close, b.open, b.high, b.low, b.volume, b.turnover, b.hfq_factor "
+            "from stock_info a left join stock_daily b on a.code = b.code "
+            "where a.code = 'sh600519' order by b.trade_date desc limit 60",
+            DataFrame())
+        df = df.sort_values(by='trade_date', ascending=True)
+
+        line = my_plot(df)
+        line.render('/Users/luoguochun/Downloads/b.html')
+
+
+    run_until_complete(_test2())
