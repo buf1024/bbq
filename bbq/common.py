@@ -109,7 +109,7 @@ def load_cmd_yml(value):
     return js
 
 
-def init_facility(data_dict, data_builtin, paths):
+def prepare_strategy(data_dict, data_builtin, paths):
     builtin_dict = data_dict['builtin']
     if len(builtin_dict) == 0:
         strategy_data = load_strategy(*data_builtin)
@@ -126,7 +126,7 @@ def init_facility(data_dict, data_builtin, paths):
                 external_dict.update(strategy_data)
 
 
-def get_facility(data_dict, name):
+def get_strategy(data_dict, name):
     name_pair = name.split(':')
     if len(name_pair) != 2:
         return None
@@ -138,6 +138,14 @@ def get_facility(data_dict, name):
 
     return d[name_pair[1]]
 
+
+def is_alive(pid):
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    else:
+        return True
 
 # if __name__ == '__main__':
 #

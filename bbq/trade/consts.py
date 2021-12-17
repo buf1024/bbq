@@ -33,6 +33,9 @@ evt_sig_cancel = 'evt_sig_cancel'
 evt_sig_buy = 'evt_sig_buy'
 evt_sig_sell = 'evt_sig_sell'
 
+# 订阅行情事件
+evt_quot_codes = 'evt_quot_codes'
+
 # 内部终止事件
 evt_term = '__evt_term'
 

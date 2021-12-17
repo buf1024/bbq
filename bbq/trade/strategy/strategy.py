@@ -10,6 +10,7 @@ class Strategy(BaseActionObj):
     1. evt_sig_cancel 取消委托
     2. evt_sig_buy 委托买
     3. evt_sig_sell 委托卖
+    4. evt_quot_codes 订阅行情
     """
 
     def __init__(self, strategy_id, account: Account):

@@ -30,7 +30,7 @@ class TradeDB(MongoDB):
         'signal_info': {'account_id': '账户id', 'signal_id': '信号id',
                         'source': '信号源, risk/strategy/broker/robot', 'source_name': '友好显示名称',
                         'signal': '信号: sell, buy, cancel', 'name': '股票名称', 'code': '股票代码',
-                        'price': '价', 'volume': '量', 'entrust_id': '委托ID', 'time': '信号时间'},
+                        'price': '价', 'volume': '量', 'desc': '描述', 'entrust_id': '委托ID', 'time': '信号时间'},
 
         # 委托信息
         'entrust_info': {'account_id': '账户id', 'entrust_id': '委托ID', 'name': '股票名称', 'code': '股票代码',

@@ -34,3 +34,10 @@ class BaseActionObj(BaseObj):
 
     async def cancel(self, sig):
         await self.emit('signal', consts.evt_sig_cancel, sig)
+
+    async def quot_subs(self, *codes):
+        """
+        订阅新的代码行情
+        """
+        if len(codes) > 0:
+            await self.emit('quotation', consts.evt_quot_codes, codes)

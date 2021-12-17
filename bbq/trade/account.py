@@ -3,7 +3,7 @@ from bbq.trade.tradedb import TradeDB
 from bbq.trade.base_obj import BaseObj
 from bbq.trade.broker import get_broker
 from bbq.trade.risk import get_risk
-from bbq.trade.strategy import get_strategy
+from bbq.trade.strategy import get_trade_strategy
 from bbq.trade.entrust import Entrust
 from typing import Dict, Optional, Tuple, List
 from bbq.trade.position import Position
@@ -118,7 +118,7 @@ class Account(BaseObj):
             self.log.error('init risk failed')
             return False
 
-        cls = get_strategy(strategy_id)
+        cls = get_trade_strategy(strategy_id)
         if cls is None:
             self.log.error('strategy_id={} not data found'.format(strategy_id))
             return False
@@ -201,6 +201,7 @@ class Account(BaseObj):
         self.log.info(f'account on quot, event={evt}, payload={payload}')
         if evt == consts.evt_morning_start or evt == consts.evt_noon_start:
             self.is_trading = True
+
         if evt == consts.evt_morning_end or evt == consts.evt_noon_end:
             self.is_trading = False
 

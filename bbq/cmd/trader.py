@@ -3,14 +3,17 @@ from bbq.data.stockdb import StockDB
 from bbq.data.funddb import FundDB
 from bbq.config import *
 import signal
+import os
 import click
 from bbq.trade.trader import Trader
 from bbq.trade.tradedb import TradeDB
 
 
 @click.command()
-@click.option('--conf', type=str, default='.config/bbq/config.yml', help='config file, default location: ~')
+@click.option('--conf', type=str, default='~/.config/bbq/config.yml', help='config file, default location: ~')
 def main(conf: str):
+    if conf is not None and '~' in conf:
+        conf = os.path.expanduser(conf)
     conf_file, conf_dict = init_config(conf)
     if conf_file is None or conf_dict is None:
         print('config file: {} not exists / load yaml config failed'.format(conf))

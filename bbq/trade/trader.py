@@ -8,6 +8,7 @@ from bbq.trade.tradedb import TradeDB
 from typing import Dict, Optional
 from bbq.trade.account import Account
 from datetime import datetime, date
+from bbq.common import is_alive
 from bbq.trade.strategy_info import StrategyInfo
 from bbq.trade.quotation import BacktestQuotation, RealtimeQuotation
 from bbq.trade.msg.msg_push import MsgPush
@@ -16,6 +17,7 @@ import bbq.trade.consts as consts
 from bbq.trade.report import Report
 import yaml
 import traceback
+
 from bbq.trade.risk import *
 from bbq.trade.broker import *
 from bbq.trade.strategy import *
@@ -69,7 +71,7 @@ class Trader:
         self.depend_task[queue] -= 1
 
     async def start(self):
-        self.init_facility()
+        self.init_strategy()
 
         is_init = await self.init_account()
         if not is_init:
@@ -92,42 +94,42 @@ class Trader:
 
         self.running = True
 
-        await self.task_queue.put('quot_task')
+        await self.task_queue.put('quot_task(行情下发)')
         self.loop.create_task(self.quot_task())
 
-        await self.task_queue.put('quot_sub_task')
+        await self.task_queue.put('quot_sub_task(行情订阅)')
         self.loop.create_task(self.general_async_task('quotation', func=self.on_quot_sub))
 
-        await self.task_queue.put('account_task')
+        await self.task_queue.put('account_task(账户行情转发)')
         self.loop.create_task(self.account_task())
 
-        await self.task_queue.put('signal_task')
+        await self.task_queue.put('signal_task(交易信号)')
         self.loop.create_task(self.general_async_task('signal', func=self.account.on_signal))
 
-        await self.task_queue.put('risk_task')
+        await self.task_queue.put('risk_task(风控策略)')
         self.loop.create_task(self.general_async_task('risk',
                                                       func=self.account.risk.on_quot,
                                                       open_func=self.account.risk.on_open,
                                                       close_func=self.account.risk.on_close))
 
-        await self.task_queue.put('strategy_task')
+        await self.task_queue.put('strategy_task(交易策略)')
         self.loop.create_task(self.general_async_task('strategy',
                                                       func=self.account.strategy.on_quot,
                                                       open_func=self.account.strategy.on_open,
                                                       close_func=self.account.strategy.on_close))
 
-        await self.task_queue.put('broker_task')
+        await self.task_queue.put('broker_task(券商委托)')
         self.loop.create_task(self.general_async_task('broker',
                                                       func=self.account.broker.on_entrust,
                                                       open_func=self.account.broker.on_open,
                                                       close_func=self.account.broker.on_close))
 
-        await self.task_queue.put('broker_event_task')
+        await self.task_queue.put('broker_event_task(券商反馈事件)')
         self.loop.create_task(self.general_async_task('broker_event',
                                                       func=self.account.on_broker))
 
         if self.robot is not None:
-            await self.task_queue.put('robot_task')
+            await self.task_queue.put('robot_task(机器运维)')
             self.loop.create_task(self.general_async_task('robot',
                                                           func=self.robot.on_robot,
                                                           open_func=self.robot.on_open,
@@ -223,12 +225,12 @@ class Trader:
 
         quot_opt = self.config['trade']['quotation'] if self.config['trade']['quotation'] is not None else None
         if quot_opt is not None:
-            if 'start_date' in quot_opt and isinstance(quot_opt['start_date'], date):
-                d = quot_opt['start_date']
-                quot_opt['start_date'] = datetime(year=d.year, month=d.month, day=d.day)
-            if 'end_date' in quot_opt and isinstance(quot_opt['end_date'], date):
-                d = quot_opt['end_date']
-                quot_opt['end_date'] = datetime(year=d.year, month=d.month, day=d.day)
+            if 'start-date' in quot_opt and isinstance(quot_opt['start-date'], date):
+                d = quot_opt['start-date']
+                quot_opt['start-date'] = datetime(year=d.year, month=d.month, day=d.day)
+            if 'end-date' in quot_opt and isinstance(quot_opt['end-date'], date):
+                d = quot_opt['end-date']
+                quot_opt['end-date'] = datetime(year=d.year, month=d.month, day=d.day)
 
             if self.is_backtest():
                 account.start_time = quot_opt['start-date']
@@ -272,7 +274,7 @@ class Trader:
             self.log.error('strategy_id not specific')
             return None
 
-        cls = get_strategy(strategy_id)
+        cls = get_trade_strategy(strategy_id)
         if cls is None:
             self.log.error('strategy_id={} not data found'.format(strategy_id))
             return None
@@ -297,6 +299,12 @@ class Trader:
 
         return account
 
+    @staticmethod
+    def write_pid(acct_id):
+        path = os.sep.join([tempfile.gettempdir(), acct_id])
+        with open(path, 'w') as f:
+            f.write(str(os.getpid()))
+
     async def init_account(self):
         trade_dict = self.config['trade']
         acct_id, cat, typ = trade_dict['account-id'], trade_dict['category'], trade_dict['type']
@@ -305,6 +313,14 @@ class Trader:
             return False
 
         if not self.is_backtest() and (acct_id is not None and len(acct_id) > 0):
+            path = os.sep.join([tempfile.gettempdir(), acct_id])
+            if os.path.exists(path):
+                with open(path) as f:
+                    pid = int(f.readline())
+                    if is_alive(pid):
+                        self.log.error('{}账号的进程已经存在, pid={}'.format(acct_id, pid))
+                        return False
+
             # 直接load数据库
             accounts = await self.db_trade.load_account(
                 filter=dict(status=0, category=cat, type=typ, account_id=acct_id))
@@ -315,11 +331,13 @@ class Trader:
                     self.log.info('从数据库中初始或account失败, account_id={}'.format(acct_id))
                     self.account = None
                     return False
+
                 quot_opt = await self.db_trade.load_strategy(filter={'account_id': self.account.account_id},
                                                              projection=['quot_opt'], limit=1)
                 quot_opt = None if len(quot_opt) == 0 else quot_opt[0]
                 self.config['trade']['quotation'] = quot_opt['quot_opt']
 
+                self.write_pid(self.account.account_id)
                 return True
 
         # strategy_js, risk_js, broker_js = trade_dict['strategy'], trade_dict['risk'], trade_dict['broker']
@@ -338,6 +356,9 @@ class Trader:
                     f.write(yaml.dump(self.config))
                 trader = sub.Popen(['bbqtrader', '--conf', path])
                 self.log.info('process pid={}'.format(trader.pid))
+
+                self.write_pid(account.account_id)
+
             self.log.info('main process exit')
             os._exit(0)
 
@@ -347,9 +368,12 @@ class Trader:
             self.log.info('创建account失败')
             return None
 
+        if not self.is_backtest():
+            self.write_pid(self.account.account_id)
+
         return True
 
-    def init_facility(self):
+    def init_strategy(self):
         init_risk(self.config['trade']['strategy-path']['risk'])
         init_broker(self.config['trade']['strategy-path']['broker'])
         init_strategy(self.config['trade']['strategy-path']['trade'])
@@ -363,7 +387,8 @@ class Trader:
         return await self.quot.init(opt=opt)
 
     async def quot_task(self):
-        await self.task_queue.get()
+        task = await self.task_queue.get()
+        self.log.info('开始运行{}任务'.format(task))
         is_backtest = self.is_backtest()
         while self.running:
             evt, payload = await self.quot.get_quot()
@@ -380,12 +405,14 @@ class Trader:
                 sleep_sec = 0.01
             await asyncio.sleep(sleep_sec)
         self.task_queue.task_done()
+        self.log.info('任务{}运行完毕'.format(task))
 
     async def account_task(self):
         self.incr_depend_task('broker_event')
         self.incr_depend_task('broker')
 
-        await self.task_queue.get()
+        task = await self.task_queue.get()
+        self.log.info('开始运行{}任务'.format(task))
         queue = self.queue['account']
         while self.is_running('account'):
             pre_evt, pre_payload = None, None
@@ -437,13 +464,16 @@ class Trader:
         self.decr_depend_task('broker')
 
         self.task_queue.task_done()
+        self.log.info('任务{}运行完毕'.format(task))
 
     async def general_async_task(self, queue, func, open_func=None, close_func=None):
         queue_name = queue
         if queue_name in ['signal', 'risk', 'strategy', 'robot']:
             self.incr_depend_task('account')
 
-        await self.task_queue.get()
+        task = await self.task_queue.get()
+        self.log.info('开始运行{}任务'.format(task))
+
         queue = self.queue[queue]
         while self.is_running(queue_name):
             if self.running:
@@ -479,3 +509,4 @@ class Trader:
             self.decr_depend_task('account')
 
         self.task_queue.task_done()
+        self.log.info('任务{}运行完毕'.format(task))

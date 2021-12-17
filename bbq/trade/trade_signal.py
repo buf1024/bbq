@@ -9,7 +9,7 @@ class TradeSignal(BaseObj):
     def __init__(self, signal_id: str, account, *,
                  source: str = '',  source_name: str = '', signal: str = '',
                  code: str = '', name: str = '', price: float = 0.0,  volume: int = 0,
-                 time: datetime = None, entrust_id: str = ''):
+                 time: datetime = None, desc: str = '', entrust_id: str = ''):
         super().__init__(typ=account.typ, db_data=account.db_data, db_trade=account.db_trade, trader=account.trader)
         self.account = account
 
@@ -24,6 +24,7 @@ class TradeSignal(BaseObj):
 
         self.price = price
         self.volume = volume
+        self.desc = desc
 
         self.entrust_id = entrust_id  # sell / cancel 有效
 
@@ -32,7 +33,7 @@ class TradeSignal(BaseObj):
         data = {'account_id': self.account.account_id,
                 'signal_id': self.signal_id, 'name': self.name, 'code': self.code,
                 'source': self.source, 'source_name': self.source_name, 'signal': self.signal,
-                'volume': self.volume, 'price': self.price,
+                'volume': self.volume, 'price': self.price, 'desc': self.desc,
                 'time': self.time
                 }
         await self.db_trade.save_signal(data=data)
@@ -42,6 +43,6 @@ class TradeSignal(BaseObj):
         return {'account_id': self.account.account_id,
                 'signal_id': self.signal_id, 'name': self.name, 'code': self.code,
                 'source': self.source, 'source_name': self.source_name, 'signal': self.signal,
-                'volume': self.volume, 'price': self.price,
+                'volume': self.volume, 'price': self.price, 'desc': self.desc,
                 'time': self.time.strftime('%Y-%m-%d %H:%M:%S') if self.time is not None else None
                 }
