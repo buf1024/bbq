@@ -313,7 +313,7 @@ def my_plot(data: pd.DataFrame, marks=None):
                 y_tmp_data = data[data['trade_date'] == item['trade_date']]
                 if y_tmp_data.shape[0] <= 0:
                     continue
-                y_index.append(y_tmp_data.iloc[0]['high'])
+                y_index.append(y_tmp_data.iloc[0]['low']*0.975)
                 tips[index] = item['tip'].replace('\n', '<br>')
 
             if 0 < len(x_index) == len(y_index):

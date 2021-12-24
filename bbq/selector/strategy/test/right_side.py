@@ -6,11 +6,11 @@ from tqdm import tqdm
 
 
 class RightSide(Strategy):
-    def __init__(self, db):
-        super().__init__(db)
+    def __init__(self, db, *, test_end_date=None, select_count=999999):
+        super().__init__(db, test_end_date=test_end_date, select_count=select_count)
         self.min_trade_days = 60
         self.min_con_days = 3
-        self.max_con_down = -1.0
+        self.max_con_down = -2.0
         self.max_con_up = 20.0
         self.judge_days = 20
         self.judge_days_up = 15.0
@@ -20,10 +20,9 @@ class RightSide(Strategy):
     def desc():
         return '  名称: 右侧选股(基于日线)\n' + \
                '  说明: 选择右侧上涨的选股\n' + \
-               '  参数: select_count  -- 选择个数(默认20)\n' + \
-               '        min_trade_days -- 最小上市天数(默认: 60)\n' + \
+               '  参数: min_trade_days -- 最小上市天数(默认: 60)\n' + \
                '        min_con_days -- 最近最小连续上涨天数(默认: 3)\n' + \
-               '        max_con_down -- 视为上涨最大下跌百分比(默认: -1.0)\n' + \
+               '        max_con_down -- 视为上涨最大下跌百分比(默认: -2.0)\n' + \
                '        max_con_up -- 视为上涨最大上涨百分比(默认: 20.0)\n' + \
                '        judge_days -- judge_days内judge_days_up天数(默认: 20)\n' + \
                '        judge_days_up -- 最近judge_days内上涨百分比(默认: 15)\n' + \
@@ -91,10 +90,14 @@ class RightSide(Strategy):
             proc_bar.set_description('处理 {}'.format(item['code']))
             kdata = None
             if isinstance(self.db, StockDB):
-                kdata = await self.db.load_stock_daily(filter={'code': item['code']}, limit=self.min_trade_days,
+                kdata = await self.db.load_stock_daily(filter={'code': item['code'],
+                                                               'trade_date': {'$lte': self.test_end_date}},
+                                                       limit=self.min_trade_days,
                                                        sort=[('trade_date', -1)])
             else:
-                kdata = await self.db.load_fund_daily(filter={'code': item['code']}, limit=self.min_trade_days,
+                kdata = await self.db.load_fund_daily(filter={'code': item['code'],
+                                                              'trade_date': {'$lte': self.test_end_date}},
+                                                      limit=self.min_trade_days,
                                                       sort=[('trade_date', -1)])
             if kdata is None or kdata.shape[0] < self.min_trade_days:
                 continue
@@ -122,11 +125,16 @@ class RightSide(Strategy):
             if rise >= self.judge_days_up:
                 got_data = dict(code=item['code'], name=item['name'],
                                 close=now_close, judge_close=jd_close, cont_day=fit_days, rise=rise,
-                                condition='cont({}%~{}%): {}, {}days up: {}%'.format(
+                                condition='cont({}%~{}%): {}\n{}days up: {}%'.format(
                                     self.max_con_down, self.max_con_up, self.min_con_days,
                                     self.judge_days, self.judge_days_up))
                 self.log.info('got you: {}'.format(got_data))
                 select.append(got_data)
+
+                if len(select) >= self.select_count:
+                    proc_bar.update(100)
+                    self.log.info('select count: {}, break loop'.format(self.select_count))
+                    break
 
         proc_bar.close()
         df = None
@@ -140,6 +148,10 @@ class RightSide(Strategy):
 
 if __name__ == '__main__':
     from bbq import *
+
     fund, stock, mysql = default(log_level='error')
-    s = RightSide(db=stock)
-    run_until_complete(s.run(select_count=1000))
+    s = RightSide(db=stock, test_end_date='20211213')
+
+    async def tt():
+        await s.plot('sh600021')
+    run_until_complete(tt())

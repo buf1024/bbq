@@ -4,8 +4,8 @@ import pandas as pd
 
 
 class StockNewFresh(Strategy):
-    def __init__(self, db):
-        super().__init__(db)
+    def __init__(self, db, *, test_end_date=None, select_count=999999):
+        super().__init__(db, test_end_date=test_end_date, select_count=select_count)
         self.trade_date = 60
         self.ratio_up = 0.5
         self.low_max_date = 10
@@ -57,7 +57,9 @@ class StockNewFresh(Strategy):
 
         select_codes = []
         for code in codes:
-            daily = await self.db.load_stock_daily(filter={'code': code}, sort=[('trade_date', -1)])
+            daily = await self.db.load_stock_daily(filter={'code': code,
+                                                           'trade_date': {'$lte': self.test_end_date}},
+                                                   sort=[('trade_date', -1)])
             if daily is None:
                 self.log.error('没有k线数据')
                 continue

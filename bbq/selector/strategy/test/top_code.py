@@ -6,8 +6,8 @@ from tqdm import tqdm
 
 
 class TopCode(Strategy):
-    def __init__(self, db):
-        super().__init__(db)
+    def __init__(self, db, *, test_end_date=None, select_count=999999):
+        super().__init__(db, test_end_date=test_end_date, select_count=select_count)
         self.days = 30
         self.min_days = 10
         self.coef = None
@@ -18,8 +18,7 @@ class TopCode(Strategy):
     def desc():
         return '  名称: 龙头选股策略(基于日线)\n' + \
                '  说明: 选择上涨趋势的选股\n' + \
-               '  参数: select_count  -- 选择个数(默认20)\n' + \
-               '        days -- 最近交易天数(默认: 30)\n' + \
+               '  参数: days -- 最近交易天数(默认: 30)\n' + \
                '        min_days -- 最小上市天数(默认: 10)\n' + \
                '        coef -- 线性拟合系数(默认: None)\n' + \
                '        score -- 线性拟合度(默认: None)\n' + \
@@ -82,10 +81,14 @@ class TopCode(Strategy):
             proc_bar.set_description('处理 {}'.format(item['code']))
             kdata = None
             if isinstance(self.db, StockDB):
-                kdata = await self.db.load_stock_daily(filter={'code': item['code']}, limit=self.days,
+                kdata = await self.db.load_stock_daily(filter={'code': item['code'],
+                                                               'trade_date': {'$lte': self.test_end_date}},
+                                                       limit=self.days,
                                                        sort=[('trade_date', -1)])
             else:
-                kdata = await self.db.load_fund_daily(filter={'code': item['code']}, limit=self.days,
+                kdata = await self.db.load_fund_daily(filter={'code': item['code'],
+                                                              'trade_date': {'$lte': self.test_end_date}},
+                                                      limit=self.days,
                                                       sort=[('trade_date', -1)])
             if kdata is None or kdata.shape[0] < self.min_days:
                 continue

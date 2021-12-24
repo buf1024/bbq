@@ -4,8 +4,8 @@ from datetime import datetime
 
 
 class FundHighDiv(Strategy):
-    def __init__(self, db):
-        super().__init__(db)
+    def __init__(self, db, *, test_end_date=None, select_count=999999):
+        super().__init__(db, test_end_date=test_end_date, select_count=select_count)
 
         self.year = datetime.now().strftime('%Y')
         self.min_rate = 5

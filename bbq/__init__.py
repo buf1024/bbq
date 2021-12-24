@@ -14,6 +14,7 @@ from bbq.data import *
 from bbq.fetch import *
 from bbq.analyse import *
 from hisql import *
+import pandas as pd
 
 
 def default(log_level='debug'):
@@ -76,3 +77,7 @@ async def bbq_plot(db, code, limit, start=None, end=None):
 
     df = df.sort_values(by='trade_date', ascending=True)
     return my_plot(df)
+
+
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', None)

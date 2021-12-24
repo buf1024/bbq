@@ -7,8 +7,8 @@ from datetime import timedelta, datetime
 
 
 class FundTopCode(Strategy):
-    def __init__(self, db):
-        super().__init__(db)
+    def __init__(self, db, *, test_end_date=None, select_count=999999):
+        super().__init__(db, test_end_date=test_end_date, select_count=select_count)
         self.days = 30
         self.min_days = 10
         self.coef = None
