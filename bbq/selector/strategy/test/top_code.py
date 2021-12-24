@@ -14,7 +14,8 @@ class TopCode(Strategy):
         self.score = None
         self.sort_by = None
 
-    def desc(self):
+    @staticmethod
+    def desc():
         return '  名称: 龙头选股策略(基于日线)\n' + \
                '  说明: 选择上涨趋势的选股\n' + \
                '  参数: select_count  -- 选择个数(默认20)\n' + \
@@ -30,7 +31,7 @@ class TopCode(Strategy):
         :param kwargs:
         :return: True/False
         """
-        await super(TopCode, self).prepare()
+        await super(TopCode, self).prepare(**kwargs)
         self.days = kwargs['days'] if kwargs is not None and 'days' in kwargs else 30
         self.min_days = kwargs['min_days'] if kwargs is not None and 'min_days' in kwargs else 10
         self.coef = kwargs['coef'] if kwargs is not None and 'coef' in kwargs else None

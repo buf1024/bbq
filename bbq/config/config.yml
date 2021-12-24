@@ -8,12 +8,17 @@ mongo:
   pool: 5
 mysql:
   uri: mysql+pymysql://bbq:bbq@localhost/bbq
+# 推送，qq邮箱关联微信后，优先级高
 message:
   email:
-    host: smtp.126.com
-    port: 465
-    email: barbarianquant@126.com
+    smtp-host: smtp.126.com
+    smtp-port: 465
+    user: barbarianquant@126.com
     secret: DAZXJPKTVXRVOESQ
+#    secret: VOBPMUWKNJOZCNNI
+    notify: buf1024@qq.com
+    # 便于邮箱分组
+    prefix: bbquant
   wechat:
     token: SCT79912TBBpSAKVv98IdQ3RWqCoQQNW2
 monitor:
@@ -56,17 +61,14 @@ trade:
   risk:
     id: builtin:Dummy
     option: null
-#  broker:
-#    id: builtin:BrokerGitee
-#    option:
-#      token: a61f482097e041c30e05327fb8b0a2ae
-#      owner: heidonglgc
-#      repo: bbq-broker
-#      timeout: 3
   broker:
-    id: builtin:BrokerSimulate
+    id: builtin:BrokerGitee
     option:
       token: a61f482097e041c30e05327fb8b0a2ae
       owner: heidonglgc
       repo: bbq-broker
       timeout: 3
+#  broker:
+#    id: builtin:BrokerSimulate
+#    option: null
+

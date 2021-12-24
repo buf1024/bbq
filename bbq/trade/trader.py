@@ -85,13 +85,6 @@ class Trader:
             return None
         self.log.info('quotation inited')
 
-        if 'message' in self.config:
-            is_init = self.msg_push.init(**self.config['message'])
-            if not is_init:
-                self.log.error('初始化推送信息异常')
-                return None
-            self.log.info('push message inited')
-
         self.running = True
 
         await self.task_queue.put('quot_task(行情下发)')

@@ -18,6 +18,7 @@ class AntClimbTree(Strategy):
         self.right_max_down = 0.1  # 右侧最大下跌
 
     async def prepare(self, **kwargs):
+        await super().prepare(**kwargs)
         self.end_time = kwargs['end_time'] if kwargs is not None and 'end_time' in kwargs else self.end_time
         self.test_days = kwargs['test_days'] if kwargs is not None and 'test_days' in kwargs else self.test_days
         self.left_up = kwargs['left_up'] if kwargs is not None and 'left_up' in kwargs else self.left_up
@@ -44,15 +45,16 @@ class AntClimbTree(Strategy):
 
         return True
 
-    def desc(self):
+    @staticmethod
+    def desc():
         return '  名称: 蚂蚁上树形态(变形)策略\n' + \
                '  说明: 前n日，找出成交量最大而且是上涨的一天，右侧m天上涨或下跌平缓(成交量减少)，左侧x天持续上涨y%\n' + \
                '  参数: end_time -- 计算开始时间(默认当天)\n' \
                '        test_days -- 计算往前推的交易日(默认30)\n' \
-               '        left_up -- 左侧默认上涨幅度(默认0.1)' \
-               '        right_min_days -- 右侧计算最小天数(默认3)' \
-               '        right_max_days -- 右侧计算最大天数(默认10)' \
-               '        right_max_up -- 右侧计算最大上涨(默认0.02)' \
+               '        left_up -- 左侧默认上涨幅度(默认0.1)\n' \
+               '        right_min_days -- 右侧计算最小天数(默认3)\n' \
+               '        right_max_days -- 右侧计算最大天数(默认10)\n' \
+               '        right_max_up -- 右侧计算最大上涨(默认0.02)\n' \
                '        right_max_down -- 右侧计算最大下跌(默认0.01)'
 
     async def select(self):

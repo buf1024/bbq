@@ -7,6 +7,7 @@ import copy
 from bbq.trade.entrust import Entrust
 from datetime import datetime
 import bbq.trade.consts as consts
+from typing import Optional
 
 
 class BrokerGitee(Broker):
@@ -39,7 +40,7 @@ class BrokerGitee(Broker):
 
         self.issue_url = 'https://gitee.com/{owner}/{repo}/issues/{number}'
 
-        self.msg_gitee: MsgGitee = None
+        self.msg_gitee: Optional[MsgGitee] = None
 
         self.task_running = False
 
@@ -50,10 +51,7 @@ class BrokerGitee(Broker):
         if 'token' not in opt:
             self.log.error('miss gitee token')
             return False
-        self.msg_gitee = MsgGitee()
-        if not self.msg_gitee.init_gitee(token=opt['token']):
-            self.log.error('init gitee failed.')
-            return False
+        self.msg_gitee = MsgGitee(token=opt['token'])
 
         self.owner = opt['owner'] if 'owner' in opt else ''
         self.repo = opt['repo'] if 'repo' in opt else ''
@@ -72,6 +70,7 @@ class BrokerGitee(Broker):
         self.log.debug('broker gitee on_open, evt={}'.format(evt))
         if evt != consts.evt_morning_start and evt != consts.evt_noon_start:
             return
+        # 开市前，将隔天的无效委托关闭，读入当天委托
         trade_date = payload['trade_date']
         issues = await self.msg_gitee.list_issues(self.owner, self.repo)
         for issue in issues:
@@ -97,6 +96,7 @@ class BrokerGitee(Broker):
 
     async def on_close(self, evt, payload):
         self.log.debug('gitee broker on_close, evt={}'.format(evt))
+        # 休市将无效委托关闭
         if evt == consts.evt_noon_end:
             for entrust_dict in self.entrust.values():
                 entrust = entrust_dict['entrust']
@@ -146,7 +146,7 @@ class BrokerGitee(Broker):
             await self.msg_gitee.update_issue(owner=self.owner, repo=self.repo,
                                               number=entrust.broker_entrust_id,
                                               labels=labels)
-            await self.emit('broker_event', consts.evt_entrust_canceled, copy.copy(entrust))
+            await self.emit('broker_event', consts.evt_broker_cancelled, copy.copy(entrust))
 
     async def notify_error_comment(self, comment, text):
         body = '{}\n\n@{} {} 处理失败: {}'.format(comment['body'], self.owner,
@@ -191,7 +191,7 @@ class BrokerGitee(Broker):
                 self.entrust[entrust.entrust_id]['entrust'] = entrust
                 self.entrust[entrust.entrust_id]['issue'] = issue
 
-                await self.emit('broker_event', consts.evt_entrust_canceled, copy.copy(entrust))
+                await self.emit('broker_event', consts.evt_broker_cancelled, copy.copy(entrust))
                 if entrust.volume_cancel + entrust.volume_deal == entrust.volume:
                     labels.append('委托完成')
                     await self.msg_gitee.update_issue(self.owner, self.repo, number=number, labels=labels,

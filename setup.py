@@ -43,6 +43,7 @@ setup(
         'pymysql',
         'requests',
         'protobuf',
+        'ipython'
     ],
     entry_points={
         'console_scripts': [

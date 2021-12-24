@@ -12,10 +12,10 @@ class MsgGitee:
         'Content-Type': 'application/json;charset=UTF-8',
     }
 
-    def __init__(self):
+    def __init__(self, token):
         self.log = log.get_logger(self.__class__.__name__)
 
-        self.token = None
+        self.token = token
         self.api = {
             'list_issues': 'https://gitee.com/api/v5/repos/{owner}/{repo}/issues',
             'create_issue': 'https://gitee.com/api/v5/repos/{owner}/issues',
@@ -24,10 +24,6 @@ class MsgGitee:
             'create_comment': 'https://gitee.com/api/v5/repos/{owner}/{repo}/issues/{number}/comments',
             'update_comment': 'https://gitee.com/api/v5/repos/{owner}/{repo}/issues/comments/{id}',
         }
-
-    def init_gitee(self, token):
-        self.token = token
-        return True
 
     async def retry_http_do(self, method, url, data=None):
         for i in range(3):

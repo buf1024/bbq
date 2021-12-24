@@ -12,7 +12,7 @@ import queue
 
 
 class EmailUtil:
-    def __init__(self, user, passwd, pop_host, smtp_host, pop_port=995, smtp_port=465):
+    def __init__(self, user, passwd, pop_host=None, smtp_host=None, pop_port=995, smtp_port=465):
         self.pop_host = pop_host
         self.pop_port = pop_port
         self.smtp_host = smtp_host
@@ -21,6 +21,9 @@ class EmailUtil:
         self.passwd = passwd
 
     def recv_email(self, start_date: datetime = None, filter_from: str = None, filter_sub: str = None):
+        if self.pop_host is None or self.pop_port <= 0:
+            return None
+
         def _parser_from(msg):
             _, addr = parseaddr(msg['From'])
             # name, charset = decode_header(hdr)[0]
@@ -88,6 +91,9 @@ class EmailUtil:
         return msgs
 
     async def send_email(self, email, title, content):
+        if self.smtp_host is None or self.smtp_port <= 0:
+            return None
+
         message = MIMEMultipart('alternative')
         message['From'] = self.user
         message['To'] = email
@@ -128,20 +134,55 @@ class EmailUtilAsync(EmailUtil):
         self.res_queue.put(msgs)
 
 
-# if __name__ == '__main__':
-#     from bbq.common import run_until_complete
-#
-#     util = EmailUtilAsync(pop_host='pop.126.com', smtp_host='smtp.126.com', user='barbarianquant@126.com',
-#                           passwd='VOBPMUWKNJOZCNNI')
-#
-#
-#     async def _test1():
-#         emails = await util.recv_email(filter_sub='fuck')
-#         print(emails)
-#
-#     async def _test2():
-#         emails = await util.recv_email(filter_sub='fuck')
-#         print(emails)
-#
-#
-#     run_until_complete(_test1(), _test2())
+if __name__ == '__main__':
+    from bbq.common import run_until_complete
+    from bbq.trade import Entrust
+
+    util = EmailUtilAsync(pop_host='pop.126.com', smtp_host='smtp.126.com', user='barbarianquant@126.com',
+                          passwd='VOBPMUWKNJOZCNNI')
+
+
+    async def _test1():
+        emails = await util.recv_email(filter_sub='fuck')
+        print(emails)
+
+    async def _test2():
+        emails = await util.recv_email(filter_sub='马日入')
+        print(emails)
+
+    async def send_entrust():
+        class Account:
+            def __init__(self) -> None:
+                self.account_id = 123
+                self.typ = None
+                self.db_data = None
+                self.db_trade = None
+                self.trader = None
+        entrust = Entrust('123', Account())
+        entrust.name = '股票名称'
+        entrust.code = 'sh600063'
+        entrust.time = datetime.now()
+
+        entrust.broker_entrust_id = '112333'  # broker对应的委托id
+        entrust.type = 'buy'  # buy, sell, cancel
+        entrust.status = Entrust.stat_init  # init, 初始化 commit 已提交 deal 已成 part_deal 部成 cancel 已经取消
+
+        entrust.price = 1.0  # 价格
+        entrust.volume = 10  # 量
+
+        entrust.volume_deal = 0  # 已成量
+        entrust.volume_cancel = 0  # 已取消量
+
+        entrust.desc = '测试'
+        d = entrust.to_dict()
+        s = ''
+        for k, v in enumerate(d):
+            s = '{s}{k}: {v}br\n'.format(s=s, k=k, v=v)
+        body = s
+        print(datetime.now())
+        await util.send_email('barbarianquant@126.com', title='马日入', content=body)
+        print(datetime.now())
+        print('done')
+
+
+    run_until_complete(send_entrust())

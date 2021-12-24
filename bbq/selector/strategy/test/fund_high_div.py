@@ -13,7 +13,8 @@ class FundHighDiv(Strategy):
         self.sort_by = None
         self.interval = 5
 
-    def desc(self):
+    @staticmethod
+    def desc():
         return '  名称: 高分红选基金策略\n' + \
                '  说明: 选择高分红高的基金\n' + \
                '  参数: year -- 分红年份(默认: 当前年)\n' + \
@@ -27,6 +28,8 @@ class FundHighDiv(Strategy):
         :param kwargs:
         :return: True/False
         """
+        await super().prepare(**kwargs)
+
         if not isinstance(self.db, FundDB):
             self.log.error('数据库参数非基金数据库，只适合选基金')
             return False

@@ -19,7 +19,8 @@ class Strategy:
         self.test_end_date = test_end_date
         self.select_count = select_count
 
-    def desc(self):
+    @staticmethod
+    def desc():
         pass
 
     async def prepare(self, **kwargs):
@@ -59,6 +60,7 @@ class Strategy:
 
         data = await self.select()
         if data is not None and not data.empty:
+            print('select count: {}'.format(self.select_count))
             if len(data) > self.select_count:
                 data = data[:self.select_count]
         await self.destroy()

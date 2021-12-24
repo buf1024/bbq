@@ -137,9 +137,12 @@ class Report:
 
         self.trade_date = self._to_x_data(self.trade_date)
 
-        self.acct_his.to_csv('/Users/luoguochun/Downloads/acct_his.csv')
-        self.deal_his.to_csv('/Users/luoguochun/Downloads/deal_his.csv')
-        self.daily.to_csv('/Users/luoguochun/Downloads/daily.csv')
+        if self.acct_his is not None and not self.acct_his.empty:
+            self.acct_his.to_csv('/Users/luoguochun/Downloads/acct_his.csv')
+        if self.deal_his is not None and not self.deal_his.empty:
+            self.deal_his.to_csv('/Users/luoguochun/Downloads/deal_his.csv')
+        if self.daily is not None and not self.daily.empty:
+            self.daily.to_csv('/Users/luoguochun/Downloads/daily.csv')
         self.is_ready = True
         return self.is_ready
 

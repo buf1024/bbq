@@ -3,7 +3,7 @@ import traceback
 import bbq.log as log
 from bbq.data.mongodb import MongoDB
 from typing import Dict
-from bbq.message import Message
+from bbq.wechat_util import WechatUtil
 from bbq.monitor.strategy import init_strategy, get_strategy
 
 

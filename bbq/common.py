@@ -6,6 +6,7 @@ from functools import wraps
 import yaml
 import bbq.log as log
 import sys
+from IPython.display import display
 
 
 def singleton(cls):
@@ -147,19 +148,9 @@ def is_alive(pid):
     else:
         return True
 
-# if __name__ == '__main__':
-#
-#     sys.path.append('~/tmp/hellome')
-#
-#
-#     @singleton
-#     class B:
-#         def __init__(self, js=None):
-#             print('class a')
-#
-#
-#     print('cls b1={}, b2={}'.format(id(B()), id(B())))
-#
-#     st = load_strategy('~/tmp/hellome', '')
-#
-#     print(st)
+
+def pretty_df(df):
+    display(df.style.set_properties(**{
+        'text-align': 'left',
+        'white-space': 'pre-wrap'
+    }))

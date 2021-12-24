@@ -339,6 +339,7 @@ class Account(BaseObj):
             entrust.volume_deal = 0
             entrust.volume_cancel = 0
             entrust.signal = sig
+            entrust.desc = sig.desc
 
             self.entrust[entrust.entrust_id] = entrust
             await entrust.sync_to_db()

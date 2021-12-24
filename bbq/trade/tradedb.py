@@ -38,7 +38,7 @@ class TradeDB(MongoDB):
                          'type': '委托类型: buy, sell, cancel',
                          'status': '委托状态: init 初始化 commit 已提交 deal 已成 part_deal 部成 cancel 已取消',
                          'price': '价', 'volume': '量', 'volume_deal': '已成量', 'volume_cancel': '已取消量',
-                         'time': '委托时间'},
+                         'desc': '描述', 'time': '委托时间'},
 
         # 成交历史
         'deal_info': {'account_id': '账户id', 'deal_id': '成交ID', 'entrust_id': '委托ID', 'type': '成交类型',

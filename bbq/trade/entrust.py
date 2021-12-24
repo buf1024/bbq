@@ -26,6 +26,8 @@ class Entrust(BaseObj):
         self.volume_deal = 0  # 已成量
         self.volume_cancel = 0  # 已取消量
 
+        self.desc = ''
+
         self.signal = None
 
     async def sync_from_db(self) -> bool:
@@ -63,6 +65,7 @@ class Entrust(BaseObj):
         self.price = data['price']
         self.status = data['status']
         self.type = data['type']
+        self.desc = data['desc']
         self.broker_entrust_id = data['broker_entrust_id']
         self.time = data['time'] if isinstance(data['time'], datetime) else datetime.strptime(data['time'],
                                                                                               '%Y-%m-%d %H:%M:%S')
@@ -79,5 +82,6 @@ class Entrust(BaseObj):
                 'volume': self.volume,
                 'volume_deal': self.volume_deal,
                 'volume_cancel': self.volume_cancel,
+                'desc': self.desc,
                 'status': self.status
                 }

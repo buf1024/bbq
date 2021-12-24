@@ -15,7 +15,8 @@ class FundTopCode(Strategy):
         self.score = None
         self.sort_by = None
 
-    def desc(self):
+    @staticmethod
+    def desc():
         return '  名称: 龙头选基金策略(基于净值)\n' + \
                '  说明: 选择上涨趋势的选股\n' + \
                '  参数: days -- 最近交易天数(默认: 30)\n' + \
@@ -30,6 +31,8 @@ class FundTopCode(Strategy):
         :param kwargs:
         :return: True/False
         """
+        await super().prepare(**kwargs)
+
         if not isinstance(self.db, FundDB):
             self.log.error('数据库不合法，非FundDB')
             return False

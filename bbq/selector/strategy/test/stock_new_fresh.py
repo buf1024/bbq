@@ -12,6 +12,8 @@ class StockNewFresh(Strategy):
         self.first_up = 2
 
     async def prepare(self, **kwargs):
+        await super().prepare(**kwargs)
+
         self.trade_date = kwargs['trade_date'] if kwargs is not None and 'trade_date' in kwargs else 60
         self.ratio_up = kwargs['ratio_up'] if kwargs is not None and 'ratio_up' in kwargs else 0.5
         self.low_max_date = kwargs['low_max_date'] if kwargs is not None and 'low_max_date' in kwargs else 10
@@ -32,7 +34,8 @@ class StockNewFresh(Strategy):
 
         return True
 
-    def desc(self):
+    @staticmethod
+    def desc():
         return '  名称: 次新股板块策略\n' + \
                '  说明: 第一次新高后，根据新低反弹情况选股\n' + \
                '  参数: trade_date -- 上市交易最多天数(默认60)\n' \

@@ -25,7 +25,8 @@ class RandCode(Strategy):
 
         return True
 
-    def desc(self):
+    @staticmethod
+    def desc():
         return '  名称: 随机策略\n' + \
                '  说明: 随机选股测试策略\n' + \
                '  参数: select_count  -- 选择个数(默认20)\n' + \
