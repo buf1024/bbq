@@ -253,6 +253,7 @@ class Strategy:
         charts = await self.plots(data=data, limit=limit)
         if charts is None:
             return
+        os.makedirs(path, exist_ok=True)
         for k, v in charts.items():
-            file_path = os.sep.join([path, k, '.html'])
+            file_path = os.sep.join([path, k + '.html'])
             v.render(file_path)

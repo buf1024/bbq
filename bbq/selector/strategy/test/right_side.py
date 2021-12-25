@@ -10,13 +10,14 @@ class RightSide(Strategy):
     """
     看第1天，第2天是否为涨，形态逐渐放大，下落不多，可追
     """
+
     def __init__(self, db, *, test_end_date=None, select_count=999999):
         super().__init__(db, test_end_date=test_end_date, select_count=select_count)
         self.min_trade_days = 60
         self.min_con_days = 3
         self.max_con_down = -2.0
         self.max_con_up = 20.0
-        self.judge_days = 20
+        self.judge_days = 8
         self.judge_days_up = 15.0
         self.sort_by = None
 
@@ -28,8 +29,8 @@ class RightSide(Strategy):
                '        min_con_days -- 最近最小连续上涨天数(默认: 3)\n' + \
                '        max_con_down -- 视为上涨最大下跌百分比(默认: -2.0)\n' + \
                '        max_con_up -- 视为上涨最大上涨百分比(默认: 20.0)\n' + \
-               '        judge_days -- judge_days内judge_days_up天数(默认: 20)\n' + \
-               '        judge_days_up -- 最近judge_days内上涨百分比(默认: 15)\n' + \
+               '        judge_days -- judge_days内judge_days_up天数(默认: 8)\n' + \
+               '        judge_days_up -- 最近judge_days内上涨百分比(默认: 15.0)\n' + \
                '        sort_by -- 排序(默认: None, close -- 现价, rise -- 阶段涨幅)'
 
     async def prepare(self, **kwargs):
@@ -67,13 +68,6 @@ class RightSide(Strategy):
             return False
         self.is_prepared = True
         return self.is_prepared
-
-    async def destroy(self):
-        """
-        清理接口
-        :return: True/False
-        """
-        return True
 
     async def select(self):
         """
