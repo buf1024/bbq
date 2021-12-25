@@ -1,4 +1,7 @@
 import random
+from typing import Optional
+
+import pandas as pd
 
 from bbq.selector.strategy.strategy import Strategy
 
@@ -22,8 +25,8 @@ class RandCode(Strategy):
         self.db_load_func = self.db.load_stock_info \
             if self.market == 'stock' or self.market is None \
             else self.db.load_fund_info
-
-        return True
+        self.is_prepared = True
+        return self.is_prepared
 
     @staticmethod
     def desc():
@@ -44,3 +47,7 @@ class RandCode(Strategy):
         df = codes.iloc[choice]
 
         return df.reset_index(drop=True)
+
+    async def test(self, code: str, name: str = None) -> Optional[pd.DataFrame]:
+        df = await self.db_load_func(filter={'code', code}, projection=['code', 'name'])
+        return df

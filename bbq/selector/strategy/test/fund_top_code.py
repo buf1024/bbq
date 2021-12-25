@@ -61,7 +61,8 @@ class FundTopCode(Strategy):
             self.log.error('策略参数不合法')
             return False
 
-        return True
+        self.is_prepared = True
+        return self.is_prepared
 
     async def destroy(self):
         """

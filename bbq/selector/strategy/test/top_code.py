@@ -1,3 +1,5 @@
+from typing import Optional
+
 from bbq.selector.strategy.strategy import Strategy
 from bbq.data.stockdb import StockDB
 from bbq.analyse.tools import linear_fitting
@@ -54,8 +56,8 @@ class TopCode(Strategy):
         except ValueError:
             self.log.error('策略参数不合法')
             return False
-
-        return True
+        self.is_prepared = True
+        return self.is_prepared
 
     async def destroy(self):
         """
@@ -79,38 +81,50 @@ class TopCode(Strategy):
         proc_bar = tqdm(codes.to_dict('records'))
         for item in proc_bar:
             proc_bar.set_description('处理 {}'.format(item['code']))
-            kdata = None
-            if isinstance(self.db, StockDB):
-                kdata = await self.db.load_stock_daily(filter={'code': item['code'],
-                                                               'trade_date': {'$lte': self.test_end_date}},
-                                                       limit=self.days,
-                                                       sort=[('trade_date', -1)])
-            else:
-                kdata = await self.db.load_fund_daily(filter={'code': item['code'],
-                                                              'trade_date': {'$lte': self.test_end_date}},
-                                                      limit=self.days,
-                                                      sort=[('trade_date', -1)])
-            if kdata is None or kdata.shape[0] < self.min_days:
-                continue
-            kdata = kdata[::-1]
-
-            rise = round((kdata.iloc[-1]['close'] - kdata.iloc[0]['close']) * 100 / kdata.iloc[0]['close'], 2)
-            a, b, score, x_index, y_index = linear_fitting(kdata)
-            if a is None or b is None or x_index is None or y_index is None:
-                continue
-            a, b, score = round(a, 4), round(b, 4), round(score, 4)
-            if self.coef is not None and self.score is not None:
-                if a > self.coef and score > self.score:
-                    got_data = dict(code=item['code'], name=item['name'], coef=a, score=score, rise=rise / 100)
-                    self.log.info('got you: {}'.format(got_data))
-                    select.append(got_data)
-            else:
-                select.append(dict(code=item['code'], name=item['name'], coef=a, score=score, rise=rise / 100))
-
+            got_data = await self.test(code=item['code'], name=item['name'])
+            if got_data is not None:
+                select = select + got_data.to_dict('records')
+                if len(select) >= self.select_count:
+                    proc_bar.update(proc_bar.total)
+                    proc_bar.set_description('处理完成select_count={}'.format(self.select_count))
+                    self.log.info('select count: {}, break loop'.format(self.select_count))
+                    break
         proc_bar.close()
+
         df = None
         if len(select) > 0:
             select = sorted(select, key=lambda v: v[self.sort_by], reverse=True)
             df = pd.DataFrame(select)
 
+        return df
+
+    async def test(self, code: str, name: str = None) -> Optional[pd.DataFrame]:
+        load_daily_func, load_info_func = self.db.load_stock_daily, self.db.load_stock_info
+        if not isinstance(self.db, StockDB):
+            load_daily_func, load_info_func = self.db.load_fund_daily, self.db.load_fund_info
+
+        kdata = await load_daily_func(filter={'code': code,
+                                              'trade_date': {'$lte': self.test_end_date}},
+                                      limit=self.days,
+                                      sort=[('trade_date', -1)])
+        if kdata is None or kdata.shape[0] < self.min_days:
+            return None
+        kdata = kdata[::-1]
+
+        rise = round((kdata.iloc[-1]['close'] - kdata.iloc[0]['close']) * 100 / kdata.iloc[0]['close'], 2)
+        a, b, score, x_index, y_index = linear_fitting(kdata)
+        if a is None or b is None or x_index is None or y_index is None or score is None:
+            return None
+        a, b, score = round(a, 4), round(b, 4), round(score, 4)
+
+        if name is None:
+            name_df = await load_info_func(filter={'code': code}, limit=1)
+            if name_df is not None and not name_df.empty:
+                name = name_df.iloc[0]['name']
+        df = None
+        if self.coef is not None and self.score is not None:
+            if a > self.coef and score > self.score:
+                df = pd.DataFrame([dict(code=code, name=name, coef=a, score=score, rise=rise / 100)])
+        else:
+            df = pd.DataFrame([dict(code=code, name=name, coef=a, score=score, rise=rise / 100)])
         return df

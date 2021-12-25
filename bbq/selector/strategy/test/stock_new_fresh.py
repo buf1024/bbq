@@ -1,3 +1,5 @@
+from typing import Optional
+from tqdm import tqdm
 from bbq.fetch import fetch_stock_new_quote
 from bbq.selector.strategy.strategy import Strategy
 import pandas as pd
@@ -31,8 +33,8 @@ class StockNewFresh(Strategy):
         except ValueError:
             self.log.error('策略参数不为整数')
             return False
-
-        return True
+        self.is_prepared = True
+        return self.is_prepared
 
     @staticmethod
     def desc():
@@ -55,79 +57,93 @@ class StockNewFresh(Strategy):
         codes = [code for code in quotes['code'].tolist() if
                  await self.db.stock_daily.count_documents({'code': code}) <= self.trade_date]
 
-        select_codes = []
-        for code in codes:
-            daily = await self.db.load_stock_daily(filter={'code': code,
-                                                           'trade_date': {'$lte': self.test_end_date}},
-                                                   sort=[('trade_date', -1)])
-            if daily is None:
-                self.log.error('没有k线数据')
-                continue
-
-            # 计算第一次新高, 2020-10-10 - 2020-10-11 < 0 + > 0 -
-            diff = daily['close'].diff()[1:]
-            if len(diff) == 0:
-                continue
-            idxmax = daily.shape[0] - 1
-            first_up = 0
-            diff = diff.reset_index(drop=True)
-            for close_diff in reversed(diff):
-                # 开始跌
-                if close_diff > 0:
+        select = []
+        proc_bar = tqdm(codes)
+        for code in proc_bar:
+            proc_bar.set_description('处理 {}'.format(code))
+            got_data = await self.test(code=code, name=quotes[quotes['code'] == code].iloc[0]['name'])
+            if got_data is not None:
+                select = select + got_data.to_dict('records')
+                if len(select) >= self.select_count:
+                    proc_bar.update(proc_bar.total)
+                    proc_bar.set_description('处理完成select_count={}'.format(self.select_count))
+                    self.log.info('select count: {}, break loop'.format(self.select_count))
                     break
-                idxmax = idxmax - 1
-                first_up = first_up + 1
-
-            if idxmax > 0 and first_up > self.first_up:
-                daily_new = daily[:idxmax]
-                # 计算新高后第一次新低, 2020-10-10 - 2020-10-11  < 0 + > 0 -
-                diff = daily_new['close'].diff()[1:]
-                if len(diff) == 0:
-                    continue
-                idxmin = daily_new.shape[0] - 1
-                diff = diff.reset_index(drop=True)
-                for close_diff in reversed(diff):
-                    # 开始涨
-                    if close_diff < 0:
-                        break
-                    idxmin = idxmin - 1
-                if idxmin < 0:
-                    continue
-                # idxmin = daily_new['close'].idxmin()
-                diff = daily_new[:idxmin + 1]['close'].diff()[1:]
-                diff_up = [x for x in diff if x < 0]
-                total, up, down = len(diff), len(diff_up), len(diff) - len(diff_up)
-                chg = up * 1.0 / total if total > 0 else 0.0
-
-                total_chg = (daily.iloc[0]['close'] - daily_new.iloc[idxmin]['close']) / daily_new.iloc[idxmin]['close']
-                msg = '代码 {}, 上市上涨天数({}), 首高({}, {}), 首低({}, {}), 首低后{}交易日: 上升({}), 下降({}), ' \
-                      '上升比例({:.2f}%), 涨幅: {:.2f}%'.format(code, first_up,
-                                                          daily.iloc[idxmax]['close'],
-                                                          daily.iloc[idxmax]['trade_date'].strftime('%Y-%m-%d'),
-                                                          daily_new.iloc[idxmin]['close'],
-                                                          daily_new.iloc[idxmin]['trade_date'].strftime('%Y-%m-%d'),
-                                                          total, up, down, chg * 100, total_chg * 100)
-                # self.log.debug(msg)
-                if chg > self.ratio_up and total <= self.low_max_date:
-                    select_codes.append({'code': code,
-                                         'name': quotes[quotes['code'] == code].iloc[0]['name'],
-                                         '上市上涨天数': first_up,
-                                         '首高': daily.iloc[idxmax]['close'],
-                                         '首高日期': daily.iloc[idxmax]['trade_date'],
-                                         '首低': daily_new.iloc[idxmin]['close'],
-                                         '首低日期': daily_new.iloc[idxmin]['trade_date'],
-                                         '首低后交易日': total,
-                                         '上升': up,
-                                         '下降': down,
-                                         '上升比例': chg,
-                                         '涨幅': total_chg,
-                                         'msg': msg})
+        proc_bar.close()
         df = None
-        if len(select_codes) > 0:
-            select_codes = sorted(select_codes, key=lambda c: c['上升比例'], reverse=True)
-            df = pd.DataFrame(select_codes)
+        if len(select) > 0:
+            select = sorted(select, key=lambda c: c['上升比例'], reverse=True)
+            df = pd.DataFrame(select)
 
         return df
 
+    async def test(self, code: str, name: str = None) -> Optional[pd.DataFrame]:
+        daily = await self.db.load_stock_daily(filter={'code': code,
+                                                       'trade_date': {'$lte': self.test_end_date}},
+                                               sort=[('trade_date', -1)])
+        if daily is None:
+            return None
 
+        # 计算第一次新高, 2020-10-10 - 2020-10-11 < 0 + > 0 -
+        diff = daily['close'].diff()[1:]
+        if len(diff) == 0:
+            return None
+        idxmax = daily.shape[0] - 1
+        first_up = 0
+        diff = diff.reset_index(drop=True)
+        for close_diff in reversed(diff):
+            # 开始跌
+            if close_diff > 0:
+                break
+            idxmax = idxmax - 1
+            first_up = first_up + 1
 
+        if idxmax > 0 and first_up > self.first_up:
+            daily_new = daily[:idxmax]
+            # 计算新高后第一次新低, 2020-10-10 - 2020-10-11  < 0 + > 0 -
+            diff = daily_new['close'].diff()[1:]
+            if len(diff) == 0:
+                return None
+            idxmin = daily_new.shape[0] - 1
+            diff = diff.reset_index(drop=True)
+            for close_diff in reversed(diff):
+                # 开始涨
+                if close_diff < 0:
+                    break
+                idxmin = idxmin - 1
+            if idxmin < 0:
+                return None
+            # idxmin = daily_new['close'].idxmin()
+            diff = daily_new[:idxmin + 1]['close'].diff()[1:]
+            diff_up = [x for x in diff if x < 0]
+            total, up, down = len(diff), len(diff_up), len(diff) - len(diff_up)
+            chg = up * 1.0 / total if total > 0 else 0.0
+
+            total_chg = (daily.iloc[0]['close'] - daily_new.iloc[idxmin]['close']) / daily_new.iloc[idxmin]['close']
+            msg = '代码 {}, 上市上涨天数({}), 首高({}, {}), 首低({}, {}), 首低后{}交易日: 上升({}), 下降({}), ' \
+                  '上升比例({:.2f}%), 涨幅: {:.2f}%'.format(code, first_up,
+                                                      daily.iloc[idxmax]['close'],
+                                                      daily.iloc[idxmax]['trade_date'].strftime('%Y-%m-%d'),
+                                                      daily_new.iloc[idxmin]['close'],
+                                                      daily_new.iloc[idxmin]['trade_date'].strftime('%Y-%m-%d'),
+                                                      total, up, down, chg * 100, total_chg * 100)
+            # self.log.debug(msg)
+            if chg > self.ratio_up and total <= self.low_max_date:
+                if name is None:
+                    name_df = await self.db.load_stock_info(filter={'code': code}, limit=1)
+                    if name_df is not None and not name_df.empty:
+                        name = name_df.iloc[0]['name']
+                return pd.DataFrame([{'code': code,
+                                      'name': name,
+                                      '上市上涨天数': first_up,
+                                      '首高': daily.iloc[idxmax]['close'],
+                                      '首高日期': daily.iloc[idxmax]['trade_date'],
+                                      '首低': daily_new.iloc[idxmin]['close'],
+                                      '首低日期': daily_new.iloc[idxmin]['trade_date'],
+                                      '首低后交易日': total,
+                                      '上升': up,
+                                      '下降': down,
+                                      '上升比例': chg,
+                                      '涨幅': total_chg,
+                                      'msg': msg}])
+            return None
