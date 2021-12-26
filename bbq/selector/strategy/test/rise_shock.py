@@ -1,5 +1,4 @@
 from typing import Optional
-from bbq.data.stockdb import StockDB
 import pandas as pd
 from bbq.selector.strategy.strategy import Strategy
 

@@ -1,5 +1,4 @@
 from typing import Optional
-from tqdm import tqdm
 from bbq.fetch import fetch_stock_new_quote
 from bbq.selector.strategy.strategy import Strategy
 import pandas as pd

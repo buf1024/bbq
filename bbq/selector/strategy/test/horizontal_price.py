@@ -1,8 +1,5 @@
 from typing import Optional
-
 import pandas as pd
-from tqdm import tqdm
-from bbq.data.stockdb import StockDB
 from bbq.selector.strategy.strategy import Strategy
 
 

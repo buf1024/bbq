@@ -1,8 +1,6 @@
 import random
 from typing import Optional
-
 import pandas as pd
-
 from bbq.selector.strategy.strategy import Strategy
 
 

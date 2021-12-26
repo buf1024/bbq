@@ -1,10 +1,7 @@
 from typing import Optional
-
-from bbq.selector.strategy.strategy import Strategy
-from bbq.data.stockdb import StockDB
-from bbq.analyse.tools import linear_fitting
 import pandas as pd
-from tqdm import tqdm
+from bbq.analyse.tools import linear_fitting
+from bbq.selector.strategy.strategy import Strategy
 
 
 class TopCode(Strategy):
