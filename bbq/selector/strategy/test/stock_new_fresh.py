@@ -12,6 +12,7 @@ class StockNewFresh(Strategy):
         self.ratio_up = 0.5
         self.low_max_date = 10
         self.first_up = 2
+        self.sort_by = '上升比例'
 
     async def prepare(self, **kwargs):
         await super().prepare(**kwargs)
@@ -57,25 +58,8 @@ class StockNewFresh(Strategy):
         codes = [code for code in quotes['code'].tolist() if
                  await self.db.stock_daily.count_documents({'code': code}) <= self.trade_date]
 
-        select = []
-        proc_bar = tqdm(codes)
-        for code in proc_bar:
-            proc_bar.set_description('处理 {}'.format(code))
-            got_data = await self.test(code=code, name=quotes[quotes['code'] == code].iloc[0]['name'])
-            if got_data is not None:
-                select = select + got_data.to_dict('records')
-                if len(select) >= self.select_count:
-                    proc_bar.update(proc_bar.total)
-                    proc_bar.set_description('处理完成select_count={}'.format(self.select_count))
-                    self.log.info('select count: {}, break loop'.format(self.select_count))
-                    break
-        proc_bar.close()
-        df = None
-        if len(select) > 0:
-            select = sorted(select, key=lambda c: c['上升比例'], reverse=True)
-            df = pd.DataFrame(select)
-
-        return df
+        codes = pd.DataFrame({'code': codes})
+        return await self.do_select(codes=codes)
 
     async def test(self, code: str, name: str = None) -> Optional[pd.DataFrame]:
         daily = await self.db.load_stock_daily(filter={'code': code,
@@ -129,10 +113,7 @@ class StockNewFresh(Strategy):
                                                       total, up, down, chg * 100, total_chg * 100)
             # self.log.debug(msg)
             if chg > self.ratio_up and total <= self.low_max_date:
-                if name is None:
-                    name_df = await self.db.load_stock_info(filter={'code': code}, limit=1)
-                    if name_df is not None and not name_df.empty:
-                        name = name_df.iloc[0]['name']
+                name = await self.code_name(code=code, name=name)
                 return pd.DataFrame([{'code': code,
                                       'name': name,
                                       '上市上涨天数': first_up,

@@ -287,11 +287,12 @@ def plot_kline(data: pd.DataFrame, *, title: str = '日线', is_grid=False,
     return kline
 
 
-def my_plot(data: pd.DataFrame, marks=None):
+def my_plot(data: pd.DataFrame, overlap=None, marks=None):
     """
     plot图象观察
     :param marks: marks: [{color:xx, data:[{trade_date:.. tip:...}...]}]
     :param data:
+    :param overlap
     :return:
     """
 
@@ -329,7 +330,9 @@ def my_plot(data: pd.DataFrame, marks=None):
                                      )))
                 scatters.append(scatter)
 
-    overlap = ['ma5', 'ma10', 'ma20', 'ma30']
+    if overlap is None:
+        overlap = []
+    overlap = overlap + ['ma5', 'ma10', 'ma20', 'ma30']
     if tips is not None and scatters is not None:
         overlap = overlap + scatters
 

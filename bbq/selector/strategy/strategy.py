@@ -12,7 +12,7 @@ import os
 
 
 class Strategy:
-    def __init__(self, db, *, test_end_date=None, select_count=999999):
+    def __init__(self, db, *, test_end_date=None, select_count=999999, skip_kcb=True):
         """
 
         :param db: stock/fund/mysql db
@@ -37,6 +37,8 @@ class Strategy:
             if ex:
                 self.test_end_date = datetime(year=now.year, month=now.month, day=now.day)
         self.select_count = select_count
+        self.skip_kcb = skip_kcb
+        self.sort_by = None
         self.is_prepared = False
 
     @staticmethod
@@ -66,6 +68,8 @@ class Strategy:
                         ex = True
                 if ex:
                     self.test_end_date = def_test_end_date
+            if kwargs is not None and 'skip_kcb' in kwargs:
+                self.skip_kcb = kwargs['test_end_date']
         except ValueError:
             self.select_count = def_count
         return True
@@ -83,7 +87,11 @@ class Strategy:
         :return: code, name 必须返回的, 1day, 3day, 5day, 10day, latest的涨幅，如果有尽量返回
             [{code, name...}, {code, name}, ...]/None
         """
-        raise Exception('选股策略 {} 没实现选股函数'.format(self.__class__.__name__))
+        load_info_func = self.db.load_stock_info
+        if not isinstance(self.db, StockDB):
+            load_info_func = self.db.load_fund_info
+        codes = await load_info_func(projection=['code', 'name'])
+        return await self.do_select(codes=codes)
 
     async def test(self, code: str, name: str = None) -> Optional[pd.DataFrame]:
         """
@@ -125,6 +133,106 @@ class Strategy:
         if with_stat:
             data = await self.stat_data(data=data)
         return data
+
+    async def plot(self, code, *, limit=60, skip_test_end_date=True, s_data=None, marks=None):
+        """
+        plot图象观察
+        :param s_data dict
+        :param marks: [{color:xx, data:[{trade_date:.. tip:...}...]}]
+        :param code:
+        :param limit: k线数量
+        :param skip_test_end_date
+        :return:
+        """
+        data = await self.plot_data(code, limit, skip_test_end_date)
+        if data is None or data.empty:
+            return None
+
+        if marks is None and self.test_end_date is not None:
+            marks = []
+
+        if self.test_end_date is not None:
+            trade_date = self.test_end_date
+            while not is_trade_date(trade_date):
+                trade_date = trade_date + timedelta(days=-1)
+
+            tip = ''
+            if s_data is not None:
+                keys = ['1day', '3day', '5day', '10day', 'latest']
+                for key, val in s_data.items():
+                    if key in keys and val is not None and not np.isnan(val):
+                        tmp_tip = '{} 涨幅:&nbsp;&nbsp;{}%'.format(key, val)
+                        if len(tip) == 0:
+                            tip = tmp_tip
+                            continue
+                        tip = '{}\n{}'.format(tip, tmp_tip)
+
+            marks.append({'color': up_color(),
+                          'symbol': 'diamond',
+                          'data': [{'trade_date': trade_date,
+                                    'tip': '留意后面涨幅\n{}'.format(tip)}]})
+
+        return my_plot(data=data, marks=marks)
+
+    async def plots(self, data, limit=60, skip_test_end_date=True):
+        if data is None:
+            return None
+
+        charts = {}
+        items = data.to_dict('records')
+        for item in items:
+            chart = await self.plot(code=item['code'], limit=limit, skip_test_end_date=skip_test_end_date, s_data=item)
+            if chart is not None:
+                charts[item['code']] = chart
+        return charts
+
+    async def plots_to_path(self, path, data, limit=60):
+        charts = await self.plots(data=data, limit=limit)
+        if charts is None:
+            return
+        os.makedirs(path, exist_ok=True)
+        for k, v in charts.items():
+            file_path = os.sep.join([path, k + '.html'])
+            v.render(file_path)
+
+    @staticmethod
+    def export_to_path(path, data):
+        codes = data['code'].to_list()
+        cont = '\n'.join(codes)
+        with open(path, mode='w') as f:
+            f.write(cont)
+
+    # 以下为保护方法，外面不要调用
+    # 不加下划线变为protected是因为，加了之后编辑器无法提示
+    async def code_name(self, code, name=None):
+        if name is not None:
+            return name
+        load_daily_func, load_info_func = self.db.load_stock_daily, self.db.load_stock_info
+        if not isinstance(self.db, StockDB):
+            load_daily_func, load_info_func = self.db.load_fund_daily, self.db.load_fund_info
+        name_df = await load_info_func(filter={'code': code}, limit=1)
+        if name_df is not None and not name_df.empty:
+            name = name_df.iloc[0]['name']
+        return name
+
+    async def load_kdata(self, with_rise=True, **kwargs):
+        load_daily_func, load_info_func = self.db.load_stock_daily, self.db.load_stock_info
+        if not isinstance(self.db, StockDB):
+            load_daily_func, load_info_func = self.db.load_fund_daily, self.db.load_fund_info
+        kdata = await load_daily_func(**kwargs)
+
+        if kdata is not None and with_rise:
+            # test_data = kdata[::]
+            test_data = kdata
+            test_data = test_data.sort_values(by='trade_date')
+            test_data['diff'] = test_data['close'].diff()
+            test_data['diff'] = test_data['diff'].fillna(value=0.0)
+            test_data['rise'] = (test_data['diff'] * 100) / (test_data['close'] - test_data['diff'])
+            test_data['rise'] = test_data['rise'].apply(lambda x: round(x, 2))
+            test_data = test_data[['trade_date', 'diff', 'rise']]
+            kdata = kdata.merge(test_data, on='trade_date')
+
+        return kdata
 
     async def stat_data(self, data):
         now = datetime.now()
@@ -183,7 +291,6 @@ class Strategy:
         return data
 
     async def plot_data(self, code, limit, skip_test_end_date=True):
-
         flter = {'code': code}
         if self.test_end_date is not None and not skip_test_end_date:
             flter = {'code': code, 'trade_date': {'$lte': self.test_end_date}}
@@ -198,62 +305,29 @@ class Strategy:
             data = data[::-1]
         return data
 
-    async def plot(self, code, limit=60, s_data=None, marks=None):
-        """
-        plot图象观察
-        :param s_data dict
-        :param marks: [{color:xx, data:[{trade_date:.. tip:...}...]}]
-        :param code:
-        :param limit: k线数量
-        :return:
-        """
-        data = await self.plot_data(code, limit)
-        if data is None or data.empty:
+    async def do_select(self, codes: pd.DataFrame) -> Optional[pd.DataFrame]:
+        if codes is None:
             return None
+        select = []
+        proc_bar = tqdm(codes.to_dict('records'))
+        for item in proc_bar:
+            if 'ST' in item['name'].upper():
+                continue
+            proc_bar.set_description('处理 {}'.format(item['code']))
+            got_data = await self.test(code=item['code'], name=item['name'])
+            if got_data is not None:
+                select = select + got_data.to_dict('records')
+                if len(select) >= self.select_count:
+                    proc_bar.update(proc_bar.total)
+                    proc_bar.set_description('处理完成select_count={}'.format(self.select_count))
+                    self.log.info('select count: {}, break loop'.format(self.select_count))
+                    break
 
-        if marks is None and self.test_end_date is not None:
-            marks = []
+        proc_bar.close()
+        df = None
+        if len(select) > 0:
+            if self.sort_by is not None:
+                select = sorted(select, key=lambda v: v[self.sort_by], reverse=True)
+            df = pd.DataFrame(select)
 
-        if self.test_end_date is not None:
-            trade_date = self.test_end_date
-            while not is_trade_date(trade_date):
-                trade_date = trade_date + timedelta(days=-1)
-
-            tip = ''
-            if s_data is not None:
-                keys = ['1day', '3day', '5day', '10day', 'latest']
-                for key, val in s_data.items():
-                    if key in keys and val is not None and not np.isnan(val):
-                        tmp_tip = '{} 涨幅:&nbsp;&nbsp;{}%'.format(key, val)
-                        if len(tip) == 0:
-                            tip = tmp_tip
-                            continue
-                        tip = '{}\n{}'.format(tip, tmp_tip)
-
-            marks.append({'color': up_color(),
-                          'symbol': 'diamond',
-                          'data': [{'trade_date': trade_date,
-                                    'tip': '留意后面涨幅\n{}'.format(tip)}]})
-
-        return my_plot(data=data, marks=marks)
-
-    async def plots(self, data, limit=60):
-        if data is None:
-            return None
-
-        charts = {}
-        items = data.to_dict('records')
-        for item in items:
-            chart = await self.plot(code=item['code'], limit=limit, s_data=item)
-            if chart is not None:
-                charts[item['code']] = chart
-        return charts
-
-    async def plots_to_path(self, path, data, limit=60):
-        charts = await self.plots(data=data, limit=limit)
-        if charts is None:
-            return
-        os.makedirs(path, exist_ok=True)
-        for k, v in charts.items():
-            file_path = os.sep.join([path, k + '.html'])
-            v.render(file_path)
+        return df

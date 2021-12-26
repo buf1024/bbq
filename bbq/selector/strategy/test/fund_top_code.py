@@ -102,8 +102,7 @@ class FundTopCode(Strategy):
             if cal_data.shape[0] < self.min_days:
                 continue
 
-            name_df = await self.db.load_fund_info(filter={'code': code})
-            name = name_df.iloc[0]['name']
+            name = await self.code_name(code=code)
 
             rise = round(
                 (cal_data.iloc[-1]['net_acc'] - cal_data.iloc[0]['net_acc']) * 100 / cal_data.iloc[0][

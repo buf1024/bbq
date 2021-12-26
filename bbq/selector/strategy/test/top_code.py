@@ -59,51 +59,8 @@ class TopCode(Strategy):
         self.is_prepared = True
         return self.is_prepared
 
-    async def destroy(self):
-        """
-        清理接口
-        :return: True/False
-        """
-        return True
-
-    async def select(self):
-        """
-        根据策略，选择股票
-        :return: code, name, coef(系数), score(分数), rise(累计涨幅)
-        """
-        codes = None
-        if isinstance(self.db, StockDB):
-            codes = await self.db.load_stock_info(projection=['code', 'name'])
-        else:
-            codes = await self.db.load_fund_info(projection=['code', 'name'])
-
-        select = []
-        proc_bar = tqdm(codes.to_dict('records'))
-        for item in proc_bar:
-            proc_bar.set_description('处理 {}'.format(item['code']))
-            got_data = await self.test(code=item['code'], name=item['name'])
-            if got_data is not None:
-                select = select + got_data.to_dict('records')
-                if len(select) >= self.select_count:
-                    proc_bar.update(proc_bar.total)
-                    proc_bar.set_description('处理完成select_count={}'.format(self.select_count))
-                    self.log.info('select count: {}, break loop'.format(self.select_count))
-                    break
-        proc_bar.close()
-
-        df = None
-        if len(select) > 0:
-            select = sorted(select, key=lambda v: v[self.sort_by], reverse=True)
-            df = pd.DataFrame(select)
-
-        return df
-
     async def test(self, code: str, name: str = None) -> Optional[pd.DataFrame]:
-        load_daily_func, load_info_func = self.db.load_stock_daily, self.db.load_stock_info
-        if not isinstance(self.db, StockDB):
-            load_daily_func, load_info_func = self.db.load_fund_daily, self.db.load_fund_info
-
-        kdata = await load_daily_func(filter={'code': code,
+        kdata = await self.load_kdata(filter={'code': code,
                                               'trade_date': {'$lte': self.test_end_date}},
                                       limit=self.days,
                                       sort=[('trade_date', -1)])
@@ -117,10 +74,7 @@ class TopCode(Strategy):
             return None
         a, b, score = round(a, 4), round(b, 4), round(score, 4)
 
-        if name is None:
-            name_df = await load_info_func(filter={'code': code}, limit=1)
-            if name_df is not None and not name_df.empty:
-                name = name_df.iloc[0]['name']
+        name = await self.code_name(code=code, name=name)
         df = None
         if self.coef is not None and self.score is not None:
             if a > self.coef and score > self.score:

@@ -6,9 +6,9 @@ import pandas as pd
 from bbq.selector.strategy.strategy import Strategy
 
 
-class RightSide(Strategy):
+class ZCode(Strategy):
     """
-    看第1天，第2天是否为涨，形态逐渐放大，下落不多，可追
+    z选股，蚂蚁上树变种
     """
 
     def __init__(self, db, *, test_end_date=None, select_count=999999):
@@ -47,14 +47,14 @@ class RightSide(Strategy):
                 self.min_con_days = int(kwargs['min_con_days'])
             if kwargs is not None and 'max_con_down' in kwargs:
                 self.max_con_down = float(kwargs['max_con_down'])
-            if kwargs is not None and 'max_con_up' in kwargs:
+            if kwargs is not None and 'min_trade_days' in kwargs:
                 self.max_con_up = float(kwargs['max_con_up'])
             if kwargs is not None and 'judge_days' in kwargs:
                 self.judge_days = int(kwargs['judge_days'])
                 if self.judge_days <= 0 or self.judge_days > self.min_trade_days:
                     self.log.error('策略参数judge_days不合法: {}~{}'.format(0, self.min_trade_days))
                     return False
-            if kwargs is not None and 'judge_days_up' in kwargs:
+            if kwargs is not None and 'min_trade_days' in kwargs:
                 self.judge_days_up = float(kwargs['judge_days_up'])
 
             if kwargs is not None and 'sort_by' in kwargs:
@@ -69,10 +69,41 @@ class RightSide(Strategy):
         self.is_prepared = True
         return self.is_prepared
 
-    async def test(self, code: str, name: str = None) -> Optional[pd.DataFrame]:
-        if self.skip_kcb and code.startswith('sh688'):
-            return None
+    async def select(self):
+        """
+        根据策略，选择股票
+        :return: code, name,
+        """
+        load_info_func = self.db.load_stock_info
+        if not isinstance(self.db, StockDB):
+            load_info_func = self.db.load_fund_info
+        codes = await load_info_func(projection=['code', 'name'])
 
+        select = []
+        proc_bar = tqdm(codes.to_dict('records'))
+        for item in proc_bar:
+            if 'ST' in item['name'].upper():
+                continue
+            proc_bar.set_description('处理 {}'.format(item['code']))
+            got_data = await self.test(code=item['code'], name=item['name'])
+            if got_data is not None:
+                select = select + got_data.to_dict('records')
+                if len(select) >= self.select_count:
+                    proc_bar.update(proc_bar.total)
+                    proc_bar.set_description('处理完成select_count={}'.format(self.select_count))
+                    self.log.info('select count: {}, break loop'.format(self.select_count))
+                    break
+
+        proc_bar.close()
+        df = None
+        if len(select) > 0:
+            if self.sort_by is not None:
+                select = sorted(select, key=lambda v: v[self.sort_by], reverse=True)
+            df = pd.DataFrame(select)
+
+        return df
+
+    async def test(self, code: str, name: str = None) -> Optional[pd.DataFrame]:
         kdata = await self.load_kdata(filter={'code': code,
                                               'trade_date': {'$lte': self.test_end_date}},
                                       limit=self.min_trade_days,
@@ -114,7 +145,7 @@ if __name__ == '__main__':
 
 
     async def tt():
-        df = await s.run(min_con_days=2, max_con_up=5, sort_by='rise', judge_days_up=8)
+        df = await s.run(select_count=2)
         await s.plots(df)
 
 

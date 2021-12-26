@@ -10,11 +10,11 @@ class HorizontalPrice(Strategy):
     def __init__(self, db, *, test_end_date=None, select_count=999999):
         super().__init__(db, test_end_date=test_end_date, select_count=select_count)
         self.min_trade_days = 60
-        self.min_break_days = 3
+        self.min_break_days = 1
         self.min_break_up = 5.0
         self.max_break_con_up = 3.0
         self.min_horizon_days = 30
-        self.max_horizon_con_shock = 3.0
+        self.max_horizon_con_shock = 10.0
         self.max_horizon_shock = 15.0
         self.sort_by = None
 
@@ -23,12 +23,12 @@ class HorizontalPrice(Strategy):
         return '  名称: 底部横盘突破选股(基于日线)\n' + \
                '  说明: 选择底部横盘的股票\n' + \
                '  参数: min_trade_days -- 最小上市天数(默认: 60)\n' + \
-               '        min_break_days -- 最近突破上涨天数(默认: 3)\n' + \
+               '        min_break_days -- 最近突破上涨天数(默认: 1)\n' + \
                '        min_break_up -- 最近累计突破上涨百分比(默认: 5.0)\n' + \
                '        max_break_con_up -- 最近突破上涨百分比(默认: 3.0)\n' + \
                '        min_horizon_days -- 最小横盘天数(默认: 30)\n' + \
-               '        max_horizon_con_shock -- 横盘天数内隔天波动百分比(默认: 3.0)\n' + \
-               '        max_horizon_shock -- 横盘天数内总波动百分比(默认: 10.0)\n' + \
+               '        max_horizon_con_shock -- 横盘天数内隔天波动百分比(默认: 10.0)\n' + \
+               '        max_horizon_shock -- 横盘天数内总波动百分比(默认: 15.0)\n' + \
                '        sort_by -- 排序(默认: None, close -- 现价, rise -- 阶段涨幅)'
 
     async def prepare(self, **kwargs):
@@ -69,47 +69,9 @@ class HorizontalPrice(Strategy):
         self.is_prepared = True
         return self.is_prepared
 
-    async def select(self):
-        """
-        根据策略，选择股票
-        :return: code, name,
-        """
-        load_info_func = self.db.load_stock_info
-        if not isinstance(self.db, StockDB):
-            load_info_func = self.db.load_fund_info
-        codes = await load_info_func(projection=['code', 'name'])
-
-        select = []
-        proc_bar = tqdm(codes.to_dict('records'))
-        for item in proc_bar:
-            if 'ST' in item['name'].upper():
-                continue
-            proc_bar.set_description('处理 {}'.format(item['code']))
-            got_data = await self.test(code=item['code'], name=item['name'])
-            if got_data is not None:
-                select = select + got_data.to_dict('records')
-                if len(select) >= self.select_count:
-                    proc_bar.update(proc_bar.total)
-                    proc_bar.set_description('处理完成select_count={}'.format(self.select_count))
-                    self.log.info('select count: {}, break loop'.format(self.select_count))
-                    break
-
-        proc_bar.close()
-        df = None
-        if len(select) > 0:
-            if self.sort_by is not None:
-                select = sorted(select, key=lambda v: v[self.sort_by], reverse=True)
-            df = pd.DataFrame(select)
-
-        return df
-
     async def test(self, code: str, name: str = None) -> Optional[pd.DataFrame]:
 
-        load_daily_func, load_info_func = self.db.load_stock_daily, self.db.load_stock_info
-        if not isinstance(self.db, StockDB):
-            load_daily_func, load_info_func = self.db.load_fund_daily, self.db.load_fund_info
-
-        kdata = await load_daily_func(filter={'code': code,
+        kdata = await self.load_kdata(filter={'code': code,
                                               'trade_date': {'$lte': self.test_end_date}},
                                       limit=self.min_trade_days,
                                       sort=[('trade_date', -1)])
@@ -117,22 +79,15 @@ class HorizontalPrice(Strategy):
         if kdata is None or kdata.shape[0] < self.min_break_days + self.min_horizon_days:
             return None
 
-        kdata = kdata[::-1]
-        kdata['diff'] = kdata['close'].diff()
-        kdata['diff'] = kdata['diff'].fillna(value=0.0)
-        kdata['rise'] = (kdata['diff'] * 100) / (kdata['close'] - kdata['diff'])
-        kdata['rise'] = kdata['rise'].apply(lambda x: round(x, 2))
-        kdata = kdata[::-1]
-
         test_data = kdata[:self.min_break_days]
         break_rise = test_data['rise'].sum()
-        if break_rise < self.min_break_up:
+        if break_rise < self.max_break_con_up:
             return None
 
         fit_days = 0
         for df in test_data.to_dict('records'):
             rise = abs(df['rise'])
-            if rise <= self.max_break_con_up:
+            if rise >= self.max_break_con_up:
                 fit_days = fit_days + 1
                 continue
             break
@@ -154,9 +109,10 @@ class HorizontalPrice(Strategy):
 
         hor_close, pre_hor_close = test_data.iloc[0]['close'], kdata.iloc[self.min_horizon_days]['close']
         rise = round((hor_close - pre_hor_close) * 100 / pre_hor_close, 2)
-        if rise > self.max_horizon_shock:
+        if abs(rise) > self.max_horizon_shock:
             return None
 
+        name = await self.code_name(code=code, name=name)
         got_data = dict(code=code, name=name,
                         close=kdata.iloc[0]['close'], break_rise=break_rise,
                         fit_days=fit_days, horizon_rise=rise)
@@ -165,13 +121,19 @@ class HorizontalPrice(Strategy):
 
 if __name__ == '__main__':
     from bbq import *
+    from datetime import datetime
 
     fund, stock, mysql = default(log_level='error')
-    s = HorizontalPrice(db=stock, test_end_date='20211213')
+    s = HorizontalPrice(db=stock, test_end_date='20211111')
 
 
     async def tt():
-        await s.plot('sh600021')
+        df = await s.backtest(code='sz002432', min_break_days=1, max_horizon_con_shock=10, max_horizon_con=15)
+        # df = await s.load_kdata(filter={'code': 'sh600063',
+        #                                 'trade_date': {'$lte': datetime.now()}},
+        #                         limit=60,
+        #                         sort=[('trade_date', -1)])
+        print(df)
 
 
     run_until_complete(tt())
