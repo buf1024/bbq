@@ -11,15 +11,16 @@ class ShockRise(Strategy):
         |
     ||||
     """
+
     def __init__(self, db, *, test_end_date=None, select_count=999999):
         super().__init__(db, test_end_date=test_end_date, select_count=select_count)
         self.min_trade_days = 60
-        self.min_break_days = 1
+        self.min_break_days = 3
         self.min_break_up = 5.0
         self.max_break_con_up = 3.0
-        self.min_horizon_days = 30
-        self.max_horizon_con_shock = 10.0
-        self.max_horizon_shock = 15.0
+        self.min_shock_days = 15
+        self.max_con_shock = 10.0
+        self.max_shock = 15.0
         self.sort_by = None
 
     @staticmethod
@@ -27,12 +28,12 @@ class ShockRise(Strategy):
         return '  名称: 底部横盘突破选股(基于日线)\n' + \
                '  说明: 选择底部横盘的股票\n' + \
                '  参数: min_trade_days -- 最小上市天数(默认: 60)\n' + \
-               '        min_break_days -- 最近突破上涨天数(默认: 1)\n' + \
+               '        min_break_days -- 最近突破上涨天数(默认: 3)\n' + \
                '        min_break_up -- 最近累计突破上涨百分比(默认: 5.0)\n' + \
                '        max_break_con_up -- 最近突破上涨百分比(默认: 3.0)\n' + \
-               '        min_horizon_days -- 最小横盘天数(默认: 30)\n' + \
-               '        max_horizon_con_shock -- 横盘天数内隔天波动百分比(默认: 10.0)\n' + \
-               '        max_horizon_shock -- 横盘天数内总波动百分比(默认: 15.0)\n' + \
+               '        min_shock_days -- 最小横盘天数(默认: 15)\n' + \
+               '        max_con_shock -- 横盘天数内隔天波动百分比(默认: 10.0)\n' + \
+               '        max_shock -- 横盘天数内总波动百分比(默认: 15.0)\n' + \
                '        sort_by -- 排序(默认: None, close -- 现价, rise -- 阶段涨幅)'
 
     async def prepare(self, **kwargs):
@@ -51,15 +52,15 @@ class ShockRise(Strategy):
                 self.min_break_up = float(kwargs['min_break_up'])
             if kwargs is not None and 'max_break_con_up' in kwargs:
                 self.max_break_con_up = float(kwargs['max_break_con_up'])
-            if kwargs is not None and 'min_horizon_days' in kwargs:
-                self.min_horizon_days = int(kwargs['min_horizon_days'])
-                if self.min_trade_days <= 0 or self.min_horizon_days > self.min_trade_days:
-                    self.log.error('策略参数min_horizon_days不合法: {}~{}'.format(0, self.min_trade_days))
+            if kwargs is not None and 'min_shock_days' in kwargs:
+                self.min_shock_days = int(kwargs['min_shock_days'])
+                if self.min_trade_days <= 0 or self.min_shock_days > self.min_trade_days:
+                    self.log.error('策略参数min_shock_days不合法: {}~{}'.format(0, self.min_trade_days))
                     return False
-            if kwargs is not None and 'max_horizon_con_shock' in kwargs:
-                self.max_horizon_con_shock = float(kwargs['max_horizon_con_shock'])
-            if kwargs is not None and 'max_horizon_shock' in kwargs:
-                self.max_horizon_shock = float(kwargs['max_horizon_shock'])
+            if kwargs is not None and 'max_con_shock' in kwargs:
+                self.max_con_shock = float(kwargs['max_con_shock'])
+            if kwargs is not None and 'max_shock' in kwargs:
+                self.max_shock = float(kwargs['max_shock'])
 
             if kwargs is not None and 'sort_by' in kwargs:
                 self.sort_by = kwargs['sort_by']
@@ -80,7 +81,7 @@ class ShockRise(Strategy):
                                       limit=self.min_trade_days,
                                       sort=[('trade_date', -1)])
 
-        if kdata is None or kdata.shape[0] < self.min_break_days + self.min_horizon_days:
+        if kdata is None or kdata.shape[0] < self.min_break_days + self.min_shock_days:
             return None
 
         test_data = kdata[:self.min_break_days]
@@ -103,17 +104,17 @@ class ShockRise(Strategy):
         fit_days = 0
         for df in test_data.to_dict('records'):
             rise = abs(df['rise'])
-            if rise <= self.max_horizon_con_shock:
+            if rise <= self.max_con_shock:
                 fit_days = fit_days + 1
                 continue
             break
 
-        if fit_days < self.min_horizon_days:
+        if fit_days < self.min_shock_days:
             return None
 
-        hor_close, pre_hor_close = test_data.iloc[0]['close'], kdata.iloc[self.min_horizon_days]['close']
+        hor_close, pre_hor_close = test_data.iloc[0]['close'], kdata.iloc[self.min_shock_days]['close']
         rise = round((hor_close - pre_hor_close) * 100 / pre_hor_close, 2)
-        if abs(rise) > self.max_horizon_shock:
+        if abs(rise) > self.max_shock:
             return None
 
         name = await self.code_name(code=code, name=name)
@@ -128,15 +129,13 @@ if __name__ == '__main__':
     from datetime import datetime
 
     fund, stock, mysql = default(log_level='error')
-    s = ShockRise(db=stock, test_end_date='20211111')
+    s = ShockRise(db=stock, test_end_date='20211224')
 
 
     async def tt():
-        df = await s.backtest(code='sz002432', min_break_days=1, max_horizon_con_shock=10, max_horizon_con=15)
-        # df = await s.load_kdata(filter={'code': 'sh600063',
-        #                                 'trade_date': {'$lte': datetime.now()}},
-        #                         limit=60,
-        #                         sort=[('trade_date', -1)])
+        await s.prepare(min_break_days=1, min_break_up=0, max_break_con_up=0,
+                        min_shock_days=15, max_con_shock=3.0, max_shock=10.0)
+        df = await s.test(code='sh603368')
         print(df)
 
 

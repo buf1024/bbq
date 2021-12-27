@@ -99,10 +99,7 @@ class RightSide(Strategy):
         if rise >= self.judge_days_up:
             name = await self.code_name(code=code, name=name)
             got_data = dict(code=code, name=name,
-                            close=now_close, judge_close=jd_close, cont_day=fit_days, rise=rise,
-                            condition='cont({}%~{}%): {}\n{}days up: {}%'.format(
-                                self.max_con_down, self.max_con_up, self.min_con_days,
-                                self.judge_days, self.judge_days_up))
+                            close=now_close, judge_close=jd_close, cont_day=fit_days, rise=rise)
             return pd.DataFrame([got_data])
 
         return None
