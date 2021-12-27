@@ -3,7 +3,14 @@ import pandas as pd
 from bbq.selector.strategy.strategy import Strategy
 
 
-class HorizontalPrice(Strategy):
+class ShockRise(Strategy):
+    """
+    左侧震荡后，开始突破
+    示意形态:
+         |
+        |
+    ||||
+    """
     def __init__(self, db, *, test_end_date=None, select_count=999999):
         super().__init__(db, test_end_date=test_end_date, select_count=select_count)
         self.min_trade_days = 60
@@ -121,7 +128,7 @@ if __name__ == '__main__':
     from datetime import datetime
 
     fund, stock, mysql = default(log_level='error')
-    s = HorizontalPrice(db=stock, test_end_date='20211111')
+    s = ShockRise(db=stock, test_end_date='20211111')
 
 
     async def tt():

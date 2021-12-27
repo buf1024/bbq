@@ -4,11 +4,19 @@ from bbq.selector.strategy.strategy import Strategy
 
 
 class RiseShock(Strategy):
+    """
+    右侧上涨后，开始震荡
+    示意形态:
+       | | | |
+      |
+     |
+    |
+    """
     def __init__(self, db, *, test_end_date=None, select_count=999999):
         super().__init__(db, test_end_date=test_end_date, select_count=select_count)
         self.min_trade_days = 60
         self.max_horizon_days = 15
-        self.max_horizon_shock = 3.0
+        self.max_horizon_shock = 3.5
         self.min_rise_up = 4.0
         self.min_rise_days = 3
         self.min_acct_rise = 9.0
@@ -20,7 +28,7 @@ class RiseShock(Strategy):
                '  说明: 右侧上涨爬升震荡的股票\n' + \
                '  参数: min_trade_days -- 最小上市天数(默认: 60)\n' + \
                '        max_horizon_days -- 水平震荡的最大天数(默认: 15)\n' + \
-               '        max_horizon_shock -- 水平震荡的最大百分比(默认: 3.0)\n' + \
+               '        max_horizon_shock -- 水平震荡的最大百分比(默认: 3.5)\n' + \
                '        min_rise_up -- 最后一日最小上涨百分比(默认: 4.0)\n' + \
                '        min_rise_days -- 连续上涨天数(默认: 3)\n' + \
                '        min_acct_rise -- 连续上涨百分比(默认: 9.0)\n' + \

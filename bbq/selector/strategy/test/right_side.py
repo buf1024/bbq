@@ -5,9 +5,14 @@ from bbq.selector.strategy.strategy import Strategy
 
 class RightSide(Strategy):
     """
-    看第1天，第2天是否为涨，形态逐渐放大，下落不多，可追
+    看上方有没有抛压，上涨幅度。
+    貌似上涨30%的都可以追，上涨大于40%有一定下跌的概率
+    示意形态:
+       |
+      |
+     |
+    |
     """
-
     def __init__(self, db, *, test_end_date=None, select_count=999999):
         super().__init__(db, test_end_date=test_end_date, select_count=select_count)
         self.min_trade_days = 60
