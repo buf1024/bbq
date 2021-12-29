@@ -234,6 +234,29 @@ class Strategy:
 
         return kdata
 
+    @staticmethod
+    def is_long_leg(df, ratio, side=None) -> bool:
+        close, high, low, open_ = df['close'], df['high'], df['low'], df['open']
+        if high == low:
+            return True
+        if side is None:
+            side = ['top', 'bottom']
+        for s in side:
+            if s == 'top':
+                r = (high - close) * 100 / (high - low)
+                if r > ratio:
+                    return True
+            if s == 'bottom':
+                r = (open_ - low) * 100 / (high - low)
+                if r > ratio:
+                    return True
+
+        return False
+
+    @staticmethod
+    def is_short_leg(df, ratio, side=None) -> bool:
+        return not Strategy.is_long_leg(df=df, ratio=ratio, side=side)
+
     async def stat_data(self, data):
         now = datetime.now()
         now = datetime(year=now.year, month=now.month, day=now.day)
