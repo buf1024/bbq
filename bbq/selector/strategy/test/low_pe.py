@@ -32,7 +32,6 @@ class LowPe(Strategy):
                 self.max_pe = float(kwargs['max_pe'])
             if kwargs is not None and 'max_price' in kwargs:
                 self.max_price = float(kwargs['max_price'])
-
         except ValueError:
             self.log.error('策略参数不合法')
             return False

@@ -172,6 +172,7 @@ def stock_margin_detail_szse(date: str = "20210728") -> pd.DataFrame:
         big_df["融资融券余额"] = pd.to_numeric(big_df["融资融券余额"])
     return big_df
 
+
 def fund_em_etf_fund_info(
         fund: str = "511280", start_date: str = "20000101", end_date: str = "20500101"
 ) -> pd.DataFrame:
@@ -203,7 +204,7 @@ def fund_em_etf_fund_info(
     }
     r = requests.get(url, params=params, headers=headers)
     text_data = r.text
-    data_json = demjson.decode(text_data[text_data.find("{") : -1])
+    data_json = demjson.decode(text_data[text_data.find("{"): -1])
     temp_df = pd.DataFrame(data_json["Data"]["LSJZList"])
     if not temp_df.empty:
         temp_df.columns = [
@@ -229,3 +230,35 @@ def fund_em_etf_fund_info(
     return temp_df
 
 
+def stock_a_lg_indicator(stock: str = "688388") -> pd.DataFrame:
+    """
+    市盈率, 市净率, 股息率数据接口
+    https://www.legulegu.com/stocklist
+    :param stock: 通过 stock_a_indicator(stock="all") 来获取所有股票的代码
+    :type stock: str
+    :return: 市盈率, 市净率, 股息率查询
+    :rtype: pandas.DataFrame
+    """
+    if stock == "all":
+        url = "https://www.legulegu.com/stocklist"
+        r = requests.get(url)
+        soup = BeautifulSoup(r.text, "lxml")
+        node_list = soup.find_all(attrs={"class": "col-xs-6"})
+        href_list = [item.find("a")["href"] for item in node_list]
+        title_list = [item.find("a")["title"] for item in node_list]
+        temp_df = pd.DataFrame([title_list, href_list]).T
+        temp_df.columns = ["stock_name", "short_url"]
+        temp_df["code"] = temp_df["short_url"].str.split("/", expand=True).iloc[:, -1]
+        del temp_df["short_url"]
+        temp_df = temp_df[["code", "stock_name"]]
+        return temp_df
+    else:
+        url = f"https://www.legulegu.com/s/base-info/{stock}"
+        r = requests.get(url)
+        temp_json = r.json()
+        if temp_json is not None and 'data' in temp_json and temp_json["data"] is not None:
+            temp_df = pd.DataFrame(temp_json["data"]["items"], columns=temp_json["data"]["fields"])
+            temp_df["trade_date"] = pd.to_datetime(temp_df["trade_date"])
+            temp_df.iloc[:, 1:] = temp_df.iloc[:, 1:].astype(float)
+            return temp_df
+        return pd.DataFrame()

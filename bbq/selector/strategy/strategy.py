@@ -79,7 +79,7 @@ class Strategy:
                 self.skip_kcb = kwargs['test_end_date']
 
             if kwargs is not None and 'sort_by' in kwargs:
-                self.sort_by = str(kwargs['sort_by']).lower()
+                self.sort_by = kwargs['sort_by']
         except ValueError:
             self.select_count = def_count
         return True

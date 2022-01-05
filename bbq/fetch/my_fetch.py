@@ -842,7 +842,9 @@ if __name__ == '__main__':
     # tdf = aks.fetch_stock_daily(code='sh600350', start=datetime(year=2020, month=11, day=23), end=datetime.now())
     # print(tdf)
 
-    tdf = aks.fetch_stock_index(code='sz000717', start=datetime(year=2021, month=12, day=13), end=datetime(year=2021, month=12, day=13))
+    tdf = aks.fetch_stock_index(code='sz002847',
+                                start=datetime(year=2022, month=1, day=5),
+                                end=datetime(year=2022, month=1, day=5))
     print(tdf)
 
     # tdf = hiak.stock_zh_a_daily(symbol='sz000001')
