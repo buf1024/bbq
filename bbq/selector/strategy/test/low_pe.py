@@ -51,9 +51,10 @@ class LowPe(Strategy):
         if index_data is None or index_data.empty:
             return None
 
-        kdata = await self.load_kdata(filter={'code': code},
-                                      limit=1,
-                                      sort=[('trade_date', -1)])
+        kdata = await self.load_kdata(
+            filter={'code': code, 'close': {'$lte': self.max_price}, 'trade_date': self.test_end_date},
+            limit=1,
+            sort=[('trade_date', -1)])
 
         if kdata is None or kdata.empty:
             return None
