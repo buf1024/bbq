@@ -13,27 +13,26 @@ class RightSide(Strategy):
      |
     |
     """
-    def __init__(self, db, *, test_end_date=None, select_count=999999):
-        super().__init__(db, test_end_date=test_end_date, select_count=select_count)
-        self.min_trade_days = 60
-        self.min_con_days = 3
-        self.max_con_down = -2.0
-        self.max_con_up = 20.0
-        self.judge_days = 8
-        self.judge_days_up = 15.0
-        self.sort_by = None
+
+    def __init__(self, db, *, test_end_date=None):
+        super().__init__(db, test_end_date=test_end_date)
+        self.min_rise_days = 3
+        self.max_down_in_rise = -2.0
+        self.max_up_in_rise = 20.0
+        self.max_leg_ratio = 33.3
+        self.recent_ndays = 8
+        self.recent_days_up = 15.0
 
     @staticmethod
     def desc():
         return '  名称: 右侧选股(基于日线)\n' + \
                '  说明: 选择右侧上涨的股票\n' + \
-               '  参数: min_trade_days -- 最小上市天数(默认: 60)\n' + \
-               '        min_con_days -- 最近最小连续上涨天数(默认: 3)\n' + \
-               '        max_con_down -- 视为上涨最大下跌百分比(默认: -2.0)\n' + \
-               '        max_con_up -- 视为上涨最大上涨百分比(默认: 20.0)\n' + \
-               '        judge_days -- judge_days内judge_days_up天数(默认: 8)\n' + \
-               '        judge_days_up -- 最近judge_days内上涨百分比(默认: 15.0)\n' + \
-               '        sort_by -- 排序(默认: None, close -- 现价, rise -- 阶段涨幅)'
+               '  参数: min_rise_days -- 最近最小连续上涨天数(默认: 3)\n' + \
+               '        max_down_in_rise -- 最大下跌百分比(默认: -2.0)\n' + \
+               '        max_up_in_rise -- 最大上涨百分比(默认: 20.0)\n' + \
+               '        max_leg_ratio -- 上涨最大腿长(默认: 33.3)\n' + \
+               '        recent_days -- 最近累计计算涨幅天数(默认: 8)\n' + \
+               '        recent_days_up -- 最近judge_days内上涨百分比(默认: 15.0)'
 
     async def prepare(self, **kwargs):
         """
@@ -43,27 +42,21 @@ class RightSide(Strategy):
         """
         await super(RightSide, self).prepare(**kwargs)
         try:
-            if kwargs is not None and 'min_trade_days' in kwargs:
-                self.min_trade_days = int(kwargs['min_trade_days'])
-            if kwargs is not None and 'min_con_days' in kwargs:
-                self.min_con_days = int(kwargs['min_con_days'])
-            if kwargs is not None and 'max_con_down' in kwargs:
-                self.max_con_down = float(kwargs['max_con_down'])
-            if kwargs is not None and 'max_con_up' in kwargs:
-                self.max_con_up = float(kwargs['max_con_up'])
-            if kwargs is not None and 'judge_days' in kwargs:
-                self.judge_days = int(kwargs['judge_days'])
-                if self.judge_days <= 0 or self.judge_days > self.min_trade_days:
-                    self.log.error('策略参数judge_days不合法: {}~{}'.format(0, self.min_trade_days))
+            if kwargs is not None and 'min_rise_days' in kwargs:
+                self.min_rise_days = int(kwargs['min_rise_days'])
+            if kwargs is not None and 'max_down_in_rise' in kwargs:
+                self.max_down_in_rise = float(kwargs['max_down_in_rise'])
+            if kwargs is not None and 'max_up_in_rise' in kwargs:
+                self.max_up_in_rise = float(kwargs['max_up_in_rise'])
+            if kwargs is not None and 'max_leg_ratio' in kwargs:
+                self.max_leg_ratio = float(kwargs['max_leg_ratio'])
+            if kwargs is not None and 'recent_ndays' in kwargs:
+                self.recent_ndays = int(kwargs['recent_ndays'])
+                if self.recent_ndays <= 0 or self.recent_ndays > self.min_trade_days:
+                    self.log.error('策略参数recent_ndays不合法: {}~{}'.format(0, self.min_trade_days))
                     return False
-            if kwargs is not None and 'judge_days_up' in kwargs:
-                self.judge_days_up = float(kwargs['judge_days_up'])
-
-            if kwargs is not None and 'sort_by' in kwargs:
-                self.sort_by = kwargs['sort_by']
-                if self.sort_by.lower() not in ('close', 'rise'):
-                    self.log.error('sort_by不合法')
-                    return False
+            if kwargs is not None and 'recent_days_up' in kwargs:
+                self.recent_days_up = float(kwargs['recent_days_up'])
 
         except ValueError:
             self.log.error('策略参数不合法')
@@ -86,20 +79,23 @@ class RightSide(Strategy):
         fit_days = 0
         for df in kdata.to_dict('records'):
             rise = df['rise']
-            if self.max_con_down <= rise <= self.max_con_up:
+            if self.max_down_in_rise <= rise <= self.max_up_in_rise and \
+                    self.is_short_leg(df, self.max_leg_ratio, 'top'):
                 fit_days = fit_days + 1
                 continue
             break
 
-        if fit_days < self.min_con_days:
+        if fit_days < self.min_rise_days:
             return None
 
-        jd_close, now_close = kdata.iloc[self.judge_days - 1]['close'], kdata.iloc[0]['close']
-        rise = round((now_close - jd_close) * 100 / jd_close, 2)
-        if rise >= self.judge_days_up:
+        re_close, now_close = kdata.iloc[self.recent_ndays - 1]['close'], kdata.iloc[0]['close']
+        recent_rise = round((now_close - re_close) * 100 / re_close, 2)
+        if recent_rise >= self.recent_days_up:
             name = await self.code_name(code=code, name=name)
             got_data = dict(code=code, name=name,
-                            close=now_close, judge_close=jd_close, cont_day=fit_days, rise=rise)
+                            nday_close=re_close, close=now_close, nday_rise=recent_rise,
+                            rise_start=kdata.iloc[fit_days]['trade_date'],
+                            rise_days=fit_days)
             return pd.DataFrame([got_data])
 
         return None
@@ -113,8 +109,11 @@ if __name__ == '__main__':
 
 
     async def tt():
-        df = await s.run(min_con_days=2, max_con_up=5, sort_by='rise', judge_days_up=8)
-        await s.plots(df)
+        await s.prepare(min_rise_days=2, max_down_in_rise=-1,
+                        max_up_in_rise=20, max_leg_ratio=40,
+                        recent_days=8, recent_days_up=10, sort_by='rise', )
+        df = await s.test('sz000558')
+        print(df)
 
 
     run_until_complete(tt())

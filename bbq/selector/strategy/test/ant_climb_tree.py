@@ -46,12 +46,6 @@ class AntClimbTree(Strategy):
             if kwargs is not None and 'max_shock_days' in kwargs:
                 self.max_shock_days = int(kwargs['max_shock_days'])
 
-            if kwargs is not None and 'sort_by' in kwargs:
-                self.sort_by = kwargs['sort_by']
-                if self.sort_by.lower() not in ('close', 'rise'):
-                    self.log.error('sort_by不合法')
-                    return False
-
         except ValueError:
             self.log.error('策略参数不合法')
             return False

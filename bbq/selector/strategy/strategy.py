@@ -12,12 +12,15 @@ import os
 
 
 class Strategy:
-    def __init__(self, db, *, test_end_date=None, select_count=999999, skip_kcb=True):
+    def __init__(self, db, *,
+                 test_end_date=None, select_count=999999, min_trade_days=60, skip_kcb=True):
         """
 
         :param db: stock/fund/mysql db
         :param test_end_date: 测试截止交易日，None为数据库中日期
         :param select_count: 默认选择最大个数
+        :param min_trade_days 最小交易天数
+        :skip_kcb 是否忽略科创板股票
         """
         self.log = log.get_logger(self.__class__.__name__)
         self.db = db
@@ -39,6 +42,7 @@ class Strategy:
         self.select_count = select_count
         self.skip_kcb = skip_kcb
         self.sort_by = None
+        self.min_trade_days = min_trade_days
         self.is_prepared = False
 
     @staticmethod
@@ -68,8 +72,14 @@ class Strategy:
                         ex = True
                 if ex:
                     self.test_end_date = def_test_end_date
+            if kwargs is not None and 'min_trade_days' in kwargs:
+                self.min_trade_days = int(kwargs['min_trade_days'])
+
             if kwargs is not None and 'skip_kcb' in kwargs:
                 self.skip_kcb = kwargs['test_end_date']
+
+            if kwargs is not None and 'sort_by' in kwargs:
+                self.sort_by = str(kwargs['sort_by']).lower()
         except ValueError:
             self.select_count = def_count
         return True
@@ -238,9 +248,11 @@ class Strategy:
     def is_long_leg(df, ratio, side=None) -> bool:
         close, high, low, open_ = df['close'], df['high'], df['low'], df['open']
         if high == low:
-            return True
+            return False
         if side is None:
             side = ['top', 'bottom']
+        if isinstance(side, str):
+            side = [side]
         for s in side:
             if s == 'top':
                 r = (high - close) * 100 / (high - low)
@@ -302,8 +314,8 @@ class Strategy:
                         if len(kdata) < 2:
                             add_dict[key] = 0
                         else:
-                            # close, pre_close = kdata.iloc[0]['close'], kdata.iloc[-1]['close']
-                            close, pre_close = kdata.iloc[0]['close'], kdata.iloc[1]['close']
+                            close, pre_close = kdata.iloc[0]['close'], kdata.iloc[-1]['close']
+                            # close, pre_close = kdata.iloc[0]['close'], kdata.iloc[1]['close']
                             rise = round((close - pre_close) * 100 / pre_close, 2)
                             add_dict[key] = rise
 

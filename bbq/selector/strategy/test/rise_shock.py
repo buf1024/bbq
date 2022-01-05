@@ -12,14 +12,13 @@ class RiseShock(Strategy):
      |
     |
     """
-    def __init__(self, db, *, test_end_date=None, select_count=999999):
-        super().__init__(db, test_end_date=test_end_date, select_count=select_count)
-        self.min_trade_days = 60
-        self.max_horizon_days = 15
-        self.max_horizon_shock = 3.5
-        self.max_horizon_shock_ratio = 3.5
-        self.min_rise_up = 4.0
-        self.is_con_rise_up = True
+    def __init__(self, db, *, test_end_date=None):
+        super().__init__(db, test_end_date=test_end_date)
+        self.max_shock_days = 15
+        self.max_shock_day_ratio = 3.5
+        self.max_shock_ratio = 3.5
+        self.min_rise_last_day = 4.0
+        self.is_con_rise = True
         self.min_rise_days = 3
         self.min_acct_rise = 9.0
         self.sort_by = None
@@ -28,15 +27,13 @@ class RiseShock(Strategy):
     def desc():
         return '  名称: 爬升震荡(基于日线)\n' + \
                '  说明: 右侧上涨爬升震荡的股票\n' + \
-               '  参数: min_trade_days -- 最小上市天数(默认: 60)\n' + \
-               '        max_horizon_days -- 水平震荡的最大天数(默认: 15)\n' + \
-               '        max_horizon_shock -- 水平震荡的最大百分比(默认: 3.5)\n' + \
-               '        max_horizon_shock_ratio -- 水平震荡的最大涨跌幅百分比(默认: 3.5)\n' + \
-               '        min_rise_up -- 最后一日最小上涨百分比(默认: 4.0)\n' + \
-               '        is_con_rise_up -- 最后一日涨幅是否大于钱一天(默认: True)\n' + \
-               '        min_rise_days -- 连续上涨天数(默认: 3)\n' + \
-               '        min_acct_rise -- 连续上涨百分比(默认: 9.0)\n' + \
-               '        sort_by -- 排序(默认: None, close -- 现价, rise -- 阶段涨幅)'
+               '  参数: max_shock_days -- 水平震荡的最大天数(默认: 15)\n' + \
+               '        max_shock_day_ratio -- 单日水平震荡的最大百分比(默认: 3.5)\n' + \
+               '        max_shock_ratio -- 水平震荡期间最后一天和当天的最大涨跌幅百分比(默认: 3.5)\n' + \
+               '        min_rise_last_day -- 震荡开始前一日最少上涨百分比(默认: 4.0)\n' + \
+               '        is_con_rise -- 震荡开始前最后一日涨幅是否大于前一天(默认: True)\n' + \
+               '        min_rise_days -- 震荡开始前连续上涨天数(默认: 3)\n' + \
+               '        min_acct_rise -- 震荡开始前最少累计上涨百分比(默认: 9.0)'
 
     async def prepare(self, **kwargs):
         """
@@ -48,26 +45,20 @@ class RiseShock(Strategy):
         try:
             if kwargs is not None and 'min_trade_days' in kwargs:
                 self.min_trade_days = int(kwargs['min_trade_days'])
-            if kwargs is not None and 'max_horizon_days' in kwargs:
-                self.max_horizon_days = int(kwargs['max_horizon_days'])
-            if kwargs is not None and 'max_horizon_shock' in kwargs:
-                self.max_horizon_shock = float(kwargs['max_horizon_shock'])
-            if kwargs is not None and 'max_horizon_shock_ratio' in kwargs:
-                self.max_horizon_shock_ratio = float(kwargs['max_horizon_shock_ratio'])
-            if kwargs is not None and 'min_rise_up' in kwargs:
-                self.min_rise_up = float(kwargs['min_rise_up'])
-            if kwargs is not None and 'is_con_rise_up' in kwargs:
-                self.is_con_rise_up = bool(kwargs['is_con_rise_up'])
+            if kwargs is not None and 'max_shock_days' in kwargs:
+                self.max_shock_days = int(kwargs['max_shock_days'])
+            if kwargs is not None and 'max_shock_day_ratio' in kwargs:
+                self.max_shock_day_ratio = float(kwargs['max_shock_day_ratio'])
+            if kwargs is not None and 'max_shock_ratio' in kwargs:
+                self.max_shock_ratio = float(kwargs['max_shock_ratio'])
+            if kwargs is not None and 'min_rise_last_day' in kwargs:
+                self.min_rise_last_day = float(kwargs['min_rise_last_day'])
+            if kwargs is not None and 'is_con_rise' in kwargs:
+                self.is_con_rise = bool(kwargs['is_con_rise'])
             if kwargs is not None and 'min_rise_days' in kwargs:
                 self.min_rise_days = int(kwargs['min_rise_days'])
             if kwargs is not None and 'min_acct_rise' in kwargs:
                 self.min_acct_rise = float(kwargs['min_acct_rise'])
-
-            if kwargs is not None and 'sort_by' in kwargs:
-                self.sort_by = kwargs['sort_by']
-                if self.sort_by.lower() not in ('close', 'rise'):
-                    self.log.error('sort_by不合法')
-                    return False
 
         except ValueError:
             self.log.error('策略参数不合法')
@@ -94,17 +85,17 @@ class RiseShock(Strategy):
         for i in range(kdata.shape[0]):
             df = kdata.iloc[i]
             rise = df['rise']
-            if abs(rise) <= self.max_horizon_shock:
+            if abs(rise) <= self.max_shock_day_ratio:
                 fit_days = fit_days + 1
                 continue
             if fit_days > 0 and fit_start_index == -1:
-                if rise >= self.min_rise_up:
+                if rise >= self.min_rise_last_day:
                     fit_start_index = i
                     pre_rise = rise
                     shock_rise = abs(round((df['close'] - kdata.iloc[0]['close'])*100/kdata.iloc[0]['close'], 2))
             break
 
-        if fit_start_index == -1 or fit_days > self.max_horizon_days or shock_rise > self.max_horizon_shock_ratio:
+        if fit_start_index == -1 or fit_days > self.max_shock_days or shock_rise > self.max_shock_ratio:
             return None
 
         test_data = kdata[fit_days:]
@@ -114,7 +105,7 @@ class RiseShock(Strategy):
             rise = test_data.iloc[i]['rise']
             if rise <= 0:
                 break
-            if self.is_con_rise_up and rise > pre_rise:
+            if self.is_con_rise and rise > pre_rise:
                 break
             cont_rise_days = cont_rise_days + 1
             acct_rise = acct_rise + rise
@@ -125,8 +116,9 @@ class RiseShock(Strategy):
 
         name = await self.code_name(code=code, name=name)
         got_data = dict(code=code, name=name,
-                        close=kdata.iloc[0]['close'], shock_days=fit_days, shock_rise=shock_rise,
-                        rise_days=cont_rise_days, rise=acct_rise, )
+                        close=kdata.iloc[0]['close'], shock_start=kdata.iloc[fit_days]['trade_date'],
+                        shock_days=fit_days, shock_rise=shock_rise,
+                        rise_days=cont_rise_days, acct_rise=acct_rise)
         return pd.DataFrame([got_data])
 
 

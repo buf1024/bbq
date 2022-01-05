@@ -99,8 +99,8 @@ class FundSync(DataSync):
               help='sync one, split by ",", available: fund_info,fund_net,fund_daily')
 @click.option('--debug/--no-debug', default=True, help='show debug log')
 def main(uri: str = 'mongodb://localhost:27017/', pool: int = 5,
-          con_fetch_num: int = 10, con_save_num: int = 100,
-          function: str = None, debug: bool = True):
+         con_fetch_num: int = 10, con_save_num: int = 100,
+         function: str = None, debug: bool = True):
     _, conf_dict = init_def_config()
     conf_dict['mongo'].update(dict(uri=uri, pool=pool))
     conf_dict['log'].update(dict(level="debug" if debug else "critical"))

@@ -60,12 +60,6 @@ class ZCode(Strategy):
             if kwargs is not None and 'left_horizon_days' in kwargs:
                 self.left_horizon_days = int(kwargs['left_horizon_days'])
 
-            if kwargs is not None and 'sort_by' in kwargs:
-                self.sort_by = kwargs['sort_by']
-                if self.sort_by.lower() not in ('close', 'rise'):
-                    self.log.error('sort_by不合法')
-                    return False
-
         except ValueError:
             self.log.error('策略参数不合法')
             return False

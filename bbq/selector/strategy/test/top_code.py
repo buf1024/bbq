@@ -43,12 +43,6 @@ class TopCode(Strategy):
                 self.coef = float(self.coef)
             if self.score is not None:
                 self.score = float(self.score)
-            if self.sort_by is not None:
-                if self.sort_by.lower() not in ('coef', 'score'):
-                    self.log.error('sort_by不合法')
-                    return False
-            else:
-                self.sort_by = 'score'
 
         except ValueError:
             self.log.error('策略参数不合法')

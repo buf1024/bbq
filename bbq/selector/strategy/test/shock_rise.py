@@ -14,31 +14,28 @@ class ShockRise(Strategy):
 
     def __init__(self, db, *, test_end_date=None, select_count=999999):
         super().__init__(db, test_end_date=test_end_date, select_count=select_count)
-        self.min_trade_days = 60
         self.min_break_days = 3
         self.is_con_break_up = True
+        self.max_leg_ratio = 33.3
         self.min_break_up = 5.0
         self.max_break_con_up = 3.0
         self.max_break_leg_ratio = 33.33
         self.min_shock_days = 15
         self.max_con_shock = 10.0
         self.max_shock = 15.0
-        self.sort_by = None
 
     @staticmethod
     def desc():
         return '  名称: 底部横盘突破选股(基于日线)\n' + \
                '  说明: 选择底部横盘的股票\n' + \
-               '  参数: min_trade_days -- 最小上市天数(默认: 60)\n' + \
-               '        min_break_days -- 最近突破上涨天数(默认: 3)\n' + \
+               '  参数: min_break_days -- 最近突破上涨天数(默认: 3)\n' + \
                '        is_con_break_up -- 涨幅是否持续放大(默认: True)\n' + \
                '        min_break_up -- 最近累计突破上涨百分比(默认: 5.0)\n' + \
                '        max_break_con_up -- 最近突破上涨百分比(默认: 3.0)\n' + \
                '        max_break_leg_ratio -- 上下天线最大比例(默认: 33.33)\n' + \
                '        min_shock_days -- 最小横盘天数(默认: 15)\n' + \
                '        max_con_shock -- 横盘天数内隔天波动百分比(默认: 10.0)\n' + \
-               '        max_shock -- 横盘天数内总波动百分比(默认: 15.0)\n' + \
-               '        sort_by -- 排序(默认: None, close -- 现价, rise -- 阶段涨幅)'
+               '        max_shock -- 横盘天数内总波动百分比(默认: 15.0)'
 
     async def prepare(self, **kwargs):
         """
@@ -69,12 +66,6 @@ class ShockRise(Strategy):
                 self.max_con_shock = float(kwargs['max_con_shock'])
             if kwargs is not None and 'max_shock' in kwargs:
                 self.max_shock = float(kwargs['max_shock'])
-
-            if kwargs is not None and 'sort_by' in kwargs:
-                self.sort_by = kwargs['sort_by']
-                if self.sort_by.lower() not in ('close', 'rise'):
-                    self.log.error('sort_by不合法')
-                    return False
 
         except ValueError:
             self.log.error('策略参数不合法')
@@ -115,6 +106,9 @@ class ShockRise(Strategy):
         if break_rise < self.min_break_up:
             return None
 
+        break_days = fit_days
+        break_date = kdata.iloc[fit_days]['trade_date']
+
         test_data = kdata[self.min_break_days:]
 
         fit_days = 0
@@ -135,8 +129,9 @@ class ShockRise(Strategy):
 
         name = await self.code_name(code=code, name=name)
         got_data = dict(code=code, name=name,
-                        close=kdata.iloc[0]['close'], break_rise=break_rise,
-                        fit_days=fit_days, horizon_rise=rise)
+                        close=kdata.iloc[0]['close'],
+                        break_date=break_date, break_days=break_days, break_rise=break_rise,
+                        shock_days=fit_days, shock_rise=rise)
         return pd.DataFrame([got_data])
 
 
