@@ -40,7 +40,7 @@ class RightSide(Strategy):
         :param kwargs:
         :return: True/False
         """
-        await super(RightSide, self).prepare(**kwargs)
+        await super().prepare(**kwargs)
         try:
             if kwargs is not None and 'min_rise_days' in kwargs:
                 self.min_rise_days = int(kwargs['min_rise_days'])
