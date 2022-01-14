@@ -95,4 +95,9 @@ select distinct index_code from stock_sw_index_info
 insert into stock_sw_index_info(index_code, index_name, stock_code, stock_name, start_date, weight)
 values(:index_code, :index_name, :stock_code, :stock_name, :start_date, :weight)
 
+-- :name select_stock_concept :many
+select distinct concept_code from stock_concept
 
+-- :name insert_stock_concept :insert
+insert into stock_concept(concept_code, concept_name, concept_date, stock_code, stock_name)
+values(:concept_code, :concept_name, :concept_date, :stock_code, :stock_name)

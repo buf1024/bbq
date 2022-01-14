@@ -43,6 +43,10 @@ class StockDB(MongoDB):
                          'rqjmg': '净卖出(股)',
                          'rzrqye': '融资融券余额(元)', 'rzrqyecz': '融资融券余额差值(元)'},
 
+        # 同花顺概念
+        'stock_concept': {'concept_code': '概念代码', 'concept_date': '概念新增日期', 'concept_name': '概念名称',
+                          'stock_code': '股票代码', 'stock_name': '股票名称'},
+
         # 申万行业数据
         'sw_index_info': {'index_code': '行业代码', 'index_name': '行业名称', 'stock_code': '股票代码', 'stock_name': '股票名称',
                           'start_date': '开始日期', 'weight': '权重'}
@@ -88,6 +92,10 @@ class StockDB(MongoDB):
     @property
     def stock_margin(self):
         return self.get_coll(self._db, 'stock_margin')
+
+    @property
+    def stock_concept(self):
+        return self.get_coll(self._db, 'stock_concept')
 
     @property
     def sw_index_info(self):
@@ -365,6 +373,29 @@ class StockDB(MongoDB):
         if count > 0:
             inserted_ids = await self.do_insert(coll=self.stock_margin, data=data)
         self.log.debug('保存融资融券数据成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
+        return inserted_ids
+
+    async def load_stock_concept(self, **kwargs) -> Optional[pd.DataFrame]:
+        """
+        :param kwargs:  filter=None, projection=None, skip=0, limit=0, sort=None, to_frame=True
+        :return: DataFrame
+        """
+        self.log.debug('加载股票概念数据, kwargs={}'.format(kwargs))
+        df = await self.do_load(self.stock_concept, **kwargs)
+        self.log.debug('加载股票概念数据成功 size={}'.format(df.shape[0] if df is not None else 0))
+        return df
+
+    async def save_stock_concept(self, data: pd.DataFrame) -> List[str]:
+        """
+        :param data: DataFrame()
+        :return: None/list[_id]
+        """
+        count = data.shape[0] if data is not None else 0
+        inserted_ids = []
+        self.log.debug('股票概念数据, count = {} ...'.format(count))
+        if count > 0:
+            inserted_ids = await self.do_insert(coll=self.stock_concept, data=data)
+        self.log.debug('保存股票概念数据成功, size = {}'.format(len(inserted_ids) if inserted_ids is not None else 0))
         return inserted_ids
 
 

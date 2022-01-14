@@ -100,6 +100,20 @@ create table stock_margin
 create
 index stock_margin_idx on stock_margin(code, trade_date);
 
+--  'concept_code': '概念代码', 'concept_name': '概念名称', 'concept_date': '概念新增日期',
+--  'stock_code': '股票代码', 'stock_name': '股票名称'
+create table stock_concept
+(
+    id           integer  not null primary key auto_increment,
+    concept_code varchar(16)  not null,
+    concept_name varchar(32) null,
+    concept_date datetime not null,
+    stock_code   varchar(16)  not null,
+    stock_name   varchar(32) null
+);
+create
+index stock_concept_idx on stock_concept(concept_code);
+
 -- 'code': '代码', 'trade_date': '交易日', 'pe': '市盈率', 'pe_ttm': '市盈率TTM',
 -- 'pb': '市净率', 'ps': '市销率', 'ps_ttm': '市销率TTM', 'dv_ratio': '股息率', 'dv_ttm': '股息率TTM',
 -- 'total_mv': '总市值'

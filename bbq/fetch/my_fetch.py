@@ -9,6 +9,8 @@ import bbq.fetch.hiakshare as hiak
 from bbq.fetch.base_fetch import BaseFetch
 from bbq.fetch.stock_eastmoney import StockEastmoney
 from bbq.retry import retry
+from bbq.fetch.my_trade_date import is_trade_date
+import os
 
 # 参考： https://stackoverflow.com/questions/64264563/attributeerror-elementtree-object-has-no-attribute-getiterator-when-trying
 # python3.9
@@ -730,6 +732,30 @@ class MyFetch(BaseFetch):
         return df
 
     @retry(name='MyFetch')
+    def fetch_stock_concept(self, start=None) -> Optional[pd.DataFrame]:
+        q_items = []
+        # 概念
+        df = hiak.stock_board_concept_name_ths()
+        if df is None or df.empty:
+            return None
+        df['日期'] = df['日期'].apply(lambda x: datetime(year=x.year, month=x.month, day=x.day))
+        if start is not None:
+            df = df[df['日期'] >= start]
+
+        for item in df.to_dict('records'):
+            name = item['概念名称']
+            code_df = hiak.stock_board_concept_cons_ths(symbol=name)
+            if code_df is None or code_df.empty:
+                continue
+            concept_code = item['代码'].split('/')[6]
+            for code_item in code_df.to_dict('records'):
+                code, stock_name = code_item['代码'], code_item['名称']
+                code = 'sh' + code if code.startswith('6') else 'sz' + code
+                q_items.append(dict(concept_code=concept_code, concept_date=item['日期'], concept_name=name,
+                                    stock_code=code, stock_name=stock_name))
+        return pd.DataFrame(q_items)
+
+    @retry(name='MyFetch')
     def fetch_fund_info(self, codes: List[str] = None, types: List[str] = None) -> Optional[pd.DataFrame]:
         """
         获取天天基金基本信息
@@ -813,6 +839,9 @@ class MyFetch(BaseFetch):
 if __name__ == '__main__':
     aks = MyFetch()
 
+    tdf = aks.fetch_stock_concept(start=datetime(year=2022, month=1, day=5))
+    print(tdf)
+
     # tdf = aks.fetch_stock_listing_date(code='sz000001')
     # print(tdf)
 
@@ -842,10 +871,10 @@ if __name__ == '__main__':
     # tdf = aks.fetch_stock_daily(code='sh600350', start=datetime(year=2020, month=11, day=23), end=datetime.now())
     # print(tdf)
 
-    tdf = aks.fetch_stock_index(code='sz002847',
-                                start=datetime(year=2022, month=1, day=5),
-                                end=datetime(year=2022, month=1, day=5))
-    print(tdf)
+    # tdf = aks.fetch_stock_index(code='sz002847',
+    #                             start=datetime(year=2022, month=1, day=5),
+    #                             end=datetime(year=2022, month=1, day=5))
+    # print(tdf)
 
     # tdf = hiak.stock_zh_a_daily(symbol='sz000001')
     # print(tdf)

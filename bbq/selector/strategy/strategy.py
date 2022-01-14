@@ -269,6 +269,29 @@ class Strategy:
     def is_short_leg(df, ratio, side=None) -> bool:
         return not Strategy.is_long_leg(df=df, ratio=ratio, side=side)
 
+    async def stock_concept(self, code):
+        if isinstance(self.db, StockDB):
+            df = await self.db.load_stock_concept(filter={'stock_code': code},
+                                                  sort=[('concept_date', -1)])
+            if df is None or df.empty:
+                df = await self.db.load_stock_concept(filter={'stock_name': code},
+                                                      sort=[('concept_date', -1)])
+            return df
+        return None
+
+    async def stock_concept_str(self, code):
+        df = await self.stock_concept(code=code)
+        if df is not None and not df.empty:
+            s = []
+            lst = list(df['concept_name'])
+            while len(lst) > 0:
+                tmp_lst = lst[:3]
+                s.append(','.join(tmp_lst))
+
+                lst = lst[3:]
+            return '\n'.join(s)
+        return ''
+
     async def stat_data(self, data):
         now = datetime.now()
         now = datetime(year=now.year, month=now.month, day=now.day)
@@ -319,6 +342,8 @@ class Strategy:
                             rise = round((close - pre_close) * 100 / pre_close, 2)
                             add_dict[key] = rise
 
+            if isinstance(self.db, StockDB):
+                add_dict['concept'] = await self.stock_concept_str(code=item['code'])
             add_list.append(add_dict)
         proc_bar.close()
         add_df = pd.DataFrame(add_list)

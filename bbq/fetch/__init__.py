@@ -23,6 +23,7 @@ fetch_stock_new_quote = my_fetch.fetch_stock_new_quote
 fetch_stock_adj_factor = my_fetch.fetch_stock_adj_factor
 fetch_stock_minute = my_fetch.fetch_stock_minute
 fetch_stock_margin = my_fetch.fetch_stock_margin
+fetch_stock_concept = my_fetch.fetch_stock_concept
 
 fetch_fund_net = my_fetch.fetch_fund_net
 fetch_fund_info = my_fetch.fetch_fund_info

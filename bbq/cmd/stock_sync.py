@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from functools import partial
 from typing import Dict
-
+import pandas as pd
 import click
 
 import bbq.fetch as fetch
@@ -222,6 +222,27 @@ class StockMarginTask(Task):
         self.log.info('股票融资融券数据task完成, code={}'.format(self.code))
 
 
+class StockConceptTask(Task):
+    def __init__(self, data_sync, name: str):
+        super().__init__(data_sync, name)
+
+    async def task(self):
+        self.log.info('开始获取股票概念数据')
+        start = await self.db.load_stock_concept(projection=['concept_date'],
+                                                 limit=1, sort=[('concept_date', -1)])
+        start = None if start is None or start.empty else start.iloc[0]['concept_date']
+
+        async def query_func():
+            data = await self.db.stock_concept.distinct('concept_code')
+            if data is None or len(data) == 0:
+                return None
+            return pd.DataFrame([{'concept_code': code} for code in data])
+        await self.incr_sync_on_code(query_func=query_func,
+                                     fetch_func=partial(fetch.fetch_stock_concept, start=start),
+                                     save_func=self.db.save_stock_concept, cmp_key='concept_code')
+        self.log.info('获取获取股票概念数据完成')
+
+
 class StockSync(DataSync):
     def __init__(self, db: StockDB, config: Dict):
         super().__init__(db=db,
@@ -285,6 +306,9 @@ class StockSync(DataSync):
                 self.add_task(
                     StockMarginTask(self, name='stock_margin_{}'.format(item['code']), code=item['code']))
 
+        if self.funcs is None or 'stock_concept' in self.funcs:
+            self.add_task(StockConceptTask(self, name='stock_concept'))
+
         # 没有用
         if self.funcs is not None and 'sw_index_info' in self.funcs:
             self.add_task(SWIndexInfoTask(self))
@@ -302,7 +326,7 @@ class StockSync(DataSync):
 @click.option('--con-save-num', default=100, type=int, help='concurrent db save number')
 @click.option('--function', type=str,
               help='sync one, split by ",", available: stock_daily,stock_index,index_daily,stock_fq_factor,'
-                   'stock_north_flow,stock_his_divend,sw_index_info,stock_margin')
+                   'stock_north_flow,stock_his_divend,sw_index_info,stock_margin,stock_concept')
 @click.option('--debug/--no-debug', default=True, type=bool, help='show debug log')
 def main(uri: str = 'mongodb://localhost:27017/', pool: int = 5,
          skip_basic: bool = False,

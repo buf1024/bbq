@@ -20,6 +20,7 @@ class Mongo2Sql:
 
         self.tables = ['fund_info', 'fund_net', 'fund_daily',
                        'stock_info', 'stock_daily', 'stock_index', 'stock_margin',
+                       'stock_concept',
                        'stock_fq_factor', 'stock_index_info', 'stock_index_daily',
                        'stock_ns_flow', 'stock_his_divend', 'stock_sw_index_info']
         self.queue = None
@@ -233,6 +234,16 @@ class Mongo2Sql:
                                 'index_code': {'$not': {'$in': [it['index_code'] for it in data]}}})
         self.log.info('同步申万行业数据完成')
 
+    @sync_wrap
+    async def sync_stock_concept(self):
+        self.log.info('开始同步股票概念数据')
+        await self.sync_one(sql_check_func=self.sql_db.select_stock_concept,
+                            mongo_query_func=self.stock_db.load_stock_concept,
+                            sql_save_func=self.sql_db.insert_stock_concept,
+                            build_cond_func=lambda data: {
+                                'concept_code': {'$not': {'$in': [it['concept_code'] for it in data]}}})
+        self.log.info('同步股票概念数据完成')
+
     async def add_task(self, name, coro):
         await self.queue.put(name)
         self.loop.create_task(coro)
@@ -302,6 +313,9 @@ class Mongo2Sql:
 
         if 'stock_sw_index_info' in sync_tables:
             await self.add_task('stock_ns_flow', self.sync_sw_index_info())
+
+        if 'stock_concept' in sync_tables:
+            await self.add_task('stock_concept', self.sync_stock_concept())
 
         await self.queue.join()
         self.log.info('同步数据完成')

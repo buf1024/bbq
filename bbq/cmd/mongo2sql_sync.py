@@ -12,7 +12,7 @@ from bbq.data.sql.mongo2sql import Mongo2Sql
               help='mysql connection string')
 @click.option('--concurrent-count', default=50, type=int, help='concurrent sync number')
 @click.option('--function', type=str,
-              help='sync one, split by ",", available: fund_info,fund_net,fund_daily,stock_margin,'
+              help='sync one, split by ",", available: fund_info,fund_net,fund_daily,stock_margin,stock_concept,'
                    'stock_info,stock_daily,stock_index,stock_fq_factor,stock_index_info,'
                    'stock_index_daily,stock_ns_flow,stock_his_divend,stock_sw_index_info')
 @click.option('--debug/--no-debug', default=True, type=bool, help='show debug log')
