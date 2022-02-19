@@ -25,23 +25,3 @@ class WechatUtil:
                     return False
                 return True
 
-
-if __name__ == '__main__':
-    from bbq.common import run_until_complete
-    from datetime import datetime
-
-    msg = WechatUtil(token='SCT79912TBBpSAKVv98IdQ3RWqCoQQNW2')
-
-
-    async def test_wechat():
-        await msg.push_wechat('买入信号屁',
-                              'sh601099(太平洋)\n\n**买入**信号(**神算子4号**策略触发)\n\nprice={} volume={}\n\n time={}'.format(
-                                  4.02,
-                                  5000,
-                                  datetime.now()))
-
-
-    run_until_complete(
-        test_wechat()
-    )
-    print('done')

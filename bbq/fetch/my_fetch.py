@@ -839,8 +839,8 @@ class MyFetch(BaseFetch):
 if __name__ == '__main__':
     aks = MyFetch()
 
-    tdf = aks.fetch_stock_concept(start=datetime(year=2022, month=1, day=5))
-    print(tdf)
+    # tdf = aks.fetch_stock_concept(start=datetime(year=2022, month=1, day=5))
+    # print(tdf)
 
     # tdf = aks.fetch_stock_listing_date(code='sz000001')
     # print(tdf)
@@ -860,8 +860,8 @@ if __name__ == '__main__':
     #
     # print(tdf)
 
-    # tdf = aks.fetch_stock_rt_quote(codes=['sh601099', 'sz000001'])
-    # print(tdf)
+    tdf = aks.fetch_stock_rt_quote(codes=['sh601099', 'sz000001'])
+    print(tdf)
 
     # day_time open high low close volume code
     # tdf = aks.fetch_stock_minute(code='sh601099', period='5')

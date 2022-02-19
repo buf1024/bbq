@@ -62,3 +62,4 @@ dist/*
 *.egg-info/
 z_gen_*.py
 *.ipynb_checkpoint*
+config.yml
